@@ -53,7 +53,7 @@ export function CompareModal({
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
             <div
-              className="relative w-full max-w-4xl pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_32px_80px_rgba(0,0,0,0.7)] p-6"
+              className="relative w-[calc(100%-2rem)] sm:w-full max-w-4xl mx-auto pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_32px_80px_rgba(0,0,0,0.7)] p-4 sm:p-6"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

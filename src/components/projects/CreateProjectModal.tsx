@@ -84,7 +84,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
             className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none"
           >
             <div
-              className="relative w-full max-w-md pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-8"
+              className="relative w-[calc(100%-2rem)] sm:w-full max-w-md mx-auto pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-6 sm:p-8"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}

@@ -22,7 +22,7 @@ export function PreviewModal({
   processedUrl,
   assetType = "image",
 }: PreviewModalProps) {
-  const hasBoth = !!originalUrl && !!processedUrl;
+  const hasBoth = !!originalUrl && !!processedUrl && assetType === "image";
   const [activeTab, setActiveTab] = useState<Tab>("original");
 
   // Reset tab to original whenever modal opens
@@ -68,7 +68,7 @@ export function PreviewModal({
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
             <div
-              className="relative w-full max-w-5xl pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_32px_80px_rgba(0,0,0,0.7)] p-4 flex flex-col gap-3"
+              className="relative w-[calc(100%-2rem)] sm:w-full max-w-5xl mx-auto pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_32px_80px_rgba(0,0,0,0.7)] p-3 sm:p-4 flex flex-col gap-3"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header row: tabs (or title placeholder) + close button */}

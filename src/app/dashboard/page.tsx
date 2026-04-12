@@ -32,7 +32,7 @@ export default function DashboardPage() {
         {/* Hero heading */}
         <motion.div {...fadeUp(0)}>
           <h2
-            className="text-4xl font-semibold text-[var(--color-foreground)] leading-tight"
+            className="text-3xl lg:text-4xl font-semibold text-[var(--color-foreground)] leading-tight"
             style={{ fontFamily: "var(--font-display)" }}
           >
             Welcome to Reelio
@@ -45,7 +45,7 @@ export default function DashboardPage() {
         {/* Stats row */}
         <motion.div
           {...fadeUp(0.06)}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"
         >
           <StatCard
             icon={<FolderOpen size={18} className="text-[var(--color-accent)]" />}
@@ -95,7 +95,7 @@ export default function DashboardPage() {
           )}
 
           {isLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
@@ -135,7 +135,7 @@ export default function DashboardPage() {
           )}
 
           {!isLoading && !isError && recentProjects.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {recentProjects.map((project, index) => {
                 const assetCount = Array.isArray(project.assets)
                   ? (project.assets[0]?.count ?? 0)

@@ -113,7 +113,7 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
+    <div className="max-w-7xl mx-auto space-y-6 lg:space-y-8">
       {/* Back */}
       <motion.div {...fadeUp(0)}>
         <Button
@@ -130,7 +130,7 @@ export default function ProjectPage() {
       {/* Project header */}
       <motion.div {...fadeUp(0.06)} className="space-y-1.5">
         <h2
-          className="text-3xl font-semibold text-[var(--color-foreground)] leading-tight"
+          className="text-2xl lg:text-3xl font-semibold text-[var(--color-foreground)] leading-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
           {project.name}

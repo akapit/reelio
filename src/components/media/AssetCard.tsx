@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "motion/react";
 import { Download, SlidersHorizontal, Sparkles, Square, Trash2, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -78,14 +77,12 @@ export function AssetCard({
   const showCompare = status === "done" && !!processedUrl && toolUsed === "enhance";
 
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+    <div
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl",
-        "bg-[var(--color-surface)] border border-[var(--color-border)]",
+        "bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/30",
         "hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
-        "transition-shadow duration-200"
+        "transition-[border-color,box-shadow] duration-200"
       )}
     >
       {/* Thumbnail */}
@@ -107,7 +104,7 @@ export function AssetCard({
             <img
               src={thumbUrl}
               alt="Asset"
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-cover"
               loading="lazy"
             />
           )}
@@ -118,7 +115,7 @@ export function AssetCard({
           <div
             className={cn(
               "absolute top-2 left-2 z-10",
-              "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+              "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
             )}
           >
             <button
@@ -146,7 +143,7 @@ export function AssetCard({
           <div
             className={cn(
               "absolute top-2 right-2 z-10 flex items-center gap-1",
-              "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+              "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
             )}
           >
             <button
@@ -269,6 +266,6 @@ export function AssetCard({
           </span>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

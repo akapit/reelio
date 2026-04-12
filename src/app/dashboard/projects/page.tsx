@@ -14,11 +14,11 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6 lg:space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h2
-              className="text-3xl font-semibold text-[var(--color-foreground)]"
+              className="text-2xl lg:text-3xl font-semibold text-[var(--color-foreground)]"
               style={{ fontFamily: "var(--font-display)" }}
             >
               Projects
@@ -42,7 +42,7 @@ export default function ProjectsPage() {
         )}
 
         {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
@@ -79,7 +79,7 @@ export default function ProjectsPage() {
         )}
 
         {!isLoading && !isError && projects && projects.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             {projects.map((project, index) => {
               const assetCount = Array.isArray(project.assets)
                 ? (project.assets[0]?.count ?? 0)
