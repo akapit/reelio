@@ -280,14 +280,15 @@ export const generateVideoTask = task({
                 : undefined;
             // Log the full input before firing so a subsequent provider
             // error is correlated to shot index + URL + prompt in the
-            // Trigger dashboard. Without this, Promise.all failures are
-            // opaque: "error at index 0" without knowing which URL.
+            // Trigger dashboard. The full prompt is emitted (not a 160-char
+            // preview) so effect application is verifiable from logs alone —
+            // match it against `scripts/preview-kling-shots.ts` output.
             logger.info("[kling] shot dispatch", {
               shotIndex: idx,
               imageNumber: shot.imageNumber,
               imageUrl: imageUrl ?? null,
               duration: shot.duration,
-              promptPreview: shot.prompt.slice(0, 160),
+              prompt: shot.prompt,
               promptLength: shot.prompt.length,
             });
             try {
