@@ -19,6 +19,12 @@ interface ProcessOptions {
   /** Additional images attached to the prompt beyond `assetId`. Passed to
    * Seedance as `reference_image_urls`. */
   referenceAssetIds?: string[];
+  /** Stable id of the selected video effect (metadata only — the trigger
+   * task applies `effectPhrases` directly). */
+  effectId?: string;
+  /** Curated cinematography phrases prepended to Kling shot prompts at
+   * fan-out time. */
+  effectPhrases?: { opener: string; transition?: string; closer?: string };
 }
 
 export function useProcess() {

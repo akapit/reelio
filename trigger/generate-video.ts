@@ -9,7 +9,7 @@ import {
 import { generateVoiceover, generateBackgroundMusic } from "@/lib/audio/elevenlabs";
 import { mergeAudioWithVideo } from "@/lib/audio/merge";
 import { concatVideos } from "@/lib/audio/concat";
-import { parseKlingShots } from "@/lib/media/prompts/kling";
+import { parseKlingShots, applyEffectToShots } from "@/lib/media/prompts/kling";
 import { r2, getPublicUrl } from "@/lib/r2";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
@@ -152,6 +152,15 @@ export const generateVideoTask = task({
     /** Additional reference image URLs (beyond originalUrl) attached in the UI.
      * Kling uses them per-shot; Seedance passes them as reference_image_urls. */
     referenceImageUrls?: string[];
+    /** Cinematography effect phrases prepended to Kling shot prompts at
+     * fan-out time. `id` is metadata-only; the phrases are the operative
+     * data. Seedance ignores this (with a skip-log) in v1. */
+    effect?: {
+      id?: string;
+      opener: string;
+      transition?: string;
+      closer?: string;
+    };
   }) => {
     const runStart = Date.now();
     const videoModel = payload.videoModel ?? "kling";
@@ -246,11 +255,25 @@ export const generateVideoTask = task({
           imageCount: allImageUrls.length,
         });
 
-        const kieTaskIds: Array<string | null> = new Array(parsed.shots.length).fill(null);
+        // Optional effect wrap: prepend curated cinematography phrases to the
+        // first / middle / last shot prompts. Pure helper — returns a new
+        // array, so `parsed.shots` stays untouched for downstream metadata.
+        const wrappedShots = applyEffectToShots(parsed.shots, payload.effect);
+        if (payload.effect) {
+          logger.info("[kling] effectApplied", {
+            effectId: payload.effect.id ?? null,
+            shotCount: wrappedShots.length,
+            hasOpener: !!payload.effect.opener,
+            hasTransition: !!payload.effect.transition,
+            hasCloser: !!payload.effect.closer,
+          });
+        }
+
+        const kieTaskIds: Array<string | null> = new Array(wrappedShots.length).fill(null);
         const fanOutStart = Date.now();
 
         const shotResults = await Promise.all(
-          parsed.shots.map(async (shot, idx) => {
+          wrappedShots.map(async (shot, idx) => {
             const imageUrl =
               shot.imageNumber !== null && shot.imageNumber >= 1
                 ? allImageUrls[shot.imageNumber - 1]
@@ -334,6 +357,15 @@ export const generateVideoTask = task({
       } else {
         // Seedance (+ fast): single provider call; optional reference images
         // are handled inside the provider.
+        if (payload.effect) {
+          // Defensive: the UI clears effect selection on model switch, so an
+          // effect payload reaching the Seedance branch is unexpected. Log it
+          // so we can notice upstream bugs — but don't fail the generation.
+          logger.info("[seedance] effectSkipped", {
+            effectId: payload.effect.id ?? null,
+            reason: "seedance-unsupported-v1",
+          });
+        }
         const result = await provider.generateVideo({
           imageUrl: payload.originalUrl,
           referenceImageUrls: payload.referenceImageUrls,

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Download, RotateCcw, X, Mic, Music, Clock, Sparkles } from "lucide-react";
+import { Download, RotateCcw, X, Mic, Music, Clock, Sparkles, Film } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getEffect } from "@/lib/media/effects/library";
 
 export interface GenerationConfig {
   prompt?: string | null;
@@ -13,6 +14,15 @@ export interface GenerationConfig {
   musicPrompt?: string | null;
   /** 0..1 (metadata scale) */
   musicVolume?: number | null;
+  /** Stable id of the effect that was active at generation time. */
+  effectId?: string | null;
+  /** Full phrase snapshot — the actual strings applied. Snapshotted so
+   * old generations stay reproducible even if the library changes. */
+  effectPhrases?: {
+    opener: string;
+    transition?: string;
+    closer?: string;
+  } | null;
 }
 
 export interface SourceAssetRef {
@@ -54,7 +64,9 @@ function hasAnyConfig(c?: GenerationConfig | null): boolean {
     c.duration ||
     c.voiceoverText ||
     c.musicPrompt ||
-    (c.musicVolume !== null && c.musicVolume !== undefined)
+    (c.musicVolume !== null && c.musicVolume !== undefined) ||
+    c.effectId ||
+    c.effectPhrases
   );
 }
 
@@ -146,6 +158,24 @@ export function PreviewModal({
   const modelLabel = generationConfig?.videoModel
     ? MODEL_LABELS[generationConfig.videoModel] ?? generationConfig.videoModel
     : null;
+
+  // Effect chip: prefer library lookup for a friendly name; fall back to
+  // "Custom" if the id is stale (effect since removed) or only phrases were
+  // persisted (anonymous effect). Tooltip surfaces the actual opener phrase
+  // — snapshotted at generation time so it's accurate even after library edits.
+  const effectFromLibrary = getEffect(generationConfig?.effectId);
+  const hasAnyEffect =
+    !!generationConfig?.effectId || !!generationConfig?.effectPhrases;
+  const effectName = effectFromLibrary
+    ? effectFromLibrary.name
+    : hasAnyEffect
+      ? "Custom"
+      : null;
+  const openerSnippet =
+    generationConfig?.effectPhrases?.opener ?? effectFromLibrary?.openerPhrase;
+  const effectTitle = openerSnippet
+    ? `Opener: ${openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}…` : openerSnippet}`
+    : undefined;
 
   return (
     <AnimatePresence>
@@ -310,6 +340,17 @@ export function PreviewModal({
                             · {Math.round((generationConfig.musicVolume ?? 0) * 100)}%
                           </span>
                         )}
+                      </div>
+                    )}
+                    {effectName && (
+                      <div
+                        className="inline-flex items-center gap-1.5"
+                        title={effectTitle}
+                      >
+                        <Film size={12} />
+                        <span className="text-[var(--color-foreground)] font-medium">
+                          Effect: {effectName}
+                        </span>
                       </div>
                     )}
                   </div>

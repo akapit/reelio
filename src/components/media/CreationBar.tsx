@@ -19,6 +19,11 @@ import {
   Wand2,
   Check,
   ChevronDown,
+  Sun,
+  MoveHorizontal,
+  Plane,
+  Compass,
+  Frame,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
@@ -26,6 +31,11 @@ import { useProcess } from "@/hooks/use-process";
 import { useTemplates, type Template } from "@/hooks/use-templates";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
+import {
+  VIDEO_EFFECTS,
+  getEffect,
+  type VideoEffect,
+} from "@/lib/media/effects/library";
 
 export interface RerunAssetRef {
   id: string;
@@ -53,6 +63,9 @@ export interface RerunPayload {
    * re-installed as `existingAssets`. Optional for backwards-compat with
    * older callers / re-runs of single-image generations. */
   referenceAssets?: RerunAssetRef[];
+  /** Effect id snapshotted at original generation time. Looked up in
+   * VIDEO_EFFECTS on preload to restore the picker state. */
+  effectId?: string;
 }
 
 interface CreationBarProps {
@@ -83,6 +96,12 @@ const TEMPLATE_ICONS: Record<string, typeof Sparkles> = {
   zap: Zap,
   sparkles: Sparkles,
   video: Video,
+  sun: Sun,
+  "move-horizontal": MoveHorizontal,
+  plane: Plane,
+  wand: Wand2,
+  compass: Compass,
+  frame: Frame,
 };
 
 const VIDEO_MODELS: { id: VideoModel; label: string; description: string }[] = [
@@ -136,6 +155,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
   const [mode, setMode] = useState<CreationMode>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
 
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
@@ -203,6 +223,16 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     const clamped = clampDuration(videoDuration, durationConstraints);
     if (clamped !== videoDuration) setVideoDuration(clamped);
   }, [durationConstraints, videoDuration]);
+
+  // Effects are Kling-only in v1. Silently clear any selected effect when the
+  // user switches to a non-Kling model (same pattern as duration snapping —
+  // no toast). Re-selecting Kling leaves the picker empty; the user can pick
+  // an effect again.
+  useEffect(() => {
+    if (videoModel !== "kling" && selectedEffectId !== null) {
+      setSelectedEffectId(null);
+    }
+  }, [videoModel, selectedEffectId]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -298,6 +328,11 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
       setMusicEnabled(false);
     }
     setSelectedTemplateId(null);
+    // Restore the effect picker from the snapshotted id. `getEffect` returns
+    // null for stale / removed ids, in which case the picker just starts
+    // empty — the stored `effectPhrases` in metadata still describe what the
+    // original run used.
+    setSelectedEffectId(preload.effectId ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preload?.nonce]);
 
@@ -371,6 +406,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     setMusicVolume(20);
     setVideoDuration(5);
     setSelectedTemplateId(null);
+    setSelectedEffectId(null);
   }, []);
 
   const applyTemplate = useCallback((template: Template) => {
@@ -402,6 +438,19 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     setTemplatesOpen(false);
     toast.success(`Template "${template.name}" applied`);
   }, [selectedTemplateId]);
+
+  // Effects are independent from templates — picking an effect only sets
+  // `selectedEffectId`. The styles block still drives base prompt / duration /
+  // voiceover config; the effect just wraps the per-shot prompts at fan-out.
+  // Clicking the same effect card again toggles it off.
+  const applyEffect = useCallback((effect: VideoEffect) => {
+    if (selectedEffectId === effect.id) {
+      setSelectedEffectId(null);
+      return;
+    }
+    setSelectedEffectId(effect.id);
+    toast.success(`Effect "${effect.name}" applied`);
+  }, [selectedEffectId]);
 
   // Drag & drop
   const handleDrop = useCallback(
@@ -577,6 +626,10 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           videoModel === "kling"
             ? klingTotalDuration(videoDuration, uploadedAssetIds.length)
             : videoDuration;
+        // Look up the selected effect (if any). We pass the phrases as the
+        // operative data — the trigger task uses them directly and does NOT
+        // re-look-up by id. The id is metadata only (for preview chip + rerun).
+        const selectedEffect = getEffect(selectedEffectId);
         process.mutate({
           assetId: firstAssetId,
           projectId,
@@ -593,6 +646,14 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           videoModel,
           referenceAssetIds:
             referenceAssetIds.length > 0 ? referenceAssetIds : undefined,
+          effectId: selectedEffect?.id,
+          effectPhrases: selectedEffect
+            ? {
+                opener: selectedEffect.openerPhrase,
+                transition: selectedEffect.transitionPhrase,
+                closer: selectedEffect.closerPhrase,
+              }
+            : undefined,
         });
         toast.success("Video generation started");
       }
@@ -613,6 +674,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     musicPrompt,
     musicVolume,
     videoModel,
+    selectedEffectId,
     clearAll,
   ]);
 
@@ -1263,7 +1325,9 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
         )}
 
-        {/* Templates dropdown */}
+        {/* Templates dropdown — also hosts the Effects picker (Kling-only).
+            A single "active" state on the trigger button covers either a
+            style OR an effect being selected (spec §4: one accent indicator). */}
         {templates && templates.length > 0 && (
           <div ref={templatesRef} className="relative">
             <button
@@ -1275,7 +1339,9 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                 "text-xs font-medium transition-colors duration-150 outline-none",
                 templatesOpen
                   ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
+                  : selectedTemplateId || selectedEffectId
+                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
               )}
             >
               <LayoutTemplate size={14} />
@@ -1297,6 +1363,10 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                   )}
                 >
                   <div className="p-1.5">
+                    {/* STYLES — existing templates, unchanged behavior. */}
+                    <p className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                      Styles
+                    </p>
                     {templates.map((template) => {
                       const Icon =
                         TEMPLATE_ICONS[template.icon] ?? Sparkles;
@@ -1345,6 +1415,58 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                         </button>
                       );
                     })}
+
+                    {/* EFFECTS — Kling only in v1. The section collapses
+                        entirely (no header, no placeholder) when Seedance
+                        is selected; silent clear on model switch handles
+                        the "selected-but-hidden" case. */}
+                    {videoModel === "kling" && (
+                      <>
+                        <div className="mx-2 my-1.5 border-t border-[var(--color-border)]" />
+                        <p className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
+                          Effects
+                          <span className="ml-1.5 text-[10px] font-normal normal-case tracking-normal text-[var(--color-muted)]/70">
+                            (Kling only)
+                          </span>
+                        </p>
+                        {VIDEO_EFFECTS.map((effect) => {
+                          const Icon =
+                            TEMPLATE_ICONS[effect.icon] ?? Sparkles;
+                          const isSelected = selectedEffectId === effect.id;
+                          return (
+                            <button
+                              key={effect.id}
+                              type="button"
+                              onClick={() => applyEffect(effect)}
+                              className={cn(
+                                "w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left",
+                                "transition-colors duration-150",
+                                isSelected
+                                  ? "bg-[var(--color-accent)]/12 ring-1 ring-[var(--color-accent)]/25"
+                                  : "hover:bg-[var(--color-accent)]/8"
+                              )}
+                            >
+                              <div
+                                className={cn(
+                                  "w-8 h-8 rounded-lg shrink-0 flex items-center justify-center",
+                                  "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                                )}
+                              >
+                                <Icon size={15} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-[var(--color-foreground)] truncate">
+                                  {effect.name}
+                                </p>
+                                <p className="text-xs text-[var(--color-muted)] mt-0.5 line-clamp-1">
+                                  {effect.description}
+                                </p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
                   </div>
                 </motion.div>
               )}

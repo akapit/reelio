@@ -280,6 +280,7 @@ export function AssetGrid({ projectId, onRerun }: AssetGridProps) {
                     voiceoverText: cfg.voiceoverText ?? undefined,
                     musicPrompt: cfg.musicPrompt ?? undefined,
                     musicVolume: cfg.musicVolume ?? undefined,
+                    effectId: cfg.effectId ?? undefined,
                     sourceAsset: toRerunRef(primary),
                     referenceAssets:
                       rest.length > 0 ? rest.map(toRerunRef) : undefined,
