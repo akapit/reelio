@@ -226,7 +226,12 @@ export function PreviewModal({
                   shrinking container instead of overflowing it — which is
                   what kept the control rail off-screen before. */}
               {assetType === "video" ? (
-                <div className="w-full bg-black rounded-xl overflow-hidden flex-1 min-h-0 max-h-[55vh] flex items-center justify-center">
+                // No flex centering on the container — wrapping an
+                // inline-display <video> in `flex items-center justify-center`
+                // swallowed the controls rail on Chrome/Safari. The video is
+                // a block child that fills the container via w-full h-full;
+                // object-contain preserves aspect inside that box.
+                <div className="w-full bg-black rounded-xl overflow-hidden flex-1 min-h-0 max-h-[55vh]">
                   <video
                     key={currentUrl}
                     src={currentUrl}
@@ -238,7 +243,7 @@ export function PreviewModal({
                   />
                 </div>
               ) : (
-                <div className="flex items-center justify-center bg-[var(--color-surface-raised)] rounded-xl overflow-hidden flex-1 min-h-0 max-h-[72vh]">
+                <div className="bg-[var(--color-surface-raised)] rounded-xl overflow-hidden flex-1 min-h-0 max-h-[72vh] flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     key={currentUrl}
