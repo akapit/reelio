@@ -4,22 +4,40 @@ import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { cn } from "@/lib/utils";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
 
   const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
-  const handleMenuToggle = useCallback(
-    () => setSidebarOpen((prev) => !prev),
-    [],
-  );
+  const handleMenuToggle = useCallback(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches
+    ) {
+      setDesktopCollapsed((prev) => !prev);
+    } else {
+      setSidebarOpen((prev) => !prev);
+    }
+  }, []);
 
   return (
     <div className="flex h-screen bg-[var(--color-background)]">
-      <Sidebar isOpen={sidebarOpen} onClose={handleSidebarClose} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={handleSidebarClose}
+        desktopCollapsed={desktopCollapsed}
+      />
 
-      <div className="flex flex-col flex-1 min-w-0 ml-0 lg:ml-64">
+      <div
+        className={cn(
+          "flex flex-col flex-1 min-w-0 ml-0",
+          "transition-[margin] duration-300 ease-out",
+          desktopCollapsed ? "lg:ml-0" : "lg:ml-64",
+        )}
+      >
         <Header
           onNewProject={() => setModalOpen(true)}
           onMenuToggle={handleMenuToggle}

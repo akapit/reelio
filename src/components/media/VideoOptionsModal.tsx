@@ -26,6 +26,8 @@ export function VideoOptionsModal({
   const [duration, setDuration] = useState<Duration>(5);
   const [quality, setQuality] = useState<Quality>("fast");
   const [prompt, setPrompt] = useState("");
+  const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
+  const [voiceoverText, setVoiceoverText] = useState("");
   const promptId = useId();
   const firstFocusRef = useRef<HTMLButtonElement>(null);
   const process = useProcess();
@@ -36,6 +38,8 @@ export function VideoOptionsModal({
       setDuration(5);
       setQuality("fast");
       setPrompt("");
+      setVoiceoverEnabled(false);
+      setVoiceoverText("");
       setTimeout(() => firstFocusRef.current?.focus(), 50);
     }
   }, [isOpen]);
@@ -60,6 +64,7 @@ export function VideoOptionsModal({
         duration,
         quality,
         prompt: prompt.trim() || undefined,
+        voiceoverText: voiceoverEnabled ? voiceoverText.trim() || undefined : undefined,
       },
       { onSuccess: onClose }
     );
@@ -192,6 +197,62 @@ export function VideoOptionsModal({
                       "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
                   />
+                </div>
+
+                {/* Voiceover Section */}
+                <div className="mt-4 border-t border-[var(--color-border)] pt-4 flex flex-col gap-3">
+                  <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={voiceoverEnabled}
+                      onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
+                      className={cn(
+                        "relative w-10 h-5 rounded-full transition-colors duration-150 outline-none shrink-0",
+                        "focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
+                        voiceoverEnabled
+                          ? "bg-[var(--color-accent)]"
+                          : "bg-[var(--color-surface-raised)]"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150",
+                          voiceoverEnabled && "translate-x-5"
+                        )}
+                      />
+                    </button>
+                    <span className="text-sm font-medium text-[var(--color-foreground)]">
+                      Add voiceover narration
+                    </span>
+                  </label>
+
+                  {voiceoverEnabled && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-[var(--color-foreground)] leading-none">
+                        Voiceover script
+                      </label>
+                      <textarea
+                        rows={3}
+                        maxLength={500}
+                        value={voiceoverText}
+                        onChange={(e) => setVoiceoverText(e.target.value)}
+                        placeholder="Welcome to this stunning three-bedroom home nestled in a quiet cul-de-sac..."
+                        className={cn(
+                          "w-full px-3 py-2.5 rounded-lg text-sm resize-none",
+                          "bg-[var(--color-surface)] border border-[var(--color-border)]",
+                          "text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+                          "transition-colors duration-150 outline-none",
+                          "hover:border-[#3a3a3e]",
+                          "focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/15",
+                          "disabled:opacity-50 disabled:cursor-not-allowed"
+                        )}
+                      />
+                      <span className="text-xs text-[var(--color-muted)] text-right">
+                        {voiceoverText.length}/500
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Actions */}

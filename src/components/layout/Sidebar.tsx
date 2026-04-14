@@ -46,9 +46,10 @@ const navItems = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  desktopCollapsed?: boolean;
 }
 
-export function Sidebar({ isOpen, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarProps) {
   const pathname = usePathname();
 
   // Close on Escape key
@@ -151,8 +152,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar -- always visible at lg+ */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] z-40">
+      {/* Desktop sidebar -- collapsible at lg+ */}
+      <aside
+        className={cn(
+          "hidden lg:flex fixed left-0 top-0 h-screen w-64 flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] z-40",
+          "transition-transform duration-300 ease-out",
+          desktopCollapsed && "lg:-translate-x-full",
+        )}
+        aria-hidden={desktopCollapsed}
+      >
         {sidebarContent}
       </aside>
 

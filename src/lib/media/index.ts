@@ -1,14 +1,18 @@
 import { kieaiProvider } from "./providers/kieai";
+import { piapiProvider } from "./providers/piapi";
 import type { IMediaProvider, MediaProvider } from "./types";
 
 const providers: Record<MediaProvider, IMediaProvider> = {
   kieai: kieaiProvider,
-  replicate: kieaiProvider,   // placeholder — replace when adding Replicate
-  fal: kieaiProvider,         // placeholder — replace when adding fal.ai
+  piapi: piapiProvider,
 };
 
 const DEFAULT_PROVIDER: MediaProvider = "kieai";
 
+/**
+ * Per-task provider routing. Flip any entry to `"piapi"` to move that
+ * capability to piapi.ai without touching the calling trigger task.
+ */
 const TASK_PROVIDER_MAP: Partial<Record<string, MediaProvider>> = {
   "enhance-image":   "kieai",
   "virtual-staging": "kieai",
