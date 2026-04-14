@@ -29,12 +29,12 @@ export function Header({ onNewProject, onMenuToggle }: HeaderProps) {
   return (
     <header className="h-16 shrink-0 flex items-center justify-between px-4 sm:px-6 lg:px-8 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
       <div className="flex items-center gap-3">
-        {/* Mobile hamburger menu */}
+        {/* Hamburger menu -- toggles drawer on mobile, collapses sidebar on desktop */}
         <button
           type="button"
           onClick={onMenuToggle}
-          className="lg:hidden flex items-center justify-center w-10 h-10 -ml-2 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-          aria-label="Open navigation menu"
+          className="flex items-center justify-center w-10 h-10 -ml-2 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
+          aria-label="Toggle navigation menu"
         >
           <Menu size={20} />
         </button>

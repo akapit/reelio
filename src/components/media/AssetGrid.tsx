@@ -11,13 +11,20 @@ import { useProcess } from "@/hooks/use-process";
 import { AssetCard } from "@/components/media/AssetCard";
 import { VideoOptionsModal } from "@/components/media/VideoOptionsModal";
 import { CompareModal } from "@/components/media/CompareModal";
-import { PreviewModal } from "@/components/media/PreviewModal";
+import {
+  PreviewModal,
+  type GenerationConfig,
+  type SourceAssetRef,
+} from "@/components/media/PreviewModal";
+import type { RerunPayload } from "@/components/media/CreationBar";
+import type { VideoModel } from "@/lib/media/types";
 
 interface AssetGridProps {
   projectId: string;
+  onRerun?: (payload: Omit<RerunPayload, "nonce">) => void;
 }
 
-export function AssetGrid({ projectId }: AssetGridProps) {
+export function AssetGrid({ projectId, onRerun }: AssetGridProps) {
   const { data: assets, isLoading, isError } = useAssets(projectId);
   const process = useProcess();
   const supabase = createClient();
@@ -65,9 +72,13 @@ export function AssetGrid({ projectId }: AssetGridProps) {
   } | null>(null);
 
   const [previewAsset, setPreviewAsset] = useState<{
+    assetId: string;
     originalUrl: string;
     processedUrl?: string | null;
     assetType: "image" | "video";
+    generationConfig?: GenerationConfig | null;
+    /** Primary first, then references from metadata.referenceAssetIds. */
+    sourceAssets?: SourceAssetRef[];
   } | null>(null);
 
   if (isLoading) {
@@ -157,13 +168,54 @@ export function AssetGrid({ projectId }: AssetGridProps) {
                   processedUrl: asset.processed_url!,
                 })
               }
-              onPreview={() =>
+              onPreview={() => {
+                const assetType =
+                  (asset.asset_type as "image" | "video") ?? "image";
+                // For video results, surface the prompt/config stored at
+                // generation time + every source image (primary + references)
+                // so the detail panel can render the full input strip.
+                let generationConfig: GenerationConfig | null = null;
+                if (
+                  asset.tool_used === "video" &&
+                  asset.metadata &&
+                  typeof asset.metadata === "object"
+                ) {
+                  generationConfig = asset.metadata as GenerationConfig;
+                }
+                const toRef = (src: NonNullable<typeof assets>[number]): SourceAssetRef => ({
+                  id: src.id,
+                  originalUrl: src.original_url,
+                  thumbnailUrl:
+                    (src as { thumbnail_url?: string | null }).thumbnail_url ??
+                    src.original_url,
+                  assetType: (src.asset_type as "image" | "video") ?? "image",
+                });
+                const sourceAssets: SourceAssetRef[] = [];
+                const primaryId = (asset as { source_asset_id?: string | null })
+                  .source_asset_id;
+                if (primaryId) {
+                  const primary = assets?.find((a) => a.id === primaryId);
+                  if (primary) sourceAssets.push(toRef(primary));
+                }
+                const refIds = (
+                  asset.metadata as { referenceAssetIds?: string[] } | null
+                )?.referenceAssetIds;
+                if (Array.isArray(refIds)) {
+                  for (const refId of refIds) {
+                    if (refId === primaryId) continue;
+                    const ref = assets?.find((a) => a.id === refId);
+                    if (ref) sourceAssets.push(toRef(ref));
+                  }
+                }
                 setPreviewAsset({
+                  assetId: asset.id,
                   originalUrl: asset.original_url,
                   processedUrl: asset.processed_url,
-                  assetType: (asset.asset_type as "image" | "video") ?? "image",
-                })
-              }
+                  assetType,
+                  generationConfig,
+                  sourceAssets,
+                });
+              }}
             />
           </motion.div>
         ))}
@@ -194,6 +246,48 @@ export function AssetGrid({ projectId }: AssetGridProps) {
           originalUrl={previewAsset.originalUrl}
           processedUrl={previewAsset.processedUrl}
           assetType={previewAsset.assetType}
+          generationConfig={previewAsset.generationConfig}
+          sourceAssets={previewAsset.sourceAssets}
+          onRerun={
+            onRerun &&
+            previewAsset.generationConfig &&
+            previewAsset.sourceAssets &&
+            previewAsset.sourceAssets.length > 0
+              ? () => {
+                  const cfg = previewAsset.generationConfig!;
+                  const allSources = previewAsset.sourceAssets!;
+                  const [primary, ...rest] = allSources;
+                  // Stored `cfg.duration` is the TOTAL video length from the
+                  // original run, captured when N = allSources.length images
+                  // were attached. We re-install all N images below, so this
+                  // stays valid for Kling's [5N, 10N] range. CreationBar's
+                  // clamp effect will still snap if the user later removes
+                  // images or switches models.
+                  const duration = cfg.duration ?? 5;
+                  const model =
+                    (cfg.videoModel as VideoModel | null | undefined) ??
+                    "kling";
+                  const toRerunRef = (s: SourceAssetRef) => ({
+                    id: s.id,
+                    originalUrl: s.originalUrl,
+                    thumbnailUrl: s.thumbnailUrl ?? s.originalUrl,
+                    assetType: s.assetType,
+                  });
+                  onRerun({
+                    prompt: cfg.prompt ?? "",
+                    videoModel: model,
+                    duration,
+                    voiceoverText: cfg.voiceoverText ?? undefined,
+                    musicPrompt: cfg.musicPrompt ?? undefined,
+                    musicVolume: cfg.musicVolume ?? undefined,
+                    sourceAsset: toRerunRef(primary),
+                    referenceAssets:
+                      rest.length > 0 ? rest.map(toRerunRef) : undefined,
+                  });
+                  setPreviewAsset(null);
+                }
+              : undefined
+          }
         />
       )}
     </>

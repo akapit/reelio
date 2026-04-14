@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, SlidersHorizontal, Sparkles, Square, Trash2, Video } from "lucide-react";
+import { Download, Loader2, SlidersHorizontal, Sparkles, Square, Trash2, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AssetStatus = "uploaded" | "processing" | "done" | "failed";
@@ -55,7 +55,15 @@ const toolLabels: Record<AssetTool, string> = {
   video: "Video",
 };
 
+const processingLabels: Record<AssetTool, string> = {
+  enhance: "Enhancing...",
+  staging: "Staging...",
+  sky: "Replacing sky...",
+  video: "Generating video...",
+};
+
 export function AssetCard({
+  id,
   originalUrl,
   processedUrl,
   status,
@@ -78,166 +86,193 @@ export function AssetCard({
 
   return (
     <div
+      draggable={status === "uploaded" || status === "done"}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(
+          "application/reelio-asset",
+          JSON.stringify({ id, originalUrl: displayUrl, thumbnailUrl: thumbUrl, assetType })
+        );
+        e.dataTransfer.effectAllowed = "copy";
+      }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl",
         "bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/30",
         "hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
-        "transition-[border-color,box-shadow] duration-200"
+        "transition-[border-color,box-shadow] duration-200",
+        (status === "uploaded" || status === "done") && "cursor-grab active:cursor-grabbing"
       )}
     >
       {/* Thumbnail */}
       <div className="relative aspect-[4/3] bg-[var(--color-surface-raised)] overflow-hidden">
-        {/* Clickable media area — calls onPreview; action buttons stop propagation */}
-        <div
-          className={cn("w-full h-full", onPreview && "cursor-pointer")}
-          onClick={() => onPreview?.()}
-        >
-          {assetType === "video" && !thumbnailUrl ? (
-            <video
-              src={displayUrl}
-              className="w-full h-full object-cover"
-              muted
-              preload="metadata"
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={thumbUrl}
-              alt="Asset"
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          )}
-        </div>
+        {status === "processing" ? (
+          <>
+            {/* Shimmer processing state */}
+            <div
+              className="w-full h-full flex flex-col items-center justify-center gap-3"
+              style={{
+                background:
+                  "linear-gradient(110deg, var(--color-surface) 30%, rgba(201,168,76,0.08) 50%, var(--color-surface) 70%)",
+                backgroundSize: "200% 100%",
+                animation: "shimmer 2s ease-in-out infinite",
+              }}
+            >
+              <Loader2 size={24} className="animate-spin text-[var(--color-muted)]" />
+              <span className="text-xs text-[var(--color-muted)]">
+                {toolUsed ? processingLabels[toolUsed] : "Processing..."}
+              </span>
+            </div>
 
-        {/* Delete button overlay */}
-        {status !== "processing" && (
-          <div
-            className={cn(
-              "absolute top-2 left-2 z-10",
-              "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
+            {/* Cancel button on hover */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                type="button"
+                title="Cancel processing"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel?.();
+                }}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium",
+                  "bg-[var(--color-surface)]/90 backdrop-blur",
+                  "border border-[var(--color-border)]",
+                  "hover:border-red-500/50 transition-colors duration-150",
+                  "text-[var(--color-muted)] hover:text-red-400",
+                  "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                )}
+              >
+                <Square size={10} className="fill-current" />
+                Stop
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Clickable media area — calls onPreview; action buttons stop propagation */}
+            <div
+              className={cn("w-full h-full", onPreview && "cursor-pointer")}
+              onClick={() => onPreview?.()}
+            >
+              {assetType === "video" && !thumbnailUrl ? (
+                <video
+                  src={displayUrl}
+                  className="w-full h-full object-cover"
+                  muted
+                  preload="metadata"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={thumbUrl}
+                  alt="Asset"
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              )}
+            </div>
+
+            {/* Delete button overlay */}
+            <div
+              className={cn(
+                "absolute top-2 left-2 z-10",
+                "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
+              )}
+            >
+              <button
+                type="button"
+                title="Remove asset"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete?.();
+                }}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center",
+                  "bg-[var(--color-surface)]/90 backdrop-blur",
+                  "border border-[var(--color-border)]",
+                  "hover:border-red-500/50 transition-colors duration-150",
+                  "text-[var(--color-muted)] hover:text-red-400"
+                )}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            {/* Action buttons overlay */}
+            {showActionButtons && (
+              <div
+                className={cn(
+                  "absolute top-2 right-2 z-10 flex items-center gap-1",
+                  "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
+                )}
+              >
+                <button
+                  type="button"
+                  title="Enhance Photo"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEnhance?.();
+                  }}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center",
+                    "bg-[var(--color-surface)]/90 backdrop-blur",
+                    "border border-[var(--color-border)]",
+                    "hover:border-[var(--color-accent)] transition-colors duration-150",
+                    "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+                  )}
+                >
+                  <Sparkles size={14} />
+                </button>
+                <button
+                  type="button"
+                  title="Generate Video"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenerateVideo?.();
+                  }}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center",
+                    "bg-[var(--color-surface)]/90 backdrop-blur",
+                    "border border-[var(--color-border)]",
+                    "hover:border-[var(--color-accent)] transition-colors duration-150",
+                    "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+                  )}
+                >
+                  <Video size={14} />
+                </button>
+                <button
+                  type="button"
+                  title="Download"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(displayUrl, "_blank");
+                  }}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center",
+                    "bg-[var(--color-surface)]/90 backdrop-blur",
+                    "border border-[var(--color-border)]",
+                    "hover:border-[var(--color-accent)] transition-colors duration-150",
+                    "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
+                  )}
+                >
+                  <Download size={14} />
+                </button>
+              </div>
             )}
-          >
-            <button
-              type="button"
-              title="Remove asset"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete?.();
-              }}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center",
-                "bg-[var(--color-surface)]/90 backdrop-blur",
-                "border border-[var(--color-border)]",
-                "hover:border-red-500/50 transition-colors duration-150",
-                "text-[var(--color-muted)] hover:text-red-400"
-              )}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
 
-        {/* Action buttons overlay */}
-        {showActionButtons && (
-          <div
-            className={cn(
-              "absolute top-2 right-2 z-10 flex items-center gap-1",
-              "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
+            {/* Compare label */}
+            {showCompare && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCompare?.();
+                }}
+                className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm hover:bg-black/80 transition-colors duration-150"
+              >
+                <SlidersHorizontal size={10} />
+                Compare
+              </button>
             )}
-          >
-            <button
-              type="button"
-              title="Enhance Photo"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEnhance?.();
-              }}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center",
-                "bg-[var(--color-surface)]/90 backdrop-blur",
-                "border border-[var(--color-border)]",
-                "hover:border-[var(--color-accent)] transition-colors duration-150",
-                "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
-              )}
-            >
-              <Sparkles size={14} />
-            </button>
-            <button
-              type="button"
-              title="Generate Video"
-              onClick={(e) => {
-                e.stopPropagation();
-                onGenerateVideo?.();
-              }}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center",
-                "bg-[var(--color-surface)]/90 backdrop-blur",
-                "border border-[var(--color-border)]",
-                "hover:border-[var(--color-accent)] transition-colors duration-150",
-                "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
-              )}
-            >
-              <Video size={14} />
-            </button>
-            <button
-              type="button"
-              title="Download"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(displayUrl, "_blank");
-              }}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center",
-                "bg-[var(--color-surface)]/90 backdrop-blur",
-                "border border-[var(--color-border)]",
-                "hover:border-[var(--color-accent)] transition-colors duration-150",
-                "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
-              )}
-            >
-              <Download size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* Compare label */}
-        {showCompare && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCompare?.();
-            }}
-            className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm hover:bg-black/80 transition-colors duration-150"
-          >
-            <SlidersHorizontal size={10} />
-            Compare
-          </button>
-        )}
-
-        {/* Processing overlay with cancel */}
-        {status === "processing" && (
-          <div className="absolute inset-0 bg-[var(--color-accent)]/5 animate-pulse flex items-center justify-center">
-            <button
-              type="button"
-              title="Cancel processing"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancel?.();
-              }}
-              className={cn(
-                "px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium",
-                "bg-[var(--color-surface)]/90 backdrop-blur",
-                "border border-[var(--color-border)]",
-                "hover:border-red-500/50 transition-colors duration-150",
-                "text-[var(--color-muted)] hover:text-red-400",
-                "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-              )}
-            >
-              <Square size={10} className="fill-current" />
-              Stop
-            </button>
-          </div>
+          </>
         )}
       </div>
 

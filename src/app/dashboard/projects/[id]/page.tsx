@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { ArrowLeft, MapPin, Calendar } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { MediaUploader } from "@/components/media/MediaUploader";
+import { CreationBar, type RerunPayload } from "@/components/media/CreationBar";
 import { AssetGrid } from "@/components/media/AssetGrid";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface Project {
   id: string;
@@ -38,6 +40,57 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [creationPreload, setCreationPreload] = useState<RerunPayload | null>(
+    null,
+  );
+  const creationBarRef = useRef<HTMLDivElement>(null);
+
+  const handleRerun = (payload: Omit<RerunPayload, "nonce">) => {
+    setCreationPreload({ ...payload, nonce: Date.now() });
+    // Scroll so the user sees the bar rehydrated.
+    requestAnimationFrame(() => {
+      creationBarRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+  };
+
+  useEffect(() => {
+    if (isEditingName) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }
+  }, [isEditingName]);
+
+  async function saveName() {
+    if (!project) return;
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === project.name) {
+      setIsEditingName(false);
+      setNameDraft(project.name);
+      return;
+    }
+    setIsSavingName(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("projects")
+      .update({ name: trimmed })
+      .eq("id", project.id);
+    setIsSavingName(false);
+    if (error) {
+      toast.error("Failed to rename project");
+      setNameDraft(project.name);
+    } else {
+      setProject({ ...project, name: trimmed });
+      toast.success("Project renamed");
+    }
+    setIsEditingName(false);
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -129,12 +182,56 @@ export default function ProjectPage() {
 
       {/* Project header */}
       <motion.div {...fadeUp(0.06)} className="space-y-1.5">
-        <h2
-          className="text-2xl lg:text-3xl font-semibold text-[var(--color-foreground)] leading-tight"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          {project.name}
-        </h2>
+        {isEditingName ? (
+          <input
+            ref={nameInputRef}
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveName();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setNameDraft(project.name);
+                setIsEditingName(false);
+              }
+            }}
+            disabled={isSavingName}
+            maxLength={120}
+            className={cn(
+              "w-full bg-transparent outline-none",
+              "text-2xl lg:text-3xl font-semibold text-[var(--color-foreground)] leading-tight",
+              "border-b border-[var(--color-accent)]/60 focus:border-[var(--color-accent)]",
+              "pb-0.5 -mb-0.5",
+            )}
+            style={{ fontFamily: "var(--font-display)" }}
+            aria-label="Project name"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setNameDraft(project.name);
+              setIsEditingName(true);
+            }}
+            className={cn(
+              "group inline-flex items-center gap-2 text-left",
+              "text-2xl lg:text-3xl font-semibold text-[var(--color-foreground)] leading-tight",
+              "rounded-md -mx-1 px-1 transition-colors duration-150",
+              "hover:bg-[var(--color-surface-raised)]/60 cursor-text",
+            )}
+            style={{ fontFamily: "var(--font-display)" }}
+            title="Click to rename"
+          >
+            <span>{project.name}</span>
+            <Pencil
+              size={14}
+              className="text-[var(--color-muted)] opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            />
+          </button>
+        )}
 
         <div className="flex flex-wrap items-center gap-4">
           {project.property_address && (
@@ -156,15 +253,9 @@ export default function ProjectPage() {
         className="h-px bg-[var(--color-border)]"
       />
 
-      {/* Upload section */}
-      <motion.section {...fadeUp(0.14)} className="space-y-3">
-        <h3
-          className="text-lg font-semibold text-[var(--color-foreground)]"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          Upload Media
-        </h3>
-        <MediaUploader projectId={project.id} />
+      {/* Creation bar */}
+      <motion.section {...fadeUp(0.14)} ref={creationBarRef}>
+        <CreationBar projectId={project.id} preload={creationPreload} />
       </motion.section>
 
       {/* Asset grid section */}
@@ -175,7 +266,7 @@ export default function ProjectPage() {
         >
           Assets
         </h3>
-        <AssetGrid projectId={project.id} />
+        <AssetGrid projectId={project.id} onRerun={handleRerun} />
       </motion.section>
     </div>
   );
