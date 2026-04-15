@@ -1,0 +1,26 @@
+{
+  "name": "premium_45s",
+  "targetDurationSec": 45,
+  "aspectRatio": "16:9",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "minUsableImages": 10,
+  "music": { "mood": "premium_elegant", "volume": 0.3 },
+  "overlays": {
+    "headline": { "enabled": true, "text": null },
+    "captions": { "enabled": true },
+    "cta":      { "enabled": true, "text": null }
+  },
+  "slots": [
+    { "id":"1_aerial_hero","label":"Aerial hero","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":4,"maxDuration":5,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"2_establishing","label":"Establishing exterior","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":4,"maxDuration":5,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"3_entrance","label":"Entrance","requiredRoomType":"hallway","fallbackRoomTypes":["living"],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"4_living","label":"Living","requiredRoomType":"living","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"pan_right","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"5_kitchen","label":"Kitchen","requiredRoomType":"kitchen","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"6_dining","label":"Dining","requiredRoomType":"dining","fallbackRoomTypes":["living"],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"7_bedroom","label":"Primary bedroom","requiredRoomType":"bedroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"8_bathroom","label":"Bathroom","requiredRoomType":"bathroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":4,"maxDuration":5,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"9_balcony_wow","label":"Balcony wow","requiredRoomType":null,"fallbackRoomTypes":["balcony","exterior"],"onMissing":"use_wow","minDuration":4,"maxDuration":5,"defaultMotion":"pan_right","transitionOut":"flash","allowReuse":false,"overlayText":null },
+    { "id":"10_closing","label":"Closing hero","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":4,"maxDuration":5,"defaultMotion":"slow_zoom","transitionOut":"cut","allowReuse":true,"overlayText":null }
+  ]
+}

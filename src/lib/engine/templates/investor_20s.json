@@ -1,0 +1,22 @@
+{
+  "name": "investor_20s",
+  "targetDurationSec": 20,
+  "aspectRatio": "16:9",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "minUsableImages": 6,
+  "music": { "mood": "investor_corporate", "volume": 0.3 },
+  "overlays": {
+    "headline": { "enabled": true, "text": null },
+    "captions": { "enabled": true },
+    "cta":      { "enabled": true, "text": null }
+  },
+  "slots": [
+    { "id":"1_exterior","label":"Exterior","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"2_kitchen","label":"Kitchen","requiredRoomType":"kitchen","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"3_bathroom","label":"Bathroom","requiredRoomType":"bathroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"4_bedroom","label":"Bedroom","requiredRoomType":"bedroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"5_wow","label":"ROI highlight","requiredRoomType":null,"fallbackRoomTypes":["balcony","exterior"],"onMissing":"use_wow","minDuration":3,"maxDuration":4,"defaultMotion":"pan_right","transitionOut":"fade","allowReuse":false,"overlayText":"ROI 12%" },
+    { "id":"6_closing","label":"Closing","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":true,"overlayText":null }
+  ]
+}
