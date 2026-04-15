@@ -37,8 +37,8 @@ function logKieError(event: string, data: Record<string, unknown>): void {
  * different slug system is a contained change. Callers pass the logical id
  * via `VideoGenerationOptions.model` and never see these strings.
  */
-const KIEAI_VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
-  kling: "kling-2.6/image-to-video",
+const VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
+  kling: "kling-2.5/image-to-video",
   seedance: "bytedance/seedance-2",
   "seedance-fast": "bytedance/seedance-2-fast",
 };
@@ -47,7 +47,7 @@ const KIEAI_VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${process.env.KIEAI_API_KEY}`,
+    "Authorization": `Bearer ${process.env.KIEAI_CODEX_KEY}`,
     ...extra,
   };
 }
@@ -199,7 +199,7 @@ async function pollMarketTask(taskId: string, maxWaitMs = 1_500_000): Promise<st
     await new Promise(r => setTimeout(r, interval));
     attempts++;
     const res = await fetch(`${BASE_URL}/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
-      headers: { "Authorization": `Bearer ${process.env.KIEAI_API_KEY}` },
+      headers: { "Authorization": `Bearer ${process.env.KIEAI_CODEX_KEY}` },
     });
     if (!res.ok) {
       const text = await res.text();
@@ -260,7 +260,7 @@ async function pollFluxKontextTask(taskId: string, maxWaitMs = 600_000): Promise
     attempts++;
     const res = await fetch(
       `${BASE_URL}/api/v1/flux/kontext/record-info?taskId=${encodeURIComponent(taskId)}`,
-      { headers: { "Authorization": `Bearer ${process.env.KIEAI_API_KEY}` } },
+      { headers: { "Authorization": `Bearer ${process.env.KIEAI_CODEX_KEY}` } },
     );
     if (!res.ok) {
       const text = await res.text();
@@ -400,7 +400,7 @@ export const kieaiProvider: IMediaProvider = {
 
   /**
    * Generate a video from an image (or text) using Kling models.
-   * Default model: kling-2.6/image-to-video (via unified createTask endpoint).
+   * Default model: kling-2.5/image-to-video (via unified createTask endpoint).
    */
   async generateVideo(options: VideoGenerationOptions): Promise<MediaJobResult> {
     const start = Date.now();
@@ -408,10 +408,10 @@ export const kieaiProvider: IMediaProvider = {
     // the id to a kie.ai slug internally. No raw-slug passthrough — an
     // unknown value indicates a bug at the call site.
     const requested = options.model ?? "kling";
-    const model = KIEAI_VIDEO_MODEL_SLUGS[requested];
+    const model = VIDEO_MODEL_SLUGS[requested];
     if (!model) {
       throw new Error(
-        `kieai.generateVideo: unknown video model "${requested}". Expected one of: ${Object.keys(KIEAI_VIDEO_MODEL_SLUGS).join(", ")}.`,
+        `kieai.generateVideo: unknown video model "${requested}". Expected one of: ${Object.keys(VIDEO_MODEL_SLUGS).join(", ")}.`,
       );
     }
     const aspectRatio = options.aspectRatio ?? "16:9";

@@ -278,7 +278,7 @@ Key fields:
 - `aspect_ratio` — `"16:9" | "9:16" | "1:1"`.
 - `image_url` — **singular string**, not array. (kie.ai uses `image_urls: [...]`.) Omit for text-to-video.
 - `enable_audio` — boolean, `2.6` supports native audio in pro mode only (costs 2x pro price).
-- `cfg_scale` — string-typed `"0.5"` in docs. Quote it as a string to be safe.
+- `cfg_scale` — must be a JSON number (float64), e.g. `0.5`. PiAPI's own JSON example in the original docs quotes it as `"0.5"`, but the server rejects string values with `cannot unmarshal string into ... cfg_scale of type float64`. Always send it unquoted.
 
 **Kling Elements** (separate task for multi-reference-image generation, version 1.6 only): `task_type: "video_generation"` with `input.elements: [{image: url}, ...]` (1–4). **Not available on 2.6** — this is a regression vs kie.ai, which allows `reference_image_urls` on Seedance. If we need multi-ref on Kling, we'd have to downgrade to 1.6. For our use case (Seedance already supports multi-ref), skip Kling Elements.
 

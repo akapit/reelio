@@ -7,17 +7,18 @@ const providers: Record<MediaProvider, IMediaProvider> = {
   piapi: piapiProvider,
 };
 
-const DEFAULT_PROVIDER: MediaProvider = "kieai";
+const DEFAULT_PROVIDER: MediaProvider = "piapi";
 
 /**
- * Per-task provider routing. Flip any entry to `"piapi"` to move that
- * capability to piapi.ai without touching the calling trigger task.
+ * Per-task provider routing. Every capability now defaults to piapi.ai.
+ * Flip an entry back to `"kieai"` if you need the legacy provider for
+ * a specific task.
  */
 const TASK_PROVIDER_MAP: Partial<Record<string, MediaProvider>> = {
-  "enhance-image":   "kieai",
-  "virtual-staging": "kieai",
-  "sky-replacement": "kieai",
-  "generate-video":  "kieai",
+  "enhance-image":   "piapi",
+  "virtual-staging": "piapi",
+  "sky-replacement": "piapi",
+  "generate-video":  "piapi",
 };
 
 export function getProvider(task?: string): IMediaProvider {
