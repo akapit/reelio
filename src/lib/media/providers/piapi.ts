@@ -34,7 +34,7 @@ function logPiApiError(event: string, data: Record<string, unknown>): void {
  * Provider-internal: logical `VideoModel` ids → PiAPI task_type values. Kept
  * private so the IMediaProvider abstraction stays free of provider slugs.
  * Only Seedance variants map 1:1; Kling uses `task_type: "video_generation"`
- * with `input.version: "2.6"` and is handled inline in `generateVideo`.
+ * with `input.version: "2.5"` and is handled inline in `generateVideo`.
  */
 const PIAPI_SEEDANCE_TASK_TYPES: Record<"seedance" | "seedance-fast", string> = {
   seedance: "seedance-2",
@@ -367,7 +367,7 @@ export const piapiProvider: IMediaProvider = {
   },
 
   /**
-   * Generate a video from an image (or text) via PiAPI. Routes to Kling 2.6
+   * Generate a video from an image (or text) via PiAPI. Routes to Kling 2.5
    * or Seedance 2 (standard or fast) based on the logical `VideoModel` id.
    */
   async generateVideo(options: VideoGenerationOptions): Promise<MediaJobResult> {
@@ -376,7 +376,7 @@ export const piapiProvider: IMediaProvider = {
     const aspectRatio = options.aspectRatio ?? "16:9";
 
     if (requested === "kling") {
-      // Kling 2.6 image-to-video. PiAPI uses singular `image_url` string;
+      // Kling 2.5 image-to-video. PiAPI uses singular `image_url` string;
       // omit it for text-to-video.
       const duration = options.duration ?? 5;
       const input: Record<string, unknown> = {
@@ -384,11 +384,14 @@ export const piapiProvider: IMediaProvider = {
           options.prompt ??
           "Slow cinematic camera movement, real estate property walkthrough",
         negative_prompt: "",
-        cfg_scale: "0.5",
+        // PiAPI Kling expects a JSON number (float64), not a string. The
+        // docs example quotes it, but the server rejects strings with
+        // `cannot unmarshal string into ... cfg_scale of type float64`.
+        cfg_scale: 0.5,
         duration,
         aspect_ratio: aspectRatio,
         mode: "std",
-        version: "2.6",
+        version: "2.5",
         enable_audio: false,
         ...(options.imageUrl ? { image_url: options.imageUrl } : {}),
       };
@@ -404,7 +407,7 @@ export const piapiProvider: IMediaProvider = {
       return {
         outputUrl: extractVideoUrl(output),
         provider: "piapi",
-        model: "kling-2.6/image-to-video",
+        model: "kling-2.5/image-to-video",
         externalIds: { taskId },
         durationMs: Date.now() - start,
       };

@@ -22,7 +22,7 @@ if (taskIds.length === 0) {
 for (const taskId of taskIds) {
   const res = await fetch(
     `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
-    { headers: { Authorization: `Bearer ${process.env.KIEAI_API_KEY}` } },
+    { headers: { Authorization: `Bearer ${process.env.KIEAI_CODEX_KEY}` } },
   );
   const text = await res.text();
   console.log(`\n=== taskId: ${taskId} (HTTP ${res.status}) ===`);

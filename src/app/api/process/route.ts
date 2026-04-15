@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { assetId, tool, prompt, duration, aspectRatio, quality, voiceoverText, musicPrompt, musicVolume, videoModel, referenceAssetIds } = body as {
+  const { assetId, tool, prompt, duration, aspectRatio, quality, voiceoverText, musicPrompt, musicVolume, videoModel, referenceAssetIds, effectId, effectPhrases } = body as {
     assetId?: string;
     tool?: string;
     prompt?: string;
@@ -38,7 +38,38 @@ export async function POST(req: NextRequest) {
     musicVolume?: number;
     videoModel?: string;
     referenceAssetIds?: string[];
+    effectId?: string;
+    effectPhrases?: unknown;
   };
+
+  // Normalize the effect payload. Effects must never block a generation, so a
+  // malformed payload silently falls back to "no effect" instead of 400ing.
+  // Shape: `{ opener: string, transition?: string, closer?: string }`.
+  let resolvedEffectPhrases:
+    | { opener: string; transition?: string; closer?: string }
+    | undefined;
+  if (
+    effectPhrases &&
+    typeof effectPhrases === "object" &&
+    !Array.isArray(effectPhrases)
+  ) {
+    const ep = effectPhrases as {
+      opener?: unknown;
+      transition?: unknown;
+      closer?: unknown;
+    };
+    if (typeof ep.opener === "string" && ep.opener.length > 0) {
+      resolvedEffectPhrases = {
+        opener: ep.opener,
+        ...(typeof ep.transition === "string"
+          ? { transition: ep.transition }
+          : {}),
+        ...(typeof ep.closer === "string" ? { closer: ep.closer } : {}),
+      };
+    }
+  }
+  const resolvedEffectId =
+    typeof effectId === "string" && effectId.length > 0 ? effectId : undefined;
 
   const VALID_VIDEO_MODELS: readonly VideoModel[] = [
     "kling",
@@ -207,6 +238,8 @@ export async function POST(req: NextRequest) {
             referenceImageUrls.length > 0
               ? (referenceAssetIds ?? []).slice(0, 9)
               : null,
+          effectId: resolvedEffectId ?? null,
+          effectPhrases: resolvedEffectPhrases ?? null,
         }
       : tool === "enhance"
         ? { prompt: prompt ?? null }
@@ -261,6 +294,9 @@ export async function POST(req: NextRequest) {
         videoModel: resolvedVideoModel,
         referenceImageUrls:
           referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+        effect: resolvedEffectPhrases
+          ? { id: resolvedEffectId, ...resolvedEffectPhrases }
+          : undefined,
       });
     }
   } catch (err) {

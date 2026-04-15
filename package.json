@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "trigger:dev": "npx trigger.dev@latest dev --env-file .env.local"
+    "trigger:dev": "npx trigger.dev@latest dev --env-file .env.local",
+    "debug:shots": "npx tsx scripts/preview-kling-shots.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1029.0",

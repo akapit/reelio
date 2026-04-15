@@ -74,7 +74,7 @@ const createRes = await fetch("https://api.kie.ai/api/v1/jobs/createTask", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${process.env.KIEAI_API_KEY}`,
+    Authorization: `Bearer ${process.env.KIEAI_CODEX_KEY}`,
   },
   body: JSON.stringify(createBody),
 });
@@ -96,7 +96,7 @@ while (Date.now() < deadline) {
   attempts++;
   const res = await fetch(
     `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`,
-    { headers: { Authorization: `Bearer ${process.env.KIEAI_API_KEY}` } },
+    { headers: { Authorization: `Bearer ${process.env.KIEAI_CODEX_KEY}` } },
   );
   const json = await res.json();
   const state = json.data?.state;

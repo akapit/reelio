@@ -9,7 +9,7 @@
  * instead of reaching `fetch` directly.
  *
  * The wrapper is intentionally provider-agnostic at the call sites — we
- * still point at kie.ai under the hood today (env var `KIEAI_API_KEY`),
+ * still point at kie.ai under the hood today (env var `KIEAI_CODEX_KEY`),
  * but callers no longer encode that fact. Swapping to OpenAI or piapi
  * later is a one-file change here.
  *
@@ -175,10 +175,10 @@ export async function callCodex(
     signal,
   } = options;
 
-  const apiKey = process.env.KIEAI_API_KEY;
+  const apiKey = process.env.KIEAI_CODEX_KEY;
   if (!apiKey) {
     logCodexError("missingApiKey", { model });
-    throw new Error("codex: KIEAI_API_KEY is not set");
+    throw new Error("codex: KIEAI_CODEX_KEY is not set");
   }
 
   // Matches the pre-refactor pattern shared by all three callers: the

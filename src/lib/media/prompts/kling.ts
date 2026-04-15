@@ -235,3 +235,56 @@ export function parseKlingShots(
     mode: "explicit-segments",
   };
 }
+
+/** Effect spec consumed by `applyEffectToShots`. Matches the wire-protocol
+ * `effectPhrases` payload so the trigger task can pass it straight through. */
+export interface KlingEffectSpec {
+  opener: string;
+  transition?: string;
+  closer?: string;
+}
+
+/**
+ * Prepend effect phrases to a parsed Kling shot list:
+ *   - Shot 1              → `<opener>. <prompt>`
+ *   - Shots 2..N-1        → `<transition>. <prompt>` (only if `transition` set)
+ *   - Shot N              → `<closer>. <prompt>`    (only if `closer` set)
+ *
+ * Edge cases:
+ *   - N=1: only the opener applies; closer is ignored (one shot can't be both).
+ *   - N=2: opener on shot 1, closer on shot 2, no middle → transition ignored.
+ *   - N≥3: opener + transitions on all middles + closer.
+ *
+ * Pure function — returns a new array, leaves the input untouched. Each
+ * resulting prompt is truncated to Kling's 500-char limit so wrapping can't
+ * overflow the per-shot cap even when `shot.prompt` was already near the edge.
+ */
+export function applyEffectToShots(
+  shots: ParsedKlingShot[],
+  effect?: KlingEffectSpec | null,
+): ParsedKlingShot[] {
+  if (!effect) return shots;
+  const n = shots.length;
+  if (n === 0) return shots;
+
+  const wrap = (phrase: string | undefined, prompt: string) => {
+    if (!phrase) return prompt;
+    const trimmed = phrase.trim();
+    if (!trimmed) return prompt;
+    // If the phrase already ends in a sentence terminator, don't double it up.
+    const sep = /[.!?]$/.test(trimmed) ? " " : ". ";
+    return `${trimmed}${sep}${prompt}`.slice(0, KLING_MAX_SHOT_PROMPT_CHARS);
+  };
+
+  return shots.map((shot, i) => {
+    let phrase: string | undefined;
+    if (i === 0) {
+      phrase = effect.opener;
+    } else if (i === n - 1 && effect.closer) {
+      phrase = effect.closer;
+    } else if (i > 0 && i < n - 1 && effect.transition) {
+      phrase = effect.transition;
+    }
+    return phrase ? { ...shot, prompt: wrap(phrase, shot.prompt) } : shot;
+  });
+}
