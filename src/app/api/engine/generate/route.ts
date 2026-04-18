@@ -10,6 +10,18 @@ const BodySchema = z.object({
   projectId: z.string().uuid(),
   imageAssetIds: z.array(z.string().uuid()).min(1).max(20),
   templateName: z.enum(TEMPLATE_NAMES),
+  /**
+   * Video-generation backend. Optional; server default resolves from
+   * ENGINE_VIDEO_PROVIDER env or "piapi".
+   */
+  videoProvider: z.enum(["piapi", "kieai"]).optional(),
+  /** Optional ElevenLabs voiceover text (max ~2000 chars). */
+  voiceoverText: z.string().max(2000).optional(),
+  voiceoverVoiceId: z.string().optional(),
+  /** Optional ElevenLabs background-music prompt. */
+  musicPrompt: z.string().max(500).optional(),
+  /** Music loudness 0..1 in the final mix. Default 0.2 at the engine layer. */
+  musicVolume: z.number().min(0).max(1).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -35,7 +47,16 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { projectId, imageAssetIds, templateName } = parsed.data;
+  const {
+    projectId,
+    imageAssetIds,
+    templateName,
+    videoProvider,
+    voiceoverText,
+    voiceoverVoiceId,
+    musicPrompt,
+    musicVolume,
+  } = parsed.data;
 
   const { data: project, error: projectErr } = await supabase
     .from("projects")
@@ -92,11 +113,23 @@ export async function POST(req: NextRequest) {
       original_url: firstAsset.original_url,
       asset_type: "video",
       status: "processing",
-      tool_used: "engine",
+      // `tool_used` is constrained to enhance|staging|sky|video in the DB
+      // (supabase/migrations/001_initial.sql). The engine is a video-producing
+      // tool, so "video" is the correct bucket. The scene-based lineage lives
+      // in `metadata.engineRequest` / `engine_runs`.
+      tool_used: "video",
       thumbnail_url: firstAsset.original_url,
       source_asset_id: firstAsset.id,
       metadata: {
-        engineRequest: { templateName, imageAssetIds },
+        engineRequest: {
+          templateName,
+          imageAssetIds,
+          ...(videoProvider ? { videoProvider } : {}),
+          ...(voiceoverText ? { voiceoverText } : {}),
+          ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
+          ...(musicPrompt ? { musicPrompt } : {}),
+          ...(musicVolume !== undefined ? { musicVolume } : {}),
+        },
       },
     })
     .select()
@@ -112,6 +145,11 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       imageUrls: imageUrls as string[],
       templateName,
+      ...(videoProvider ? { videoProvider } : {}),
+      ...(voiceoverText ? { voiceoverText } : {}),
+      ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
+      ...(musicPrompt ? { musicPrompt } : {}),
+      ...(musicVolume !== undefined ? { musicVolume } : {}),
     });
   } catch (err) {
     console.error("[engine/generate] Failed to trigger task:", err);

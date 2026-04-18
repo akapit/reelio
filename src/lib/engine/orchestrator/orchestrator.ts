@@ -1,290 +1,620 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type {
-  ContentBlock,
-  Message,
-  MessageParam,
-  Tool,
-  ToolResultBlockParam,
-  ToolUseBlock,
-} from "@anthropic-ai/sdk/resources/messages";
-import { SYSTEM_PROMPT } from "./systemPrompt";
-import { TOOLS, executeTool as defaultExecuteTool } from "./tools";
-import { classifyError, toJobErrorFromToolResult } from "./errors";
+/**
+ * Engine orchestrator — imperative linear pipeline.
+ *
+ * Flow:
+ *   1. Vision analyze  — Google Cloud Vision produces per-image analysis + ratings
+ *   2. Plan            — slot-fill a scene timeline from the template
+ *   3. Scene prompts   — Claude writes one cinematography prompt per scene
+ *   4. Scene generate  — piapi Kling 2.5 i2v (or Seedance) per scene, in parallel
+ *   5. Audio (opt.)    — ElevenLabs voiceover + music
+ *   6. Merge           — ffmpeg concat scenes with xfade transitions + audio mux
+ *
+ * Every step is recorded in Supabase (engine_runs / engine_steps) when
+ * `request.tracking` is provided. Without tracking, the pipeline still runs
+ * (used by scripts/test-engine.ts and local smoke tests) but writes no rows.
+ */
+
+import nodePath from "node:path";
+
+import { analyzeImages } from "../vision/analyzer";
+import { loadTemplate } from "../templates/loader";
+import { planTimeline } from "../planner/planner";
+import { writeScenePrompts } from "../prompt-writer/writer";
+import { generateScenes, type VideoProviderName } from "../scene-generator/generator";
+import { mergeScenes } from "../merge/ffmpeg";
 import {
-  ImageDataset,
+  generateVoiceover,
+  generateBackgroundMusic,
+} from "../../audio/elevenlabs";
+import {
+  startRun,
+  startStep,
+  finishStep,
+  withStep,
+  completeRun,
+  mergeRunSummary,
+} from "../tracking/supabase";
+import {
   JobError,
   JobResult,
-  RenderResult,
-  TimelineBlueprint,
+  ImageDataset,
+  SceneTimeline,
+  Scene,
+  ScenePrompt,
+  SceneVideo,
+  FailureReason,
+  Layer,
 } from "../models";
+
+export interface RunEngineTracking {
+  assetId: string;
+  userId: string;
+  projectId?: string | null;
+}
 
 export interface RunEngineRequest {
   imagePaths: string[];
   templateName: string;
   outputPath: string;
+  /** When set, every step is persisted to Supabase engine_runs/engine_steps. */
+  tracking?: RunEngineTracking;
+  /** Optional narration. When set, runs ElevenLabs voiceover generation. */
+  voiceoverText?: string;
+  voiceoverVoiceId?: string;
+  /** Optional background music. When set, runs ElevenLabs music generation. */
+  musicPrompt?: string;
+  /** 0..1 — music loudness in the final mix. Default 0.2. */
+  musicVolume?: number;
+  /**
+   * Video-generation backend. Defaults to piapi (current behaviour); set to
+   * "kieai" to route per-scene Kling/Seedance calls through the kie.ai
+   * provider instead. Env fallback: `ENGINE_VIDEO_PROVIDER`.
+   */
+  videoProvider?: VideoProviderName;
 }
 
 export interface RunEngineDeps {
-  client?: Pick<Anthropic, "messages">;
-  executeTool?: typeof defaultExecuteTool;
-  model?: string;
-  maxIterations?: number;
-}
-
-interface Locals {
-  dataset?: ImageDataset;
-  timeline?: TimelineBlueprint;
-  render?: RenderResult;
+  // Reserved for future dep injection. Currently unused — kept for back-compat.
 }
 
 function log(event: string, data: Record<string, unknown> = {}): void {
   try {
     console.log(JSON.stringify({ source: "engine.orchestrator", event, ...data }));
   } catch {
-    // never throw from logging
+    /* never throw from logging */
   }
 }
 
-function isErrorEnvelope(raw: unknown): boolean {
-  return toJobErrorFromToolResult(raw) !== null;
+function makeError(
+  layer: Layer,
+  reason: FailureReason,
+  message: string,
+  details?: Record<string, unknown>,
+): JobError {
+  return { status: "error", layer, reason, message, details };
 }
 
-function captureLocal(name: string, raw: unknown, locals: Locals): void {
-  if (isErrorEnvelope(raw)) return;
+/** Convert an ImageDataset into the summary.images base array (pre-generation). */
+function datasetToImageSummary(dataset: ImageDataset): Array<Record<string, unknown>> {
+  return dataset.images.map((img) => ({
+    url: img.path,
+    analysis: {
+      roomType: img.roomType,
+      dims: img.dims,
+      dominantColorsHex: img.dominantColorsHex,
+      visionLabels: img.visionLabels,
+    },
+    rating: img.scores,
+    eligibility: img.eligibility,
+  }));
+}
 
-  if (name === "analyze_images") {
-    const parsed = ImageDataset.safeParse(raw);
-    if (parsed.success) locals.dataset = parsed.data;
-    return;
-  }
-  if (name === "build_timeline") {
-    // PlannerAbort signal — not a timeline.
-    if (
-      raw &&
-      typeof raw === "object" &&
-      "abortedSlotIds" in (raw as object) &&
-      !("shots" in (raw as object))
-    ) {
-      return;
+/** Merge per-scene planning/prompt/generation info back onto the summary images. */
+function mergeSceneInfoIntoSummary(
+  baseImages: Array<Record<string, unknown>>,
+  scenes: Scene[],
+  prompts: ScenePrompt[],
+  videos: SceneVideo[],
+): Array<Record<string, unknown>> {
+  const promptBySceneId = new Map(prompts.map((p) => [p.sceneId, p]));
+  const videoBySceneId = new Map(videos.map((v) => [v.sceneId, v]));
+  const imageByUrl = new Map(baseImages.map((img) => [img.url as string, { ...img }]));
+  for (const scene of scenes) {
+    const img = imageByUrl.get(scene.imagePath);
+    if (!img) continue;
+    const p = promptBySceneId.get(scene.sceneId);
+    const v = videoBySceneId.get(scene.sceneId);
+    img.sceneId = scene.sceneId;
+    img.sceneOrder = scene.order;
+    img.sceneRole = scene.sceneRole;
+    img.durationSec = scene.durationSec;
+    img.motionIntent = scene.motionIntent;
+    if (p) {
+      img.scenePrompt = p.prompt;
+      img.modelChoice = p.modelChoice;
+      img.modelReason = p.modelReason;
     }
-    const parsed = TimelineBlueprint.safeParse(raw);
-    if (parsed.success) locals.timeline = parsed.data;
-    return;
+    if (v) {
+      img.sceneVideoUrl = v.videoUrl;
+      img.piapiTaskId = v.piapiTaskId;
+    }
   }
-  if (name === "render_video") {
-    const parsed = RenderResult.safeParse(raw);
-    if (parsed.success) locals.render = parsed.data;
-    return;
-  }
-}
-
-function lastTextOf(content: ContentBlock[] | undefined): string {
-  if (!content) return "";
-  for (let i = content.length - 1; i >= 0; i--) {
-    const b = content[i];
-    if (b.type === "text") return b.text;
-  }
-  return "";
-}
-
-function tryParseJson(text: string): unknown | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return null;
-  }
-}
-
-function synthesizeJobResult(
-  locals: Locals,
-  outputPath: string,
-  startedAt: number,
-): JobResult | null {
-  if (!locals.dataset || !locals.timeline || !locals.render) return null;
-  const candidate: JobResult = {
-    status: "success",
-    videoPath: locals.render.outputPath || outputPath,
-    timeline: locals.timeline,
-    dataset: locals.dataset,
-    render: locals.render,
-    totalMs: Date.now() - startedAt,
-  };
-  const parsed = JobResult.safeParse(candidate);
-  return parsed.success ? parsed.data : null;
+  return Array.from(imageByUrl.values());
 }
 
 export async function runEngineJob(
-  req: RunEngineRequest,
-  deps: RunEngineDeps = {},
+  request: RunEngineRequest,
+  _deps: RunEngineDeps = {},
 ): Promise<JobResult | JobError> {
   const startedAt = Date.now();
-  const model =
-    deps.model ?? process.env.ENGINE_ORCHESTRATOR_MODEL ?? "claude-opus-4-6";
-  const maxIterations = deps.maxIterations ?? 10;
-  const exec = deps.executeTool ?? defaultExecuteTool;
-
-  const client: Pick<Anthropic, "messages"> =
-    deps.client ?? (new Anthropic() as unknown as Pick<Anthropic, "messages">);
-
-  const messages: MessageParam[] = [
-    {
-      role: "user",
-      content: JSON.stringify({
-        image_paths: req.imagePaths,
-        template_name: req.templateName,
-        output_path: req.outputPath,
-      }),
-    },
-  ];
-
-  const locals: Locals = {};
+  const { imagePaths, templateName, outputPath, tracking } = request;
 
   log("run.start", {
-    model,
-    maxIterations,
-    imageCount: req.imagePaths.length,
-    templateName: req.templateName,
+    imageCount: imagePaths.length,
+    templateName,
+    outputPath,
+    tracked: !!tracking,
+    videoProvider:
+      request.videoProvider ??
+      (process.env.ENGINE_VIDEO_PROVIDER as string | undefined) ??
+      "piapi",
   });
 
-  for (let i = 0; i < maxIterations; i++) {
-    let resp: Message;
+  // --- Start run (optional tracking) ---
+  let runId: string | undefined;
+  if (tracking) {
     try {
-      resp = (await client.messages.create({
-        model,
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        tools: TOOLS as unknown as Tool[],
-        messages,
-      })) as Message;
+      runId = await startRun({
+        assetId: tracking.assetId,
+        userId: tracking.userId,
+        projectId: tracking.projectId ?? null,
+        input: {
+          imagePaths,
+          templateName,
+          outputPath,
+          hasVoiceover: !!request.voiceoverText,
+          hasMusic: !!request.musicPrompt,
+          musicVolume: request.musicVolume,
+        },
+      });
     } catch (err) {
-      log("anthropic.error", {
-        i,
-        message: err instanceof Error ? err.message : String(err),
+      log("run.trackingStartFailed", {
+        error: err instanceof Error ? err.message : String(err),
       });
-      return classifyError(err, "orchestrator");
+      // Non-fatal: continue without tracking rather than failing the whole run.
     }
-
-    const stopReason = resp.stop_reason ?? null;
-    const toolUses = (resp.content ?? []).filter(
-      (b): b is ToolUseBlock => b.type === "tool_use",
-    );
-    log("iter.end", {
-      i,
-      stopReason,
-      toolsCalled: toolUses.map((t) => t.name),
-    });
-
-    // Append the assistant message into the running transcript.
-    messages.push({
-      role: "assistant",
-      content: resp.content as MessageParam["content"],
-    });
-
-    if (stopReason === "end_turn") {
-      const text = lastTextOf(resp.content);
-      const parsed = tryParseJson(text);
-
-      if (parsed && typeof parsed === "object") {
-        const errParse = JobError.safeParse(parsed);
-        if (errParse.success) {
-          log("run.end", { outcome: "error", reason: errParse.data.reason });
-          return errParse.data;
-        }
-        // Try as JobResult; substitute locals when available (authoritative).
-        const okParse = JobResult.safeParse(parsed);
-        if (okParse.success) {
-          if (locals.dataset && locals.timeline && locals.render) {
-            const synthesized: JobResult = {
-              status: "success",
-              videoPath: locals.render.outputPath || req.outputPath,
-              timeline: locals.timeline,
-              dataset: locals.dataset,
-              render: locals.render,
-              totalMs: Date.now() - startedAt,
-            };
-            log("run.end", { outcome: "success", resultSource: "synthesized" });
-            return synthesized;
-          }
-          // No locals to substitute — trust model and recompute totalMs.
-          const out: JobResult = {
-            ...okParse.data,
-            totalMs: Date.now() - startedAt,
-          };
-          log("run.end", { outcome: "success", resultSource: "model" });
-          return out;
-        }
-      }
-
-      // Final message couldn't be parsed as JobResult or JobError.
-      // If we have all locals, synthesize success anyway.
-      const synth = synthesizeJobResult(locals, req.outputPath, startedAt);
-      if (synth) {
-        log("run.end", { outcome: "success", resultSource: "synthesized.fallback" });
-        return synth;
-      }
-
-      return classifyError(
-        new Error(`unparseable final content: ${text.slice(0, 200)}`),
-        "orchestrator",
-      );
-    }
-
-    if (stopReason !== "tool_use") {
-      // Try synthesizing from locals before giving up.
-      const synth = synthesizeJobResult(locals, req.outputPath, startedAt);
-      if (synth) {
-        log("run.end", {
-          outcome: "success",
-          resultSource: "synthesized.unexpected_stop",
-          stopReason,
-        });
-        return synth;
-      }
-      return {
-        status: "error",
-        layer: "orchestrator",
-        reason: "unknown",
-        message: `unexpected stop_reason: ${stopReason}`,
-      };
-    }
-
-    // tool_use: execute every tool_use block in this assistant turn.
-    if (toolUses.length === 0) {
-      return {
-        status: "error",
-        layer: "orchestrator",
-        reason: "unknown",
-        message: "tool_use stop_reason but no tool_use blocks",
-      };
-    }
-
-    const toolResults: ToolResultBlockParam[] = [];
-    for (const tu of toolUses) {
-      let result: unknown;
-      try {
-        result = await exec(tu.name, tu.input);
-      } catch (err) {
-        result = { error: classifyError(err, "orchestrator") };
-      }
-      captureLocal(tu.name, result, locals);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: JSON.stringify(result),
-        is_error: isErrorEnvelope(result),
-      });
-    }
-
-    messages.push({ role: "user", content: toolResults });
   }
 
-  log("run.end", { outcome: "timeout", iterations: maxIterations });
-  return {
-    status: "error",
-    layer: "orchestrator",
-    reason: "timeout",
-    message: `exceeded maxIterations=${maxIterations}`,
+  const failRun = async (err: Record<string, unknown>): Promise<void> => {
+    if (!runId) return;
+    try {
+      await completeRun({ runId, status: "failed", error: err });
+    } catch {
+      /* already logged */
+    }
   };
+
+  // --- Step 1: Vision analyze ---
+  let dataset: ImageDataset;
+  try {
+    dataset = runId
+      ? await withStep(
+          { runId, stepOrder: 1, stepType: "vision_analyze", input: { imageCount: imagePaths.length } },
+          async () => {
+            const d = await analyzeImages(imagePaths);
+            return {
+              output: { images: datasetToImageSummary(d), usableCount: d.usableCount, availableRoomTypes: d.availableRoomTypes },
+              metrics: { imageCount: d.images.length },
+              result: d,
+            };
+          },
+        )
+      : await analyzeImages(imagePaths);
+  } catch (err) {
+    const jobErr = makeError(
+      "vision",
+      "vision_api_failure",
+      err instanceof Error ? err.message : String(err),
+    );
+    await failRun(jobErr);
+    log("run.visionFailed", { error: jobErr.message });
+    return jobErr;
+  }
+
+  // --- Step 2: Load template + plan ---
+  let template;
+  try {
+    template = loadTemplate(templateName);
+  } catch (err) {
+    const jobErr = makeError(
+      "planner",
+      "no_usable_template",
+      err instanceof Error ? err.message : String(err),
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  if (dataset.usableCount < template.minUsableImages) {
+    const jobErr = makeError(
+      "planner",
+      "insufficient_images",
+      `usableCount=${dataset.usableCount} < minUsableImages=${template.minUsableImages}`,
+      { usableCount: dataset.usableCount, required: template.minUsableImages },
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  let timeline: SceneTimeline;
+  try {
+    const planResult = runId
+      ? await withStep(
+          { runId, stepOrder: 2, stepType: "plan", input: { templateName } },
+          async () => {
+            const r = planTimeline({ dataset, template });
+            if (r.abortedSlotIds && r.abortedSlotIds.length > 0) {
+              return {
+                output: { abortedSlotIds: r.abortedSlotIds },
+                result: r,
+              };
+            }
+            return {
+              output: {
+                templateName: r.timeline.templateName,
+                sceneCount: r.timeline.scenes.length,
+                totalDurationSec: r.timeline.totalDurationSec,
+                warnings: r.timeline.warnings,
+                unfilledSlotIds: r.timeline.unfilledSlotIds,
+              },
+              result: r,
+            };
+          },
+        )
+      : planTimeline({ dataset, template });
+
+    if (planResult.abortedSlotIds && planResult.abortedSlotIds.length > 0) {
+      const jobErr = makeError(
+        "planner",
+        "planner_slots_unfillable",
+        `slots unfillable: ${planResult.abortedSlotIds.join(", ")}`,
+        { abortedSlotIds: planResult.abortedSlotIds },
+      );
+      await failRun(jobErr);
+      return jobErr;
+    }
+    timeline = planResult.timeline;
+  } catch (err) {
+    const jobErr = makeError(
+      "planner",
+      "unknown",
+      err instanceof Error ? err.message : String(err),
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  // --- Step 3: Scene prompts ---
+  let scenePrompts: ScenePrompt[];
+  try {
+    scenePrompts = runId
+      ? await withStep(
+          {
+            runId,
+            stepOrder: 3,
+            stepType: "scene_prompt",
+            input: { sceneCount: timeline.scenes.length, templateName },
+          },
+          async () => {
+            const r = await writeScenePrompts({ scenes: timeline.scenes, templateName });
+            return {
+              output: {
+                prompts: r.prompts,
+                fallbackUsed: r.fallbackUsed,
+              },
+              externalIds: r.anthropicRequestId
+                ? { anthropicRequestId: r.anthropicRequestId }
+                : undefined,
+              metrics: {
+                tokensIn: r.tokensIn,
+                tokensOut: r.tokensOut,
+                cacheReadTokens: r.cacheReadTokens,
+                cacheWriteTokens: r.cacheWriteTokens,
+              },
+              result: r.prompts,
+            };
+          },
+        )
+      : (await writeScenePrompts({ scenes: timeline.scenes, templateName })).prompts;
+  } catch (err) {
+    const jobErr = makeError(
+      "orchestrator",
+      "unknown",
+      `scene_prompt: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  // --- Step 4: Scene generate (parallel, one engine_step row per scene) ---
+  const sceneStepIdBySceneId = new Map<string, string>();
+  let sceneGen;
+  try {
+    sceneGen = await generateScenes({
+      scenes: timeline.scenes,
+      prompts: scenePrompts,
+      aspectRatio: timeline.aspectRatio,
+      videoProvider: request.videoProvider,
+      imagesByPath: new Map(dataset.images.map((img) => [img.path, img])),
+      onSceneStart: async (scene, prompt) => {
+        if (!runId) return;
+        try {
+          const stepId = await startStep({
+            runId,
+            stepOrder: 100 + scene.order, // reserve 100+ for per-scene steps
+            stepType: "scene_generate",
+            input: {
+              sceneId: scene.sceneId,
+              sceneOrder: scene.order,
+              sceneRole: scene.sceneRole,
+              imagePath: scene.imagePath,
+              prompt: prompt.prompt,
+              modelChoice: prompt.modelChoice,
+              durationSec: scene.durationSec,
+            },
+          });
+          sceneStepIdBySceneId.set(scene.sceneId, stepId);
+        } catch {
+          /* logged in tracking helper */
+        }
+      },
+      onSceneTaskId: async (scene, piapiTaskId) => {
+        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+        if (!stepId) return;
+        try {
+          await finishStep({
+            stepId,
+            status: "running",
+            externalIds: { piapiTaskId },
+          });
+        } catch {
+          /* already logged */
+        }
+      },
+      onSceneDone: async (scene, video) => {
+        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+        if (!stepId) return;
+        try {
+          await finishStep({
+            stepId,
+            status: "done",
+            output: { videoUrl: video.videoUrl, durationSec: video.durationSec, model: video.model },
+            externalIds: video.piapiTaskId ? { piapiTaskId: video.piapiTaskId } : undefined,
+            metrics: { generationMs: video.generationMs },
+          });
+        } catch {
+          /* already logged */
+        }
+      },
+      onSceneFailed: async (scene, error) => {
+        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+        if (!stepId) return;
+        try {
+          await finishStep({
+            stepId,
+            status: "failed",
+            error: { message: error.message },
+          });
+        } catch {
+          /* already logged */
+        }
+      },
+    });
+  } catch (err) {
+    const jobErr = makeError(
+      "orchestrator",
+      "unknown",
+      `scene_generate: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  if (sceneGen.videos.length === 0) {
+    const jobErr = makeError(
+      "orchestrator",
+      "unknown",
+      `all ${sceneGen.failed.length} scene generations failed`,
+      { failed: sceneGen.failed },
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  // --- Step 5: Audio (optional) ---
+  let voiceoverBuffer: Buffer | undefined;
+  let musicBuffer: Buffer | undefined;
+
+  if (request.voiceoverText) {
+    try {
+      const vo = runId
+        ? await withStep(
+            { runId, stepOrder: 200, stepType: "voiceover", input: { textLength: request.voiceoverText.length } },
+            async () => {
+              const r = await generateVoiceover({
+                text: request.voiceoverText!,
+                voiceId: request.voiceoverVoiceId,
+              });
+              return {
+                output: { durationMs: r.durationMs, model: r.model, byteLength: r.byteLength },
+                externalIds: { elevenlabsVoiceoverRequestId: r.requestId },
+                result: r,
+              };
+            },
+          )
+        : await generateVoiceover({
+            text: request.voiceoverText,
+            voiceId: request.voiceoverVoiceId,
+          });
+      voiceoverBuffer = vo.buffer;
+    } catch (err) {
+      log("run.voiceoverFailed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Non-fatal: continue with video-only. The merge step handles missing audio.
+    }
+  }
+
+  if (request.musicPrompt) {
+    try {
+      const musicDuration = Math.min(30, Math.round(timeline.totalDurationSec));
+      const mu = runId
+        ? await withStep(
+            { runId, stepOrder: 201, stepType: "music", input: { promptLength: request.musicPrompt.length, durationSec: musicDuration } },
+            async () => {
+              const r = await generateBackgroundMusic({
+                prompt: request.musicPrompt!,
+                durationSeconds: musicDuration,
+              });
+              return {
+                output: { durationMs: r.durationMs, model: r.model, byteLength: r.byteLength },
+                externalIds: { elevenlabsMusicRequestId: r.requestId },
+                result: r,
+              };
+            },
+          )
+        : await generateBackgroundMusic({
+            prompt: request.musicPrompt,
+            durationSeconds: musicDuration,
+          });
+      musicBuffer = mu.buffer;
+    } catch (err) {
+      log("run.musicFailed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Non-fatal: continue with video + voiceover (or video-only).
+    }
+  }
+
+  // --- Step 6: Merge ---
+  let mergeResult;
+  try {
+    mergeResult = runId
+      ? await withStep(
+          {
+            runId,
+            stepOrder: 300,
+            stepType: "merge",
+            input: {
+              sceneCount: sceneGen.videos.length,
+              hasVoiceover: !!voiceoverBuffer,
+              hasMusic: !!musicBuffer,
+            },
+          },
+          async () => {
+            const r = await mergeScenes({
+              scenes: timeline.scenes,
+              videos: sceneGen.videos,
+              outputPath,
+              voiceoverBuffer,
+              musicBuffer,
+              musicVolume: request.musicVolume,
+            });
+            return {
+              output: {
+                outputPath: r.outputPath,
+                durationSec: r.durationSec,
+                sizeBytes: r.sizeBytes,
+                sceneCount: r.sceneCount,
+              },
+              metrics: { renderMs: r.renderMs },
+              result: r,
+            };
+          },
+        )
+      : await mergeScenes({
+          scenes: timeline.scenes,
+          videos: sceneGen.videos,
+          outputPath,
+          voiceoverBuffer,
+          musicBuffer,
+          musicVolume: request.musicVolume,
+        });
+  } catch (err) {
+    const jobErr = makeError(
+      "renderer",
+      "renderer_ffmpeg_failure",
+      err instanceof Error ? err.message : String(err),
+    );
+    await failRun(jobErr);
+    return jobErr;
+  }
+
+  // --- Finalize run summary ---
+  if (runId) {
+    const baseImages = datasetToImageSummary(dataset);
+    const images = mergeSceneInfoIntoSummary(
+      baseImages,
+      timeline.scenes,
+      scenePrompts,
+      sceneGen.videos,
+    );
+    try {
+      await mergeRunSummary(runId, {
+        images,
+        timeline: {
+          templateName: timeline.templateName,
+          totalDurationSec: timeline.totalDurationSec,
+          aspectRatio: timeline.aspectRatio,
+          resolution: timeline.resolution,
+          fps: timeline.fps,
+          sceneIds: timeline.scenes.map((s) => s.sceneId),
+        },
+        merge: {
+          sceneCount: mergeResult.sceneCount,
+          totalDurationSec: mergeResult.durationSec,
+          outputPath: mergeResult.outputPath,
+          width: mergeResult.width,
+          height: mergeResult.height,
+          codec: mergeResult.codec,
+          sizeBytes: mergeResult.sizeBytes,
+        },
+        scenesFailed: sceneGen.failed,
+      });
+      await completeRun({ runId, status: "done" });
+    } catch (err) {
+      log("run.summaryFailed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const totalMs = Date.now() - startedAt;
+  log("run.done", {
+    totalMs,
+    sceneCount: sceneGen.videos.length,
+    outputPath: nodePath.resolve(outputPath),
+    runId,
+  });
+
+  const result: JobResult = {
+    status: "success",
+    videoPath: mergeResult.outputPath,
+    timeline,
+    dataset,
+    render: {
+      outputPath: mergeResult.outputPath,
+      durationSec: mergeResult.durationSec,
+      sizeBytes: mergeResult.sizeBytes,
+      width: mergeResult.width,
+      height: mergeResult.height,
+      codec: mergeResult.codec,
+      renderMs: mergeResult.renderMs,
+    },
+    totalMs,
+    runId,
+    scenePrompts,
+    sceneVideos: sceneGen.videos,
+  };
+  return result;
 }

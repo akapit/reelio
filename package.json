@@ -9,6 +9,7 @@
     "lint": "eslint",
     "trigger:dev": "npx trigger.dev@latest dev --env-file .env.local",
     "debug:shots": "npx tsx scripts/preview-kling-shots.ts",
+    "engine:test": "npx tsx scripts/test-engine.ts",
     "test": "vitest run src/lib/engine",
     "test:watch": "vitest src/lib/engine"
   },

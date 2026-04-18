@@ -2,7 +2,16 @@ import { ImageAnnotatorClient } from "@google-cloud/vision";
 
 export interface VisionRaw {
   labelAnnotations: Array<{ description: string; score: number }>;
-  localizedObjectAnnotations: Array<{ name: string; score: number }>;
+  /**
+   * Localized objects carry a normalized bounding box when the source image
+   * produced one. bbox fields are each in [0, 1]. Absent when Google Vision
+   * returned no polygon for an object.
+   */
+  localizedObjectAnnotations: Array<{
+    name: string;
+    score: number;
+    bbox?: { x0: number; y0: number; x1: number; y1: number };
+  }>;
   imagePropertiesAnnotation?: {
     dominantColors?: {
       colors?: Array<{
@@ -159,7 +168,29 @@ export const googleVision: VisionProvider = {
 
     const localizedObjectAnnotations = (result.localizedObjectAnnotations ?? [])
       .filter((o) => typeof o.name === "string" && typeof o.score === "number")
-      .map((o) => ({ name: String(o.name), score: Number(o.score) }));
+      .map((o) => {
+        const verts = o.boundingPoly?.normalizedVertices ?? [];
+        const xs = verts
+          .map((v) => v.x)
+          .filter((x): x is number => typeof x === "number");
+        const ys = verts
+          .map((v) => v.y)
+          .filter((y): y is number => typeof y === "number");
+        const bbox =
+          xs.length >= 2 && ys.length >= 2
+            ? {
+                x0: Math.max(0, Math.min(1, Math.min(...xs))),
+                y0: Math.max(0, Math.min(1, Math.min(...ys))),
+                x1: Math.max(0, Math.min(1, Math.max(...xs))),
+                y1: Math.max(0, Math.min(1, Math.max(...ys))),
+              }
+            : undefined;
+        return {
+          name: String(o.name),
+          score: Number(o.score),
+          ...(bbox ? { bbox } : {}),
+        };
+      });
 
     // NOTE: Vision API doesn't reliably return width/height — parse the image header ourselves.
     const { width, height } = readImageDims(bytes);

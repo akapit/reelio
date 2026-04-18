@@ -63,6 +63,26 @@ export const VisionLabel = z.object({
 });
 export type VisionLabel = z.infer<typeof VisionLabel>;
 
+/**
+ * Normalized bounding box (each field ∈ [0, 1] of the source image).
+ * x0/y0 = top-left; x1/y1 = bottom-right.
+ */
+export const BoundingBox = z.object({
+  x0: z.number().min(0).max(1),
+  y0: z.number().min(0).max(1),
+  x1: z.number().min(0).max(1),
+  y1: z.number().min(0).max(1),
+});
+export type BoundingBox = z.infer<typeof BoundingBox>;
+
+/** A localized object detected by Google Vision with its bounding box. */
+export const VisionObject = z.object({
+  name: z.string(),
+  confidence: z.number(),
+  bbox: BoundingBox,
+});
+export type VisionObject = z.infer<typeof VisionObject>;
+
 export const ImageMetadata = z.object({
   path: z.string(),
   roomType: RoomType,
@@ -70,6 +90,11 @@ export const ImageMetadata = z.object({
   eligibility: ImageEligibility,
   dims: ImageDims,
   visionLabels: z.array(VisionLabel).default([]),
+  /**
+   * Localized objects with normalized bboxes, used downstream by smartCrop
+   * to center the 9:16 crop on the dominant subject(s). Defaults to [].
+   */
+  visionObjects: z.array(VisionObject).default([]),
   dominantColorsHex: z.array(z.string()).default([]),
 });
 export type ImageMetadata = z.infer<typeof ImageMetadata>;
@@ -177,12 +202,20 @@ export type RenderResult = z.infer<typeof RenderResult>;
 export const JobResult = z.object({
   status: z.literal("success"),
   videoPath: z.string(),
-  timeline: TimelineBlueprint,
+  // New-pipeline timeline (scene-based). Old TimelineBlueprint is deprecated.
+  timeline: z.lazy(() => SceneTimeline),
   dataset: ImageDataset,
   render: RenderResult,
   totalMs: z.number().int().nonnegative(),
+  runId: z.string().uuid().optional(),
+  scenePrompts: z.array(z.lazy(() => ScenePrompt)).optional(),
+  sceneVideos: z.array(z.lazy(() => SceneVideo)).optional(),
 });
-export type JobResult = z.infer<typeof JobResult>;
+export type JobResult = z.infer<typeof JobResult> & {
+  timeline: SceneTimeline;
+  scenePrompts?: ScenePrompt[];
+  sceneVideos?: SceneVideo[];
+};
 
 export const FailureReason = z.enum([
   "insufficient_images",
@@ -216,3 +249,124 @@ export const TEMPLATE_NAMES = [
   "premium_45s",
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
+
+// --- New scene-based pipeline models ---------------------------------------
+
+export const SceneRole = z.enum(["opening", "hero", "wow", "filler", "closing"]);
+export type SceneRole = z.infer<typeof SceneRole>;
+
+export const VideoModelChoice = z.enum(["kling", "seedance", "seedance-fast"]);
+export type VideoModelChoice = z.infer<typeof VideoModelChoice>;
+
+/** One planned scene. Produced by the planner, consumed by the prompt writer. */
+export const Scene = z.object({
+  sceneId: z.string(),
+  order: z.number().int().nonnegative(),
+  slotId: z.string(),
+  imagePath: z.string(),
+  imageRoomType: RoomType,
+  imageScores: ImageScores,
+  imageDominantColorsHex: z.array(z.string()).default([]),
+  imageLabels: z.array(VisionLabel).default([]),
+  sceneRole: SceneRole,
+  durationSec: z.number().positive(),
+  motionIntent: z.string(),
+  templateMood: z.string(),
+  overlayText: z.string().nullable().default(null),
+  transitionOut: TransitionType,
+  transitionDurationSec: z.number().min(0).default(0.3),
+});
+export type Scene = z.infer<typeof Scene>;
+
+/** Produced by Claude per scene and fed to the scene generator. */
+export const ScenePrompt = z.object({
+  sceneId: z.string(),
+  prompt: z.string().min(1),
+  modelChoice: VideoModelChoice.default("kling"),
+  modelReason: z.string().optional(),
+  modelParams: z
+    .object({
+      mode: z.enum(["std", "pro"]).optional(),
+      cameraMovement: z.string().optional(),
+    })
+    .optional(),
+});
+export type ScenePrompt = z.infer<typeof ScenePrompt>;
+
+/** Produced by the per-scene generator (piapi). */
+export const SceneVideo = z.object({
+  sceneId: z.string(),
+  videoUrl: z.string().url(),
+  piapiTaskId: z.string().optional(),
+  durationSec: z.number().positive().optional(),
+  model: z.string(),
+  generationMs: z.number().int().nonnegative().optional(),
+});
+export type SceneVideo = z.infer<typeof SceneVideo>;
+
+/** Full scene-based timeline returned by the planner. */
+export const SceneTimeline = z.object({
+  templateName: z.string(),
+  targetDurationSec: z.number().positive(),
+  totalDurationSec: z.number().positive(),
+  aspectRatio: AspectRatio,
+  resolution: z.object({
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }),
+  fps: z.number().int().positive(),
+  scenes: z.array(Scene).min(1),
+  music: z.object({ mood: z.string(), volume: z.number() }),
+  overlays: TemplateOverlays,
+  unfilledSlotIds: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+});
+export type SceneTimeline = z.infer<typeof SceneTimeline>;
+
+// --- Supabase tracking row shapes -----------------------------------------
+
+export const RunStatus = z.enum(["pending", "running", "done", "failed"]);
+export type RunStatus = z.infer<typeof RunStatus>;
+
+export const StepStatus = z.enum(["running", "done", "failed"]);
+export type StepStatus = z.infer<typeof StepStatus>;
+
+export const StepType = z.enum([
+  "vision_analyze",
+  "plan",
+  "scene_prompt",
+  "scene_generate",
+  "voiceover",
+  "music",
+  "merge",
+  "upload",
+]);
+export type StepType = z.infer<typeof StepType>;
+
+/** engine_runs row (subset we care about in app code). */
+export const RunRecord = z.object({
+  id: z.string().uuid(),
+  asset_id: z.string().uuid(),
+  user_id: z.string().uuid(),
+  project_id: z.string().uuid().nullable(),
+  status: RunStatus,
+  input: z.record(z.unknown()),
+  summary: z.record(z.unknown()),
+  error: z.record(z.unknown()).nullable(),
+});
+export type RunRecord = z.infer<typeof RunRecord>;
+
+/** engine_steps row (subset we write). */
+export const StepRecord = z.object({
+  id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  step_order: z.number().int().nonnegative(),
+  step_type: StepType,
+  status: StepStatus,
+  input: z.record(z.unknown()),
+  output: z.record(z.unknown()),
+  external_ids: z.record(z.unknown()),
+  metrics: z.record(z.unknown()),
+  error: z.record(z.unknown()).nullable(),
+});
+export type StepRecord = z.infer<typeof StepRecord>;

@@ -43,6 +43,7 @@ export function makeImage(input: MakeImageInput): ImageMetadata {
       aspectRatio,
     },
     visionLabels: [],
+    visionObjects: [],
     dominantColorsHex: [],
   };
 }

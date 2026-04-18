@@ -35,17 +35,38 @@ function log(event: string, data: Record<string, unknown>): void {
   }
 }
 
+async function exists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function renderVideo(
   timeline: TimelineBlueprint,
   outputPath: string,
 ): Promise<RenderResult> {
   const started = Date.now();
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "engine-"));
+  // If ENGINE_CACHE_DIR is set, use it as a persistent scratch/cache dir so
+  // expensive ffmpeg steps (per-shot renders especially) can be reused on
+  // retry. Caller is responsible for cleaning up / invalidating the cache
+  // when the timeline changes.
+  const cacheDir = process.env.ENGINE_CACHE_DIR;
+  let scratch: string;
+  if (cacheDir) {
+    scratch = path.resolve(cacheDir);
+    await fs.mkdir(scratch, { recursive: true });
+  } else {
+    scratch = await fs.mkdtemp(path.join(os.tmpdir(), "engine-"));
+  }
   log("render.start", {
     scratch,
     outputPath,
     shots: timeline.shots.length,
     totalDurationSec: timeline.totalDurationSec,
+    cached: Boolean(cacheDir),
   });
 
   try {
@@ -65,16 +86,28 @@ export async function renderVideo(
             { width, height },
           );
           const shotPath = path.join(scratch, `shot_${shot.order}.mp4`);
+          if (cacheDir && (await exists(shotPath))) {
+            log("shot.cacheHit", { order: shot.order, path: shotPath });
+            return shotPath;
+          }
+          // Pre-scale the source image to cover the target frame while
+          // maintaining its original aspect ratio. This prevents stretching
+          // when the source AR differs from the output AR (e.g. a landscape
+          // photo rendered to a 9:16 portrait video). The zoompan filter then
+          // pans across the properly-scaled frame.
+          const coverScale = `scale=${width}:${height}:force_original_aspect_ratio=increase,setsar=1`;
           const args = [
             "-y",
             "-loop",
             "1",
-            "-t",
-            shot.durationSec.toString(),
+            "-framerate",
+            fps.toString(),
             "-i",
             shot.imagePath,
             "-vf",
-            `${filter},format=yuv420p`,
+            `${coverScale},${filter},format=yuv420p`,
+            "-t",
+            shot.durationSec.toString(),
             "-r",
             fps.toString(),
             "-c:v",
@@ -97,22 +130,26 @@ export async function renderVideo(
       shots,
     );
     const concatPath = path.join(scratch, "concat.mp4");
-    const concatArgs = [
-      "-y",
-      ...concatInputs,
-      "-filter_complex",
-      concatFilter,
-      "-map",
-      "[vout]",
-      "-c:v",
-      "libx264",
-      "-pix_fmt",
-      "yuv420p",
-      "-r",
-      fps.toString(),
-      concatPath,
-    ];
-    await runFfmpeg(concatArgs);
+    if (cacheDir && (await exists(concatPath))) {
+      log("concat.cacheHit", { path: concatPath });
+    } else {
+      const concatArgs = [
+        "-y",
+        ...concatInputs,
+        "-filter_complex",
+        concatFilter,
+        "-map",
+        "[vout]",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        fps.toString(),
+        concatPath,
+      ];
+      await runFfmpeg(concatArgs);
+    }
 
     // Step 3 — overlays (optional).
     const fontPath = await resolveFontPath();
@@ -182,8 +219,12 @@ export async function renderVideo(
 
     return result;
   } finally {
-    await fs.rm(scratch, { recursive: true, force: true }).catch(() => {
-      // best-effort cleanup
-    });
+    // Preserve cache dir when ENGINE_CACHE_DIR is set so retries can reuse
+    // per-shot renders. Anonymous scratch dirs still get cleaned up.
+    if (!cacheDir) {
+      await fs.rm(scratch, { recursive: true, force: true }).catch(() => {
+        // best-effort cleanup
+      });
+    }
   }
 }

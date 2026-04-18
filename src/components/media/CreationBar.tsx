@@ -28,12 +28,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
 import { useProcess } from "@/hooks/use-process";
+import { useEngineGenerate } from "@/hooks/use-engine-generate";
 import { useTemplates, type Template } from "@/hooks/use-templates";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
+import type { TemplateName as EngineTemplateName } from "@/lib/engine/models";
 import {
   VIDEO_EFFECTS,
-  getEffect,
   type VideoEffect,
 } from "@/lib/media/effects/library";
 
@@ -110,6 +111,30 @@ const VIDEO_MODELS: { id: VideoModel; label: string; description: string }[] = [
   { id: "seedance-fast", label: "Seedance 2.0 Fast", description: "Quicker runs, lower cost" },
 ];
 
+type AspectRatioOption = "16:9" | "9:16" | "1:1";
+const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = [
+  { id: "16:9", label: "Landscape", icon: "▬" },
+  { id: "9:16", label: "Portrait", icon: "▮" },
+  { id: "1:1", label: "Square", icon: "◼" },
+];
+
+/**
+ * Scene-engine templates exposed in the UI. Labels are shown in the picker;
+ * ids must match `TEMPLATE_NAMES` in @/lib/engine/models and correspond to
+ * JSON files under src/lib/engine/templates/.
+ */
+const ENGINE_TEMPLATE_META: {
+  id: EngineTemplateName;
+  label: string;
+  description: string;
+}[] = [
+  { id: "fast_15s", label: "Social Reel · 15s", description: "Short, punchy, 9:16 — Instagram/TikTok" },
+  { id: "investor_20s", label: "Investor · 20s", description: "Crisp, data-forward pitch" },
+  { id: "family_30s", label: "Family · 30s", description: "Warm, story-led walkthrough" },
+  { id: "luxury_30s", label: "Luxury · 30s", description: "Cinematic listing tour" },
+  { id: "premium_45s", label: "Premium · 45s", description: "Full hero-to-close reel" },
+];
+
 /** Kling 2.6 auto-fan caps at 8 shots; each shot is 5s or 10s. */
 const KLING_MAX_SHOTS_UI = 8;
 
@@ -180,6 +205,13 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
   // still pick Kling from the model dropdown for multi-shot cinematic output.
   const [videoModel, setVideoModel] = useState<VideoModel>("seedance-fast");
   const [videoModelOpen, setVideoModelOpen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
+  const [aspectRatioOpen, setAspectRatioOpen] = useState(false);
+  // Scene-engine template selection. Drives /api/engine/generate when mode
+  // is "video". Default fast_15s matches the most-requested social-reel format.
+  const [engineTemplate, setEngineTemplate] =
+    useState<EngineTemplateName>("fast_15s");
+  const [engineTemplateOpen, setEngineTemplateOpen] = useState(false);
 
   // @-mention autocomplete state. `startIndex` is the position of the '@' in `prompt`.
   const [mention, setMention] = useState<{
@@ -193,8 +225,10 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const templatesRef = useRef<HTMLDivElement>(null);
   const videoModelRef = useRef<HTMLDivElement>(null);
+  const aspectRatioRef = useRef<HTMLDivElement>(null);
   const upload = useUpload(projectId);
   const process = useProcess();
+  const engine = useEngineGenerate();
   const { data: templates } = useTemplates();
 
   const uploadedAssetIds = [
@@ -279,6 +313,20 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [videoModelOpen]);
+
+  useEffect(() => {
+    if (!aspectRatioOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        aspectRatioRef.current &&
+        !aspectRatioRef.current.contains(e.target as Node)
+      ) {
+        setAspectRatioOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [aspectRatioOpen]);
 
   // Preload from a "Re-run" click on a past asset. Keyed on `nonce` so the
   // same payload can be reapplied by bumping the nonce from the parent.
@@ -613,29 +661,15 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
         `Enhancing ${uploadedAssetIds.length} photo${uploadedAssetIds.length > 1 ? "s" : ""}`
       );
     } else if (mode === "video") {
-      const firstAssetId = uploadedAssetIds[0];
-      if (firstAssetId) {
-        // Additional images beyond the first go as reference images. For
-        // Seedance they're `reference_image_urls`; for Kling they each drive
-        // one concatenated shot (auto-fan).
-        const referenceAssetIds = uploadedAssetIds.slice(1);
-        // Wire protocol: `duration` is the TOTAL video length. For Kling,
-        // multiply per-shot × N here; Seedance sends the slider value as-is
-        // (it's a single clip).
-        const totalDuration =
-          videoModel === "kling"
-            ? klingTotalDuration(videoDuration, uploadedAssetIds.length)
-            : videoDuration;
-        // Look up the selected effect (if any). We pass the phrases as the
-        // operative data — the trigger task uses them directly and does NOT
-        // re-look-up by id. The id is metadata only (for preview chip + rerun).
-        const selectedEffect = getEffect(selectedEffectId);
-        process.mutate({
-          assetId: firstAssetId,
+      if (uploadedAssetIds.length > 0) {
+        // Dispatch to the scene-based engine. Per-shot model choice and
+        // cinematography prompts are decided server-side by the planner +
+        // Claude prompt writer; the UI only picks the template, aspect, and
+        // optional voiceover/music.
+        engine.mutate({
           projectId,
-          tool: "video",
-          prompt: prompt.trim() || undefined,
-          duration: totalDuration,
+          imageAssetIds: uploadedAssetIds,
+          templateName: engineTemplate,
           voiceoverText: voiceoverEnabled
             ? voiceoverText.trim() || undefined
             : undefined,
@@ -643,19 +677,8 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
             ? musicPrompt.trim() || undefined
             : undefined,
           musicVolume: musicEnabled ? musicVolume / 100 : undefined,
-          videoModel,
-          referenceAssetIds:
-            referenceAssetIds.length > 0 ? referenceAssetIds : undefined,
-          effectId: selectedEffect?.id,
-          effectPhrases: selectedEffect
-            ? {
-                opener: selectedEffect.openerPhrase,
-                transition: selectedEffect.transitionPhrase,
-                closer: selectedEffect.closerPhrase,
-              }
-            : undefined,
         });
-        toast.success("Video generation started");
+        // useEngineGenerate.onSuccess surfaces its own toast — no duplicate.
       }
     }
 
@@ -665,16 +688,14 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     mode,
     uploadedAssetIds,
     process,
+    engine,
     projectId,
-    prompt,
-    videoDuration,
+    engineTemplate,
     voiceoverEnabled,
     voiceoverText,
     musicEnabled,
     musicPrompt,
     musicVolume,
-    videoModel,
-    selectedEffectId,
     clearAll,
   ]);
 
@@ -1225,6 +1246,88 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           )}
         </AnimatePresence>
 
+        {/* Engine template picker — drives /api/engine/generate. The scene
+            planner and per-shot Claude prompt writer decide model + duration
+            per scene from this single choice. */}
+        {mode === "video" && (
+          <div className="relative flex items-center">
+            <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+            <button
+              type="button"
+              onClick={() => setEngineTemplateOpen((prev) => !prev)}
+              title="Template"
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-1 rounded-md",
+                "text-xs font-medium transition-colors duration-150 outline-none",
+                engineTemplateOpen
+                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
+              )}
+            >
+              <LayoutTemplate size={12} className="shrink-0" />
+              <span className="truncate max-w-[120px] sm:max-w-none">
+                {ENGINE_TEMPLATE_META.find((t) => t.id === engineTemplate)?.label ?? engineTemplate}
+              </span>
+              <ChevronDown
+                size={11}
+                className={cn(
+                  "transition-transform duration-150",
+                  engineTemplateOpen && "rotate-180"
+                )}
+              />
+            </button>
+            <AnimatePresence>
+              {engineTemplateOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.12, ease: "easeOut" as const }}
+                  className={cn(
+                    "absolute bottom-full left-0 mb-2 z-50",
+                    "w-64 rounded-xl overflow-hidden",
+                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
+                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
+                  )}
+                >
+                  <div className="p-1.5">
+                    {ENGINE_TEMPLATE_META.map((t) => {
+                      const isSelected = engineTemplate === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setEngineTemplate(t.id);
+                            setEngineTemplateOpen(false);
+                          }}
+                          className={cn(
+                            "w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-left",
+                            "transition-colors duration-150",
+                            isSelected
+                              ? "bg-[var(--color-accent)]/10 text-[var(--color-foreground)]"
+                              : "hover:bg-[var(--color-surface)] text-[var(--color-foreground)]"
+                          )}
+                        >
+                          <span className="text-xs font-medium flex items-center gap-1.5">
+                            {t.label}
+                            {isSelected && (
+                              <Check size={12} className="text-[var(--color-accent)]" />
+                            )}
+                          </span>
+                          <span className="text-[10px] text-[var(--color-muted)] leading-tight">
+                            {t.description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* Video model picker — sibling of the animated options block so its
             dropdown panel isn't clipped by that block's overflow-hidden. */}
         {mode === "video" && (
@@ -1309,6 +1412,100 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                             <p className="text-[11px] text-[var(--color-muted)] truncate mt-0.5">
                               {m.description}
                             </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {/* Aspect ratio picker */}
+        {mode === "video" && (
+          <div ref={aspectRatioRef} className="relative flex items-center">
+            <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+            <button
+              type="button"
+              onClick={() => setAspectRatioOpen((prev) => !prev)}
+              title="Aspect ratio"
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-1 rounded-md",
+                "text-xs font-medium transition-colors duration-150 outline-none",
+                aspectRatioOpen
+                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
+              )}
+            >
+              <span className="truncate">
+                {aspectRatio}
+              </span>
+              <ChevronDown
+                size={11}
+                className={cn(
+                  "transition-transform duration-150",
+                  aspectRatioOpen && "rotate-180"
+                )}
+              />
+            </button>
+
+            <AnimatePresence>
+              {aspectRatioOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                  transition={{ duration: 0.12, ease: "easeOut" as const }}
+                  className={cn(
+                    "absolute bottom-full left-0 mb-2 z-50",
+                    "w-40 rounded-xl overflow-hidden",
+                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
+                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
+                  )}
+                >
+                  <div className="p-1.5">
+                    {ASPECT_RATIOS.map((ar) => {
+                      const isSelected = aspectRatio === ar.id;
+                      return (
+                        <button
+                          key={ar.id}
+                          type="button"
+                          onClick={() => {
+                            setAspectRatio(ar.id);
+                            setAspectRatioOpen(false);
+                          }}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left",
+                            "transition-colors duration-150",
+                            isSelected
+                              ? "bg-[var(--color-accent)]/12"
+                              : "hover:bg-[var(--color-accent)]/8"
+                          )}
+                        >
+                          <div className="w-4 h-4 shrink-0 flex items-center justify-center">
+                            {isSelected ? (
+                              <Check
+                                size={13}
+                                className="text-[var(--color-accent)]"
+                              />
+                            ) : (
+                              <span className="text-xs text-[var(--color-muted)]">{ar.icon}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={cn(
+                                "text-xs font-medium truncate",
+                                isSelected
+                                  ? "text-[var(--color-accent)]"
+                                  : "text-[var(--color-foreground)]"
+                              )}
+                            >
+                              {ar.label}
+                            </p>
+                            <p className="text-[11px] text-[var(--color-muted)]">{ar.id}</p>
                           </div>
                         </button>
                       );

@@ -91,6 +91,7 @@ describe("pickImage", () => {
         eligibility: { asHero: false, asWow: false, asClosing: false },
         dims: { width: 1920, height: 1080, aspectRatio: 1.78 },
         visionLabels: [],
+        visionObjects: [],
         dominantColorsHex: [],
       },
     ]);

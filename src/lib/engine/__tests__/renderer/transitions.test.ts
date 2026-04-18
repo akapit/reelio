@@ -23,7 +23,7 @@ describe("transitions.buildConcatGraph", () => {
     // final label is [vout]
     const expected =
       "[0:v][1:v]xfade=transition=fade:duration=0.5:offset=2.5[v01];" +
-      "[v01][2:v]xfade=transition=fadewhite:duration=0.2:offset=6.8[vout]";
+      "[v01][2:v]xfade=transition=fadewhite:duration=0.2:offset=6.3[vout]";
     expect(filter).toBe(expected);
   });
 
@@ -45,7 +45,7 @@ describe("transitions.buildConcatGraph", () => {
       ],
     );
     expect(filter).toBe(
-      "[0:v][1:v]xfade=transition=fade:duration=0:offset=2[vout]",
+      "[0:v][1:v]xfade=transition=fade:duration=0.04:offset=1.96[vout]",
     );
   });
 

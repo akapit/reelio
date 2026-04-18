@@ -10,13 +10,19 @@ import { appendAssetMetadata, updateAssetStatus } from "./_shared";
 
 export const engineGenerateTask = task({
   id: "engine-generate",
-  maxDuration: 300,
+  maxDuration: 600,
   retry: { maxAttempts: 1 },
   run: async (payload: {
     assetId: string;
     userId: string;
+    projectId?: string | null;
     imageUrls: string[];
     templateName: string;
+    voiceoverText?: string;
+    voiceoverVoiceId?: string;
+    musicPrompt?: string;
+    musicVolume?: number;
+    videoProvider?: "piapi" | "kieai";
   }) => {
     const runStart = Date.now();
     await tags.add(`asset_${payload.assetId}`);
@@ -30,6 +36,8 @@ export const engineGenerateTask = task({
       assetId: payload.assetId,
       imageCount: payload.imageUrls.length,
       templateName: payload.templateName,
+      hasVoiceover: !!payload.voiceoverText,
+      hasMusic: !!payload.musicPrompt,
     });
 
     const outputPath = path.join("/tmp", `engine-${payload.assetId}-${randomUUID()}.mp4`);
@@ -39,6 +47,16 @@ export const engineGenerateTask = task({
         imagePaths: payload.imageUrls,
         templateName: payload.templateName,
         outputPath,
+        tracking: {
+          assetId: payload.assetId,
+          userId: payload.userId,
+          projectId: payload.projectId ?? null,
+        },
+        voiceoverText: payload.voiceoverText,
+        voiceoverVoiceId: payload.voiceoverVoiceId,
+        musicPrompt: payload.musicPrompt,
+        musicVolume: payload.musicVolume,
+        videoProvider: payload.videoProvider,
       });
 
       if (result.status === "error") {
@@ -52,6 +70,8 @@ export const engineGenerateTask = task({
         throw new Error(`${result.layer}:${result.reason}: ${result.message}`);
       }
 
+      if (result.runId) await tags.add(`run_${result.runId}`);
+
       const buf = await readFile(outputPath);
       const key = `${payload.userId}/processed/${randomUUID()}.mp4`;
       await r2.send(
@@ -64,10 +84,14 @@ export const engineGenerateTask = task({
       );
       const publicUrl = getPublicUrl(key);
 
+      // Keep the assets row lean — the full detail lives in engine_runs.summary.
       await appendAssetMetadata(payload.assetId, {
         engine: {
-          timeline: result.timeline,
-          render: result.render,
+          runId: result.runId,
+          templateName: result.timeline.templateName,
+          sceneCount: result.timeline.scenes.length,
+          totalDurationSec: result.render.durationSec,
+          sizeBytes: result.render.sizeBytes,
           totalMs: result.totalMs,
         },
       });
@@ -77,6 +101,7 @@ export const engineGenerateTask = task({
 
       logger.info("[engine-generate] ok", {
         assetId: payload.assetId,
+        runId: result.runId,
         publicUrl,
         durationSec: result.render.durationSec,
         sizeBytes: result.render.sizeBytes,
@@ -86,8 +111,10 @@ export const engineGenerateTask = task({
 
       return {
         videoUrl: publicUrl,
+        runId: result.runId,
         render: result.render,
         templateName: result.timeline.templateName,
+        sceneCount: result.timeline.scenes.length,
       };
     } catch (error) {
       logger.error("[engine-generate] failed", {

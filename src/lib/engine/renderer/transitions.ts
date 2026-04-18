@@ -8,7 +8,10 @@ function xfadeParams(t: TransitionType): {
 } {
   switch (t) {
     case "cut":
-      return { transition: "fade", duration: 0 };
+      // ffmpeg's xfade with duration=0 truncates the output to the first clip.
+      // Use a single-frame crossfade (~1/30s at 30fps) — visually an instant cut
+      // but keeps the xfade chain well-formed across ffmpeg versions.
+      return { transition: "fade", duration: 0.04 };
     case "fade":
       return { transition: "fade", duration: 0.5 };
     case "flash":
@@ -56,13 +59,18 @@ export function buildConcatGraph(
 
   const segments: string[] = [];
   let cumulative = 0;
+  let priorOverlap = 0;
   let prevLabel = "[0:v]";
 
   for (let i = 0; i < n - 1; i++) {
     const shot = shots[i];
     const { transition, duration } = xfadeParams(shot.transitionOut);
     cumulative += shot.durationSec;
-    const offset = cumulative - duration;
+    // Each prior xfade consumed `duration` seconds of overlap in the merged
+    // stream, so the next xfade's offset (relative to the merged stream) must
+    // subtract those — otherwise ffmpeg silently drops the second input.
+    const offset = cumulative - priorOverlap - duration;
+    priorOverlap += duration;
     const isLast = i === n - 2;
     const outLabel = isLast
       ? "[vout]"

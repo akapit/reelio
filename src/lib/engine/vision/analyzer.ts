@@ -1,10 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, access, mkdir } from "node:fs/promises";
+import path from "node:path";
 import pLimit from "p-limit";
 import {
   ImageDataset,
   type ImageMetadata,
   type RoomType,
   type VisionLabel,
+  type VisionObject,
 } from "../models";
 import { googleVision, type VisionProvider, type VisionRaw } from "./googleVision";
 import { classifyRoom } from "./roomClassifier";
@@ -72,6 +74,7 @@ function failedImage(path: string): ImageMetadata {
     eligibility: { asHero: false, asWow: false, asClosing: false },
     dims: { width: 1, height: 1, aspectRatio: 1 },
     visionLabels: [],
+    visionObjects: [],
     dominantColorsHex: [],
   };
 }
@@ -88,6 +91,19 @@ function toMetadata(path: string, raw: VisionRaw): ImageMetadata {
     name: o.name.toLowerCase(),
     confidence: o.score,
   }));
+  // Full localized-object list WITH bboxes (used by smartCrop downstream).
+  // Images without a bbox (rare) are dropped here — smartCrop falls back to
+  // centered crop when the list is empty.
+  const visionObjects: VisionObject[] = raw.localizedObjectAnnotations
+    .filter(
+      (o): o is typeof o & { bbox: { x0: number; y0: number; x1: number; y1: number } } =>
+        o.bbox !== undefined,
+    )
+    .map((o) => ({
+      name: o.name.toLowerCase(),
+      confidence: o.score,
+      bbox: o.bbox,
+    }));
   const roomType: RoomType = classifyRoom(labels, objects);
 
   const width = raw.width > 0 ? raw.width : 1;
@@ -104,8 +120,38 @@ function toMetadata(path: string, raw: VisionRaw): ImageMetadata {
       aspectRatio: width / height,
     },
     visionLabels: topLabels(raw),
+    visionObjects,
     dominantColorsHex: extractDominantColors(raw),
   };
+}
+
+async function tryLoadCachedDataset(): Promise<ImageDataset | null> {
+  const cacheDir = process.env.ENGINE_CACHE_DIR;
+  if (!cacheDir) return null;
+  const cachePath = path.join(cacheDir, "dataset.json");
+  try {
+    await access(cachePath);
+    const raw = JSON.parse(await readFile(cachePath, "utf-8"));
+    const parsed = ImageDataset.safeParse(raw);
+    if (parsed.success) {
+      console.log(JSON.stringify({ source: "vision", event: "dataset.cacheHit", path: cachePath }));
+      return parsed.data;
+    }
+  } catch {
+    // No cache or invalid — fall through to full analysis.
+  }
+  return null;
+}
+
+async function saveCachedDataset(dataset: ImageDataset): Promise<void> {
+  const cacheDir = process.env.ENGINE_CACHE_DIR;
+  if (!cacheDir) return;
+  try {
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(path.join(cacheDir, "dataset.json"), JSON.stringify(dataset, null, 2));
+  } catch {
+    // Best-effort — don't break the pipeline over a cache write.
+  }
 }
 
 export async function analyzeImages(
@@ -115,6 +161,9 @@ export async function analyzeImages(
   if (!Array.isArray(paths) || paths.length === 0) {
     throw new VisionApiError("analyzeImages: no paths provided");
   }
+
+  const cached = await tryLoadCachedDataset();
+  if (cached) return cached;
 
   const provider = deps.provider ?? googleVision;
   const loadBytes = deps.loadBytes ?? defaultLoadBytes;
@@ -155,10 +204,12 @@ export async function analyzeImages(
     new Set(images.map((m) => m.roomType)),
   ) as RoomType[];
 
-  return ImageDataset.parse({
+  const dataset = ImageDataset.parse({
     images,
     availableRoomTypes,
     usableCount,
     analyzedAt: new Date().toISOString(),
   });
+  await saveCachedDataset(dataset);
+  return dataset;
 }
