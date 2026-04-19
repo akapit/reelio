@@ -1,0 +1,22 @@
+{
+  "name": "fast_15s",
+  "targetDurationSec": 15,
+  "aspectRatio": "9:16",
+  "fps": 30,
+  "resolution": { "width": 1080, "height": 1920 },
+  "minUsableImages": 5,
+  "music": { "mood": "upbeat_fast", "volume": 0.5 },
+  "overlays": {
+    "headline": { "enabled": true, "text": null },
+    "captions": { "enabled": false },
+    "cta":      { "enabled": true, "text": null }
+  },
+  "slots": [
+    { "id":"1_exterior","label":"Exterior hero","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":2,"maxDuration":3,"defaultMotion":"slow_zoom","transitionOut":"cut","allowReuse":false,"overlayText":null },
+    { "id":"2_living","label":"Living","requiredRoomType":"living","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":2,"maxDuration":3,"defaultMotion":"ken_burns_in","transitionOut":"cut","allowReuse":false,"overlayText":null },
+    { "id":"3_kitchen","label":"Kitchen","requiredRoomType":"kitchen","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":2,"maxDuration":3,"defaultMotion":"ken_burns_in","transitionOut":"cut","allowReuse":false,"overlayText":null },
+    { "id":"4_bedroom","label":"Bedroom","requiredRoomType":"bedroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":2,"maxDuration":3,"defaultMotion":"pan_right","transitionOut":"cut","allowReuse":false,"overlayText":null },
+    { "id":"5_wow","label":"Wow shot","requiredRoomType":null,"fallbackRoomTypes":["balcony","exterior"],"onMissing":"use_wow","minDuration":2,"maxDuration":3,"defaultMotion":"pan_right","transitionOut":"cut","allowReuse":false,"overlayText":null },
+    { "id":"6_closing","label":"Closing","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":2,"maxDuration":3,"defaultMotion":"slow_zoom","transitionOut":"cut","allowReuse":true,"overlayText":null }
+  ]
+}

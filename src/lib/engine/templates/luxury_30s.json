@@ -1,0 +1,41 @@
+{
+  "name": "luxury_30s",
+  "targetDurationSec": 30,
+  "aspectRatio": "16:9",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "minUsableImages": 6,
+  "music": { "mood": "luxury_cinematic", "volume": 0.35 },
+  "overlays": {
+    "headline": { "enabled": true,  "text": null },
+    "captions": { "enabled": false },
+    "cta":      { "enabled": true,  "text": null }
+  },
+
+  "_design_notes": [
+    "Slot order is deliberately arranged for trim-resilience. The planner's",
+    "slot-trim keeps slots[0], slots[last], and the first (budget - 2) of the",
+    "middle. Ordering the middle by importance (Living > Kitchen > Wow >",
+    "Master > Bathroom > Entrance) means a 6-image trim drops Bathroom +",
+    "Entrance, preserving the centerpiece Wow shot.",
+    "",
+    "Duration maxes are wide enough that a 6-slot trim can still reach the",
+    "30s target: sum of maxes = 31s for the trimmed set. distribute() in",
+    "planner/duration.ts clamps + redistributes to hit the target.",
+    "",
+    "Closing keeps allowReuse=true as a last-resort bookend: if no unused",
+    "exterior/living exists after 7 other slots have filled, it can reuse",
+    "the hero. With the unused-preferring pickImage, reuse is rare."
+  ],
+
+  "slots": [
+    { "id": "1_establishing", "label": "Establishing exterior", "requiredRoomType": "exterior", "fallbackRoomTypes": ["living"], "onMissing": "use_hero", "minDuration": 3,   "maxDuration": 5.5, "defaultMotion": "slow_zoom",   "transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "2_living",       "label": "Living",                 "requiredRoomType": "living",   "fallbackRoomTypes": ["dining"], "onMissing": "skip",     "minDuration": 3,   "maxDuration": 5.5, "defaultMotion": "pan_right",   "transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "3_kitchen",      "label": "Kitchen",                "requiredRoomType": "kitchen",  "fallbackRoomTypes": ["dining"], "onMissing": "skip",     "minDuration": 3,   "maxDuration": 5,   "defaultMotion": "ken_burns_in","transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "4_wow",          "label": "Wow view",               "requiredRoomType": null,       "fallbackRoomTypes": ["balcony", "exterior", "dining"], "onMissing": "use_wow", "minDuration": 3,   "maxDuration": 5.5, "defaultMotion": "pan_right",   "transitionOut": "flash", "allowReuse": false, "overlayText": null },
+    { "id": "5_master",       "label": "Primary bedroom",        "requiredRoomType": "bedroom",  "fallbackRoomTypes": [],         "onMissing": "skip",     "minDuration": 2.5, "maxDuration": 4.5, "defaultMotion": "ken_burns_in","transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "6_bathroom",     "label": "Bathroom",               "requiredRoomType": "bathroom", "fallbackRoomTypes": [],         "onMissing": "skip",     "minDuration": 2,   "maxDuration": 3,   "defaultMotion": "slow_zoom",   "transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "7_entrance",     "label": "Entrance / hallway",     "requiredRoomType": "hallway",  "fallbackRoomTypes": ["living"], "onMissing": "skip",     "minDuration": 2,   "maxDuration": 3,   "defaultMotion": "ken_burns_in","transitionOut": "fade",  "allowReuse": false, "overlayText": null },
+    { "id": "8_closing",      "label": "Closing hero",           "requiredRoomType": "exterior", "fallbackRoomTypes": ["living"], "onMissing": "use_hero", "minDuration": 2.5, "maxDuration": 5,   "defaultMotion": "slow_zoom",   "transitionOut": "cut",   "allowReuse": true,  "overlayText": null }
+  ]
+}

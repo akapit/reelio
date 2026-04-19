@@ -1,0 +1,24 @@
+{
+  "name": "family_30s",
+  "targetDurationSec": 30,
+  "aspectRatio": "16:9",
+  "fps": 30,
+  "resolution": { "width": 1920, "height": 1080 },
+  "minUsableImages": 7,
+  "music": { "mood": "family_warm", "volume": 0.4 },
+  "overlays": {
+    "headline": { "enabled": true, "text": null },
+    "captions": { "enabled": true },
+    "cta":      { "enabled": true, "text": null }
+  },
+  "slots": [
+    { "id":"1_exterior","label":"Exterior welcome","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"2_living","label":"Living room","requiredRoomType":"living","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"pan_right","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"3_kitchen","label":"Kitchen","requiredRoomType":"kitchen","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"4_family_room","label":"Family room","requiredRoomType":"living","fallbackRoomTypes":["dining"],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"5_bedroom","label":"Bedroom","requiredRoomType":"bedroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"ken_burns_in","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"6_bathroom","label":"Bathroom","requiredRoomType":"bathroom","fallbackRoomTypes":[],"onMissing":"skip","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"7_backyard","label":"Backyard","requiredRoomType":"balcony","fallbackRoomTypes":["exterior"],"onMissing":"use_wow","minDuration":3,"maxDuration":4,"defaultMotion":"pan_right","transitionOut":"fade","allowReuse":false,"overlayText":null },
+    { "id":"8_closing","label":"Closing","requiredRoomType":"exterior","fallbackRoomTypes":[],"onMissing":"use_hero","minDuration":3,"maxDuration":4,"defaultMotion":"slow_zoom","transitionOut":"fade","allowReuse":true,"overlayText":null }
+  ]
+}

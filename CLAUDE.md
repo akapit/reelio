@@ -24,16 +24,32 @@ There is no test suite. Verification is `npx tsc --noEmit` + running the feature
 
 Reelio is an AI-powered real-estate media platform: users upload photos, and kie.ai-backed models enhance/stage/re-sky them or animate them into short videos with optional ElevenLabs voiceover + background music.
 
-### Two-phase generation flow
+### Generation flow (two paths)
 
-Every "make something" action is split between a Next.js API route (fast, synchronous) and a Trigger.dev task (long-running, retryable):
+There are two fire-and-forget pipelines, both split between a Next.js API route (fast, synchronous) and a Trigger.dev task (long-running, retryable). Both drop a placeholder `assets` row first so the UI shows "processing" instantly and flip it via Supabase Realtime when done (`src/hooks/use-assets.ts`).
 
-1. **Client** (`src/components/media/CreationBar.tsx` → `src/hooks/use-process.ts`) POSTs to `/api/process`.
-2. **API route** `src/app/api/process/route.ts` verifies auth + ownership, **inserts a placeholder `assets` row** with `status='processing'` (so the UI shows something immediately), snapshots the generation config into `metadata` JSONB, and dispatches a Trigger.dev task via `tasks.trigger<typeof generateVideoTask>(...)`.
-3. **Trigger task** (`trigger/{enhance-image,virtual-staging,sky-replacement,generate-video}.ts`) calls the media provider, uploads the result to Cloudflare R2, then updates the placeholder row to `status='done'` with `processed_url`.
-4. **Client** sees the status flip via Supabase Realtime subscription (`src/hooks/use-assets.ts`) — no polling needed.
+**Path A — Image tools** (enhance / staging / sky):
+1. `CreationBar` (via `src/hooks/use-process.ts`) POSTs to `/api/process`.
+2. `src/app/api/process/route.ts` dispatches `trigger/{enhance-image,virtual-staging,sky-replacement}.ts`.
+3. The trigger task calls `kieaiProvider.{enhanceImage,virtualStaging,skyReplacement}`, uploads to R2, updates the placeholder to `status='done'`.
 
-If you add a new tool, you add: a trigger task, a provider method (or reuse kieai), a branch in `/api/process/route.ts`, and UI in `CreationBar` or `AssetCard`.
+**Path B — Video generation (scene-based engine)**:
+1. `CreationBar` (via `src/hooks/use-engine-generate.ts`) POSTs to `/api/engine/generate` with `{ projectId, imageAssetIds, templateName, videoProvider?, voiceoverText?, musicPrompt?, musicVolume? }`.
+2. `src/app/api/engine/generate/route.ts` dispatches `trigger/engine-generate.ts`.
+3. `engineGenerateTask` calls `runEngineJob` (`src/lib/engine/orchestrator/orchestrator.ts`), which runs the 6-step imperative pipeline:
+   - **Vision analyze** — Google Cloud Vision returns labels + localized-object bboxes (`src/lib/engine/vision/analyzer.ts`).
+   - **Plan timeline** — slot-fill scene roles (`opening/hero/wow/filler/closing`) from the chosen template (`src/lib/engine/planner/planner.ts`).
+   - **Scene prompts** — Claude writes one cinematography prompt per scene (`src/lib/engine/prompt-writer/writer.ts`, `claude-sonnet-4-6`).
+   - **Scene generate** — parallel Kling / Seedance i2v calls via `piapiProvider` (default) or `kieaiProvider`, with smart-crop preprocessing (`src/lib/engine/vision/smartCrop.ts`) using the vision bboxes so 4:3 sources don't crop subjects when rendered to 9:16.
+   - **Audio** — ElevenLabs voiceover + background music (optional).
+   - **Merge** — ffmpeg concat with xfade transitions + audio mux (`src/lib/engine/merge/ffmpeg.ts`).
+4. Result MP4 is uploaded to R2; asset row flipped to `status='done'`. Every step is persisted to `engine_runs`/`engine_steps` in Supabase when the request supplies `tracking`.
+
+CLI harness for the engine: `scripts/test-engine.ts` (see `npx tsx scripts/test-engine.ts --help`). Flags: `--template <name>`, `--provider piapi|kieai`, `--resume`, `-v`.
+
+**Provider toggle**: `ENGINE_VIDEO_PROVIDER=kieai|piapi` env or `videoProvider` field in the API body. Default `kieai` — its plan allows ~100 concurrent tasks (20 req/10s) vs piapi's 2-task cap. Both satisfy the same `IMediaProvider.generateVideo` interface.
+
+If you add a new image tool, extend Path A. New video templates go in `src/lib/engine/templates/*.json` + `TEMPLATE_NAMES` in `models.ts`. New video models plug in via the planner's `VideoModelChoice` enum and the provider's model-slug map.
 
 ### Media providers (`src/lib/media/`)
 
@@ -106,3 +122,13 @@ Cloudflare R2 via `@aws-sdk/client-s3` S3-compatible interface (`src/lib/r2.ts`)
 - **Duration enums differ per model**: UI exposes 5s/10s only; Seedance's API accepts 4–15, Kling is model-dependent. The provider clamps Seedance to [4, 15].
 - **The `metadata` JSONB is shared** between re-run config, external IDs, and `lastError` — always deep-merge via `appendAssetMetadata`, never clobber by assigning `metadata: { ... }` in an update.
 - **Providers are pure**: do not import from `next/*` or `@trigger.dev/sdk` inside `src/lib/media/`. They run both in API routes and in the trigger worker.
+
+## Working rules
+
+- Read the full file before editing. Plan all changes, then make ONE complete edit. If you've edited a file 3+ times, stop and re-read the user's requirements.
+- Every few turns, re-read the original request to make sure you haven't drifted from the goal.
+- When the user corrects you, stop and re-read their message. Quote back what they asked for and confirm before proceeding.
+- Re-read the user's last message before responding. Follow through on every instruction completely.
+- When stuck, summarize what you've tried and ask the user for guidance instead of retrying the same approach.
+- Work more autonomously. Make reasonable decisions without asking for confirmation on every step.
+- After 2 consecutive tool failures, stop and change your approach entirely. Explain what failed and try a different strategy.

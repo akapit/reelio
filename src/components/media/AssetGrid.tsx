@@ -171,16 +171,56 @@ export function AssetGrid({ projectId, onRerun }: AssetGridProps) {
               onPreview={() => {
                 const assetType =
                   (asset.asset_type as "image" | "video") ?? "image";
-                // For video results, surface the prompt/config stored at
-                // generation time + every source image (primary + references)
-                // so the detail panel can render the full input strip.
+                // Merge two metadata dialects for video assets:
+                //   1. Legacy (old path-B "video" tool): config lives at
+                //      `metadata.{prompt,videoModel,duration,voiceoverText,...}`.
+                //   2. Engine (current path): config lives at
+                //      `metadata.engineRequest.{templateName,voiceoverText,...}`
+                //      and the image list at `metadata.engineRequest.imageAssetIds`.
+                // The PreviewModal and the re-run payload consume a single
+                // GenerationConfig shape, so we flatten both paths here.
+                const meta =
+                  (asset.metadata && typeof asset.metadata === "object"
+                    ? (asset.metadata as {
+                        prompt?: string | null;
+                        videoModel?: string | null;
+                        duration?: number | null;
+                        voiceoverText?: string | null;
+                        musicPrompt?: string | null;
+                        musicVolume?: number | null;
+                        effectId?: string | null;
+                        effectPhrases?: GenerationConfig["effectPhrases"];
+                        referenceAssetIds?: string[];
+                        engineRequest?: {
+                          templateName?: string;
+                          imageAssetIds?: string[];
+                          voiceoverText?: string;
+                          musicPrompt?: string;
+                          musicVolume?: number;
+                        };
+                      })
+                    : null) ?? null;
                 let generationConfig: GenerationConfig | null = null;
-                if (
-                  asset.tool_used === "video" &&
-                  asset.metadata &&
-                  typeof asset.metadata === "object"
-                ) {
-                  generationConfig = asset.metadata as GenerationConfig;
+                if (asset.tool_used === "video" && meta) {
+                  generationConfig = {
+                    prompt: meta.prompt ?? null,
+                    videoModel: meta.videoModel ?? null,
+                    duration: meta.duration ?? null,
+                    voiceoverText:
+                      meta.voiceoverText ??
+                      meta.engineRequest?.voiceoverText ??
+                      null,
+                    musicPrompt:
+                      meta.musicPrompt ??
+                      meta.engineRequest?.musicPrompt ??
+                      null,
+                    musicVolume:
+                      meta.musicVolume ??
+                      meta.engineRequest?.musicVolume ??
+                      null,
+                    effectId: meta.effectId ?? null,
+                    effectPhrases: meta.effectPhrases ?? null,
+                  };
                 }
                 const toRef = (src: NonNullable<typeof assets>[number]): SourceAssetRef => ({
                   id: src.id,
@@ -197,12 +237,23 @@ export function AssetGrid({ projectId, onRerun }: AssetGridProps) {
                   const primary = assets?.find((a) => a.id === primaryId);
                   if (primary) sourceAssets.push(toRef(primary));
                 }
-                const refIds = (
-                  asset.metadata as { referenceAssetIds?: string[] } | null
-                )?.referenceAssetIds;
+                // Resolve the reference list, preferring the richer engine
+                // payload (full ordered list incl. primary) and falling back
+                // to the top-level referenceAssetIds that legacy runs wrote.
+                // Strip the primary so the modal keeps it at index 0 without
+                // duplicates.
+                const engineImageIds = meta?.engineRequest?.imageAssetIds;
+                const refIds =
+                  Array.isArray(engineImageIds) && engineImageIds.length > 0
+                    ? engineImageIds
+                    : meta?.referenceAssetIds;
                 if (Array.isArray(refIds)) {
+                  const seen = new Set<string>(
+                    primaryId ? [primaryId] : [],
+                  );
                   for (const refId of refIds) {
-                    if (refId === primaryId) continue;
+                    if (seen.has(refId)) continue;
+                    seen.add(refId);
                     const ref = assets?.find((a) => a.id === refId);
                     if (ref) sourceAssets.push(toRef(ref));
                   }
@@ -241,6 +292,7 @@ export function AssetGrid({ projectId, onRerun }: AssetGridProps) {
 
       {previewAsset && (
         <PreviewModal
+          assetId={previewAsset.assetId}
           isOpen={!!previewAsset}
           onClose={() => setPreviewAsset(null)}
           originalUrl={previewAsset.originalUrl}

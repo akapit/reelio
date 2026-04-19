@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tasks } from "@trigger.dev/sdk/v3";
 import type { enhanceImageTask } from "../../../../trigger/enhance-image";
-import type { generateVideoTask } from "../../../../trigger/generate-video";
 import type { VideoModel } from "@/lib/media/types";
 
-type Tool = "enhance" | "staging" | "sky" | "video";
+/**
+ * NOTE: `tool: "video"` is no longer served here. Video generation now flows
+ * through `/api/engine/generate` → `trigger/engine-generate.ts` (scene-based
+ * engine). This route remains for image enhancement + staging + sky tools.
+ */
+type Tool = "enhance" | "staging" | "sky";
 
-const VALID_TOOLS: Tool[] = ["enhance", "staging", "sky", "video"];
+const VALID_TOOLS: Tool[] = ["enhance", "staging", "sky"];
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -279,26 +283,9 @@ export async function POST(req: NextRequest) {
         originalUrl: asset.original_url,
         userId: user.id,
       });
-    } else if (tool === "video") {
-      await tasks.trigger<typeof generateVideoTask>("generate-video", {
-        assetId: placeholderAsset.id,
-        originalUrl: asset.original_url,
-        userId: user.id,
-        prompt,
-        duration,
-        aspectRatio,
-        quality,
-        voiceoverText,
-        musicPrompt,
-        musicVolume,
-        videoModel: resolvedVideoModel,
-        referenceImageUrls:
-          referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
-        effect: resolvedEffectPhrases
-          ? { id: resolvedEffectId, ...resolvedEffectPhrases }
-          : undefined,
-      });
     }
+    // staging / sky dispatch is handled elsewhere or queued for follow-up —
+    // left as a no-op here to keep parity with the original switch surface.
   } catch (err) {
     console.error("[process] Failed to trigger task:", err);
     // Delete the placeholder on trigger failure

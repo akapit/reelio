@@ -38,6 +38,9 @@ yarn-error.log*
 # trigger.dev
 .trigger/
 
+# gcp credentials
+.gcp/
+
 # cursor
 .cursor/
 

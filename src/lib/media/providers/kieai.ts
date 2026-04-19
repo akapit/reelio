@@ -37,8 +37,14 @@ function logKieError(event: string, data: Record<string, unknown>): void {
  * different slug system is a contained change. Callers pass the logical id
  * via `VideoGenerationOptions.model` and never see these strings.
  */
+/**
+ * kie.ai Market endpoint model slugs (see https://docs.kie.ai/market).
+ * The "kling" logical id maps to Kling 2.5 Turbo Pro by default. Std is also
+ * published at `kling/v2-5-turbo-image-to-video` (no "-pro" suffix) — swap if
+ * cost/quality tradeoff demands it. Seedance slugs unchanged.
+ */
 const VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
-  kling: "kling-2.5/image-to-video",
+  kling: "kling/v2-5-turbo-image-to-video-pro",
   seedance: "bytedance/seedance-2",
   "seedance-fast": "bytedance/seedance-2-fast",
 };
@@ -59,6 +65,7 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
 function summarizeKieInput(input: Record<string, unknown>): Record<string, unknown> {
   const summary: Record<string, unknown> = {};
   const imageFields: Array<keyof typeof input> = [
+    "image_url",
     "image_urls",
     "image_input",
     "first_frame_url",
@@ -76,31 +83,146 @@ function summarizeKieInput(input: Record<string, unknown>): Record<string, unkno
   return summary;
 }
 
-/** POST to the unified Market createTask endpoint */
-async function createTask(body: { model: string; callBackUrl?: string; input: Record<string, unknown> }) {
-  const start = Date.now();
-  logKie("createTask.request", { model: body.model });
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}/api/v1/jobs/createTask`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    logKieError("createTask.networkError", {
-      model: body.model,
-      durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
-      inputSummary: summarizeKieInput(body.input),
-    });
-    throw err;
+/**
+ * kie.ai returns HTTP 429 when the per-account rate limit is exceeded
+ * (default: 20 new generation requests per 10 seconds). Rejected requests
+ * do not enter the queue — retrying after a short backoff is the expected
+ * behaviour. Tunables:
+ *   KIEAI_CREATE_TASK_MAX_ATTEMPTS    default 5
+ *   KIEAI_CREATE_TASK_BACKOFF_MS      base delay, default 1000 (1s)
+ *   KIEAI_CREATE_TASK_MAX_BACKOFF_MS  ceiling, default 15000 (15s)
+ * Worst-case wait with defaults: 1 + 2 + 4 + 8 = 15s before the 5th attempt.
+ */
+function isKieRateLimit(info: {
+  status: number;
+  code?: number;
+  msg?: string;
+}): boolean {
+  if (info.status === 429) return true;
+  if (info.code === 429) return true;
+  if (info.msg && /rate limit|too many requests|requests per/i.test(info.msg)) {
+    return true;
   }
-  if (!res.ok) {
+  return false;
+}
+
+const kieSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** POST to the unified Market createTask endpoint.
+ *  Retries on 429 with exponential backoff. */
+async function createTask(body: { model: string; callBackUrl?: string; input: Record<string, unknown> }) {
+  const maxAttempts = Number(process.env.KIEAI_CREATE_TASK_MAX_ATTEMPTS ?? 5);
+  const baseBackoffMs = Number(process.env.KIEAI_CREATE_TASK_BACKOFF_MS ?? 1000);
+  const maxBackoffMs = Number(process.env.KIEAI_CREATE_TASK_MAX_BACKOFF_MS ?? 15000);
+
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const start = Date.now();
+    logKie("createTask.request", { model: body.model, attempt });
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/api/v1/jobs/createTask`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      logKieError("createTask.networkError", {
+        model: body.model,
+        attempt,
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+        inputSummary: summarizeKieInput(body.input),
+      });
+      throw err;
+    }
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.code !== 200) {
+        const inputSummary = summarizeKieInput(body.input);
+        const rateLimited = isKieRateLimit({
+          status: res.status,
+          code: json.code,
+          msg: json.msg,
+        });
+        if (rateLimited && attempt < maxAttempts) {
+          const backoff = Math.min(
+            baseBackoffMs * 2 ** (attempt - 1),
+            maxBackoffMs,
+          );
+          logKie("createTask.retryScheduled", {
+            model: body.model,
+            attempt,
+            nextDelayMs: backoff,
+            reason: "rate_limit",
+            code: json.code,
+            msg: json.msg,
+          });
+          await kieSleep(backoff);
+          lastErr = new Error(
+            `kie.ai createTask error ${json.code}: ${json.msg}`,
+          );
+          continue;
+        }
+        logKieError("createTask.apiError", {
+          model: body.model,
+          attempt,
+          code: json.code,
+          msg: json.msg,
+          durationMs: Date.now() - start,
+          inputSummary,
+        });
+        throw new Error(
+          `kie.ai createTask error ${json.code}: ${json.msg} [model=${body.model}, input=${JSON.stringify(inputSummary)}]`,
+        );
+      }
+      const taskId = json.data.taskId as string;
+      logKie("createTask.response", {
+        taskId,
+        model: body.model,
+        attempt,
+        durationMs: Date.now() - start,
+      });
+      return taskId;
+    }
+
+    // HTTP error path.
     const text = await res.text();
     const inputSummary = summarizeKieInput(body.input);
+    let parsedMsg: string | undefined;
+    try {
+      parsedMsg = JSON.parse(text)?.msg;
+    } catch {
+      /* body was not JSON */
+    }
+    const rateLimited = isKieRateLimit({
+      status: res.status,
+      msg: parsedMsg ?? text,
+    });
+
+    if (rateLimited && attempt < maxAttempts) {
+      const backoff = Math.min(
+        baseBackoffMs * 2 ** (attempt - 1),
+        maxBackoffMs,
+      );
+      logKie("createTask.retryScheduled", {
+        model: body.model,
+        attempt,
+        nextDelayMs: backoff,
+        reason: "http_rate_limit",
+        status: res.status,
+      });
+      await kieSleep(backoff);
+      lastErr = new Error(
+        `kie.ai createTask ${res.status}: ${text.slice(0, 200)}`,
+      );
+      continue;
+    }
+
     logKieError("createTask.httpError", {
       model: body.model,
+      attempt,
       status: res.status,
       body: text,
       durationMs: Date.now() - start,
@@ -113,27 +235,14 @@ async function createTask(body: { model: string; callBackUrl?: string; input: Re
       `kie.ai createTask ${res.status}: ${text} [model=${body.model}, input=${JSON.stringify(inputSummary)}]`,
     );
   }
-  const json = await res.json();
-  if (json.code !== 200) {
-    const inputSummary = summarizeKieInput(body.input);
-    logKieError("createTask.apiError", {
-      model: body.model,
-      code: json.code,
-      msg: json.msg,
-      durationMs: Date.now() - start,
-      inputSummary,
-    });
-    throw new Error(
-      `kie.ai createTask error ${json.code}: ${json.msg} [model=${body.model}, input=${JSON.stringify(inputSummary)}]`,
-    );
-  }
-  const taskId = json.data.taskId as string;
-  logKie("createTask.response", {
-    taskId,
+
+  logKieError("createTask.retryExhausted", {
     model: body.model,
-    durationMs: Date.now() - start,
+    maxAttempts,
+    lastError: lastErr?.message,
   });
-  return taskId;
+  throw lastErr ??
+    new Error(`kie.ai createTask: retries exhausted (${maxAttempts})`);
 }
 
 /** POST to the Flux Kontext generation endpoint (separate from unified createTask) */
@@ -476,26 +585,37 @@ export const kieaiProvider: IMediaProvider = {
             : {}),
       };
     } else {
-      // Kling 2.6 single-shot. For multi-shot videos we fan out at the
-      // Trigger.dev layer — each shot is its own generateVideo call, with
-      // the results concatenated by ffmpeg. So here we just handle ONE shot.
-      const duration = String(options.duration ?? 5);
+      // Kling 2.5 Turbo image-to-video single-shot. Multi-shot videos fan out
+      // at the orchestrator layer — each scene is its own generateVideo call
+      // and the results are concatenated by ffmpeg.
+      //
+      // kie.ai Kling 2.5 turbo input schema (see docs/market/kling):
+      //   prompt         (required, <= 2500 chars)
+      //   image_url      (required for i2v — SINGULAR string, NOT an array)
+      //   duration       ("5" | "10") — DISCRETE, not a range
+      //   negative_prompt (optional, <= 500 chars)
+      //   cfg_scale      (optional 0-1, default 0.5)
+      // No `aspect_ratio`, no `sound` fields. Omitting them.
+      //
+      // Provider-layer safety net for the discrete-duration constraint. The
+      // scene generator's clampDuration() is the primary gate (pins Kling to
+      // 5s); this hardcode catches any out-of-tree caller that forgot.
+      const duration = "5";
       if (options.imageUrl) {
-        // Kling 2.6 image-to-video uses image_urls (array of length 1).
         input = {
-          prompt: options.prompt ?? "Slow cinematic camera movement, real estate property walkthrough",
-          sound: false,
+          prompt:
+            options.prompt ??
+            "Slow cinematic camera movement, real estate property walkthrough",
+          image_url: options.imageUrl,
           duration,
-          image_urls: [options.imageUrl],
         };
       } else {
-        // Text-to-video: include aspect_ratio
-        input = {
-          prompt: options.prompt ?? "Cinematic real estate property exterior",
-          sound: false,
-          aspect_ratio: aspectRatio,
-          duration,
-        };
+        // No image provided: kie.ai Kling 2.5 turbo i2v requires image_url.
+        // Fail loudly rather than sending a malformed request the API will
+        // 422 anyway.
+        throw new Error(
+          "kieai.generateVideo: Kling 2.5 turbo i2v requires imageUrl",
+        );
       }
     }
 

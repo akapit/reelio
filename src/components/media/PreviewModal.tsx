@@ -1,10 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Download, RotateCcw, X, Mic, Music, Clock, Sparkles, Film } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  Download,
+  Loader2,
+  Mic,
+  Music,
+  RotateCcw,
+  Sparkles,
+  Upload,
+  Video,
+  X,
+  XCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getEffect } from "@/lib/media/effects/library";
+import { useEngineRun } from "@/hooks/use-engine-run";
 
 export interface GenerationConfig {
   prompt?: string | null;
@@ -33,6 +47,7 @@ export interface SourceAssetRef {
 }
 
 interface PreviewModalProps {
+  assetId?: string;
   isOpen: boolean;
   onClose: () => void;
   originalUrl: string;
@@ -55,6 +70,58 @@ const MODEL_LABELS: Record<string, string> = {
   seedance: "Seedance 2.0",
   "seedance-fast": "Seedance 2.0 Fast",
 };
+
+const RUN_STATUS_META = {
+  pending: {
+    label: "Pending",
+    icon: Clock3,
+    className:
+      "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)]",
+  },
+  running: {
+    label: "Running",
+    icon: Loader2,
+    className:
+      "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 text-[var(--color-accent)]",
+  },
+  done: {
+    label: "Done",
+    icon: CheckCircle2,
+    className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  },
+  failed: {
+    label: "Failed",
+    icon: XCircle,
+    className: "border-red-500/30 bg-red-500/10 text-red-400",
+  },
+} as const;
+
+function formatDurationMs(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 1000) return `${Math.round(value)}ms`;
+  if (value < 60_000) return `${(value / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(value / 60_000);
+  const seconds = Math.round((value % 60_000) / 1000);
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatStepLabel(stepType: string): string {
+  return stepType
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatTimestamp(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
 function hasAnyConfig(c?: GenerationConfig | null): boolean {
   if (!c) return false;
@@ -83,6 +150,7 @@ function filenameFromUrl(url: string, assetType: "image" | "video"): string {
 }
 
 export function PreviewModal({
+  assetId,
   isOpen,
   onClose,
   originalUrl,
@@ -97,6 +165,15 @@ export function PreviewModal({
   const hasSources = sources.length > 0;
   const [activeTab, setActiveTab] = useState<Tab>("original");
   const [downloading, setDownloading] = useState(false);
+  const { data: engineData, isLoading: isEngineLoading } = useEngineRun(
+    assetId,
+    isOpen,
+  );
+  const engineRun = engineData?.run ?? null;
+  const engineSteps = engineData?.steps ?? [];
+  const engineScenes = engineData?.scenes ?? [];
+  const engineAttempts = engineData?.attempts ?? [];
+  const engineEvents = engineData?.events ?? [];
 
   // Reset tab to original whenever modal opens
   useEffect(() => {
@@ -120,7 +197,7 @@ export function PreviewModal({
   // for videos, always prefer `processedUrl` when present.
   const currentUrl =
     assetType === "video"
-      ? processedUrl || originalUrl
+      ? processedUrl ?? null
       : hasBoth && activeTab === "enhanced"
         ? processedUrl!
         : originalUrl;
@@ -130,16 +207,17 @@ export function PreviewModal({
   // a different origin than the app) — browsers silently navigate instead
   // of downloading. Blob-fetch bypasses that.
   async function handleDownload() {
-    if (!currentUrl || downloading) return;
+    const downloadUrl = currentUrl ?? originalUrl;
+    if (!downloadUrl || downloading) return;
     setDownloading(true);
     try {
-      const res = await fetch(currentUrl, { mode: "cors", credentials: "omit" });
+      const res = await fetch(downloadUrl, { mode: "cors", credentials: "omit" });
       if (!res.ok) throw new Error(`download failed: ${res.status}`);
       const blob = await res.blob();
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objUrl;
-      a.download = filenameFromUrl(currentUrl, assetType);
+      a.download = filenameFromUrl(downloadUrl, assetType);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -148,13 +226,42 @@ export function PreviewModal({
     } catch (err) {
       // Fallback: open in a new tab so the user can at least save manually.
       console.error("[preview] blob download failed, opening in tab", err);
-      window.open(currentUrl, "_blank", "noopener,noreferrer");
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
     } finally {
       setDownloading(false);
     }
   }
 
-  const showDetails = hasAnyConfig(generationConfig) || hasSources;
+  const sceneSteps = useMemo(
+    () =>
+      engineSteps.filter((step) => step.step_type === "scene_generate").sort((a, b) => a.step_order - b.step_order),
+    [engineSteps],
+  );
+  const attemptsBySceneRecordId = useMemo(() => {
+    const map = new Map<string, typeof engineAttempts>();
+    for (const attempt of engineAttempts) {
+      const current = map.get(attempt.scene_record_id) ?? [];
+      current.push(attempt);
+      map.set(attempt.scene_record_id, current);
+    }
+    for (const attempts of map.values()) {
+      attempts.sort((a, b) => a.attempt_order - b.attempt_order);
+    }
+    return map;
+  }, [engineAttempts]);
+  const runStatusMeta = engineRun ? RUN_STATUS_META[engineRun.status] : null;
+  const totalRunDuration = formatDurationMs(
+    engineRun?.completed_at && engineRun.started_at
+      ? new Date(engineRun.completed_at).getTime() -
+          new Date(engineRun.started_at).getTime()
+      : null,
+  );
+  const showDetails =
+    hasAnyConfig(generationConfig) ||
+    hasSources ||
+    !!engineRun ||
+    engineScenes.length > 0 ||
+    sceneSteps.length > 0;
   const modelLabel = generationConfig?.videoModel
     ? MODEL_LABELS[generationConfig.videoModel] ?? generationConfig.videoModel
     : null;
@@ -176,6 +283,7 @@ export function PreviewModal({
   const effectTitle = openerSnippet
     ? `Opener: ${openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}…` : openerSnippet}`
     : undefined;
+  const RunStatusIcon = runStatusMeta?.icon;
 
   return (
     <AnimatePresence>
@@ -255,12 +363,7 @@ export function PreviewModal({
                   The video itself uses `h-full` so it actually fills the
                   shrinking container instead of overflowing it — which is
                   what kept the control rail off-screen before. */}
-              {assetType === "video" ? (
-                // No flex centering on the container — wrapping an
-                // inline-display <video> in `flex items-center justify-center`
-                // swallowed the controls rail on Chrome/Safari. The video is
-                // a block child that fills the container via w-full h-full;
-                // object-contain preserves aspect inside that box.
+              {assetType === "video" && currentUrl ? (
                 <div className="w-full bg-black rounded-xl overflow-hidden flex-1 min-h-0 max-h-[55vh]">
                   <video
                     key={currentUrl}
@@ -274,13 +377,39 @@ export function PreviewModal({
                 </div>
               ) : (
                 <div className="bg-[var(--color-surface-raised)] rounded-xl overflow-hidden flex-1 min-h-0 max-h-[72vh] flex items-center justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    key={currentUrl}
-                    src={currentUrl}
-                    alt="Asset preview"
-                    className="max-w-full max-h-full object-contain rounded-xl"
-                  />
+                  {assetType === "video" && !currentUrl ? (
+                    <div className="w-full h-full min-h-[280px] flex flex-col items-center justify-center gap-3 text-center px-6">
+                      <div className="w-12 h-12 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
+                        <Video size={20} className="text-[var(--color-accent)]" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-[var(--color-foreground)]">
+                          Video is still processing
+                        </p>
+                        <p className="text-xs text-[var(--color-muted)] max-w-md">
+                          The run timeline below shows the current stage, scene prompts, and any upstream task ids.
+                        </p>
+                      </div>
+                      {sources[0] && (
+                        <div className="w-36 h-24 rounded-lg overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={sources[0].thumbnailUrl ?? sources[0].originalUrl}
+                            alt="Primary source"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={currentUrl ?? originalUrl}
+                      src={currentUrl ?? originalUrl}
+                      alt="Asset preview"
+                      className="max-w-full max-h-full object-contain rounded-xl"
+                    />
+                  )}
                 </div>
               )}
 
@@ -311,7 +440,7 @@ export function PreviewModal({
                     )}
                     {generationConfig?.duration != null && (
                       <div className="inline-flex items-center gap-1.5">
-                        <Clock size={12} />
+                        <Clock3 size={12} />
                         <span>{generationConfig.duration}s</span>
                       </div>
                     )}
@@ -347,13 +476,405 @@ export function PreviewModal({
                         className="inline-flex items-center gap-1.5"
                         title={effectTitle}
                       >
-                        <Film size={12} />
+                        <Sparkles size={12} />
                         <span className="text-[var(--color-foreground)] font-medium">
                           Effect: {effectName}
                         </span>
                       </div>
                     )}
                   </div>
+
+                  {engineRun && runStatusMeta && (
+                    <div className="pt-3 border-t border-[var(--color-border)] space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                            runStatusMeta.className,
+                          )}
+                        >
+                          {RunStatusIcon && (
+                            <RunStatusIcon
+                              size={12}
+                              className={cn(engineRun.status === "running" && "animate-spin")}
+                            />
+                          )}
+                          {runStatusMeta.label}
+                        </span>
+                        <span className="text-[11px] text-[var(--color-muted)]">
+                          Run {engineRun.id.slice(0, 8)}
+                        </span>
+                        {typeof engineRun.input?.templateName === "string" && (
+                          <span className="text-[11px] text-[var(--color-muted)]">
+                            Template: {engineRun.input.templateName}
+                          </span>
+                        )}
+                        {totalRunDuration && (
+                          <span className="text-[11px] text-[var(--color-muted)]">
+                            Total: {totalRunDuration}
+                          </span>
+                        )}
+                      </div>
+
+                      {typeof engineRun.error?.message === "string" && (
+                        <div className="rounded-lg border border-red-500/30 bg-red-500/8 px-3 py-2 text-xs text-red-300">
+                          {engineRun.error.message}
+                        </div>
+                      )}
+
+                      {engineScenes.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                            Scenes
+                          </p>
+                          <div className="grid gap-2">
+                            {engineScenes.map((scene) => {
+                              const sceneStatusMeta =
+                                RUN_STATUS_META[
+                                  scene.status === "running"
+                                    ? "running"
+                                    : scene.status === "failed"
+                                      ? "failed"
+                                      : scene.status === "done"
+                                        ? "done"
+                                        : "pending"
+                                ];
+                              const SceneStatusIcon = sceneStatusMeta.icon;
+                              const promptText =
+                                typeof scene.prompt?.prompt === "string"
+                                  ? scene.prompt.prompt
+                                  : null;
+                              const attempts =
+                                attemptsBySceneRecordId.get(scene.id) ?? [];
+                              const sceneOutput = scene.output ?? {};
+                              const preparedSource =
+                                sceneOutput.preparedSource as
+                                  | Record<string, unknown>
+                                  | undefined;
+                              const crop = preparedSource?.crop as
+                                | Record<string, unknown>
+                                | undefined;
+                              const evaluation = sceneOutput.evaluation as
+                                | Record<string, unknown>
+                                | undefined;
+                              return (
+                                <div
+                                  key={scene.id}
+                                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 space-y-2"
+                                >
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs font-medium text-[var(--color-foreground)]">
+                                        Scene {scene.scene_order}
+                                      </span>
+                                      <span className="text-[10px] text-[var(--color-muted)] uppercase tracking-[0.12em]">
+                                        {scene.scene_role}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]",
+                                          sceneStatusMeta.className,
+                                        )}
+                                      >
+                                        <SceneStatusIcon
+                                          size={10}
+                                          className={cn(scene.status === "running" && "animate-spin")}
+                                        />
+                                        {sceneStatusMeta.label}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
+                                      <span>{scene.room_type}</span>
+                                      <span>{scene.duration_sec}s</span>
+                                    </div>
+                                  </div>
+
+                                  {promptText && (
+                                    <p className="text-xs text-[var(--color-foreground)] whitespace-pre-wrap break-words">
+                                      {promptText}
+                                    </p>
+                                  )}
+
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
+                                    {scene.motion_intent && <span>{scene.motion_intent}</span>}
+                                    {typeof scene.prompt?.modelChoice === "string" && (
+                                      <span>
+                                        Model:{" "}
+                                        {MODEL_LABELS[scene.prompt.modelChoice] ??
+                                          scene.prompt.modelChoice}
+                                      </span>
+                                    )}
+                                    {typeof scene.output?.videoUrl === "string" && (
+                                      <span className="inline-flex items-center gap-1">
+                                        <Upload size={10} />
+                                        Clip ready
+                                      </span>
+                                    )}
+                                    {typeof crop?.reason === "string" && (
+                                      <span>
+                                        Crop: {crop.reason}
+                                      </span>
+                                    )}
+                                    {typeof evaluation?.score === "number" && (
+                                      <span>
+                                        QA:{" "}
+                                        {Math.round(evaluation.score * 100)}
+                                        %
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {typeof evaluation?.summary === "string" && (
+                                    <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-raised)] px-2.5 py-2 text-[11px] text-[var(--color-muted)] space-y-1">
+                                      <p className="text-[var(--color-foreground)]">
+                                        {evaluation.summary}
+                                      </p>
+                                      {Array.isArray(evaluation.issues) &&
+                                        evaluation.issues.length > 0 && (
+                                          <p>
+                                            Issues:{" "}
+                                            {evaluation.issues.join(", ")}
+                                          </p>
+                                        )}
+                                      {typeof sceneOutput.retryReason === "string" &&
+                                        sceneOutput.retryReason && (
+                                          <p>Retry reason: {sceneOutput.retryReason}</p>
+                                        )}
+                                    </div>
+                                  )}
+
+                                  {attempts.length > 0 && (
+                                    <div className="space-y-1">
+                                      {attempts.map((attempt) => {
+                                        const attemptStatusMeta =
+                                          RUN_STATUS_META[
+                                            attempt.status === "running"
+                                              ? "running"
+                                              : attempt.status === "failed"
+                                                ? "failed"
+                                                : "done"
+                                          ];
+                                        const AttemptStatusIcon = attemptStatusMeta.icon;
+                                        return (
+                                          <div
+                                            key={attempt.id}
+                                            className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]"
+                                          >
+                                            <span className="text-[var(--color-foreground)] font-medium">
+                                              Attempt {attempt.attempt_order}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
+                                                attemptStatusMeta.className,
+                                              )}
+                                            >
+                                              <AttemptStatusIcon
+                                                size={10}
+                                                className={cn(attempt.status === "running" && "animate-spin")}
+                                              />
+                                              {attemptStatusMeta.label}
+                                            </span>
+                                            {attempt.provider && <span>{attempt.provider}</span>}
+                                            {attempt.model_choice && (
+                                              <span>
+                                                {MODEL_LABELS[attempt.model_choice] ??
+                                                  attempt.model_choice}
+                                              </span>
+                                            )}
+                                            {typeof attempt.external_ids?.piapiTaskId ===
+                                              "string" && (
+                                              <span>
+                                                Task {attempt.external_ids.piapiTaskId}
+                                              </span>
+                                            )}
+                                            {typeof attempt.metrics?.generationMs ===
+                                              "number" && (
+                                              <span>
+                                                {formatDurationMs(
+                                                  attempt.metrics.generationMs,
+                                                )}
+                                              </span>
+                                            )}
+                                            {typeof attempt.metrics?.evaluationScore ===
+                                              "number" && (
+                                              <span>
+                                                QA{" "}
+                                                {Math.round(
+                                                  attempt.metrics.evaluationScore * 100,
+                                                )}
+                                                %
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {typeof scene.error?.message === "string" && (
+                                    <p className="text-[10px] text-red-300">
+                                      {scene.error.message}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                          Pipeline
+                        </p>
+                        <div className="grid gap-2">
+                        {engineSteps.map((step) => {
+                          const stepStatusMeta =
+                            RUN_STATUS_META[
+                              step.status === "running"
+                                ? "running"
+                                : step.status === "failed"
+                                  ? "failed"
+                                  : "done"
+                            ];
+                          const stepDuration = formatDurationMs(
+                            typeof step.metrics?.durationMs === "number"
+                              ? step.metrics.durationMs
+                              : step.completed_at
+                                ? new Date(step.completed_at).getTime() -
+                                  new Date(step.started_at).getTime()
+                                : null,
+                          );
+                          const StepStatusIcon = stepStatusMeta.icon;
+                          return (
+                            <div
+                              key={step.id}
+                              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 space-y-1.5"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-[var(--color-foreground)]">
+                                    {formatStepLabel(step.step_type)}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]",
+                                      stepStatusMeta.className,
+                                    )}
+                                  >
+                                    {StepStatusIcon && (
+                                      <StepStatusIcon
+                                        size={10}
+                                        className={cn(step.status === "running" && "animate-spin")}
+                                      />
+                                    )}
+                                    {stepStatusMeta.label}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
+                                  {typeof step.input?.sceneOrder === "number" && (
+                                    <span>Scene {step.input.sceneOrder}</span>
+                                  )}
+                                  {stepDuration && <span>{stepDuration}</span>}
+                                  {typeof step.external_ids?.piapiTaskId === "string" && (
+                                    <span>Task {step.external_ids.piapiTaskId}</span>
+                                  )}
+                                  {typeof step.external_ids?.anthropicRequestId === "string" && (
+                                    <span>Anthropic {step.external_ids.anthropicRequestId}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {typeof step.input?.prompt === "string" && (
+                                <p className="text-xs text-[var(--color-foreground)] whitespace-pre-wrap break-words">
+                                  {step.input.prompt}
+                                </p>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
+                                {typeof step.input?.modelChoice === "string" && (
+                                  <span>
+                                    Model: {MODEL_LABELS[step.input.modelChoice] ?? step.input.modelChoice}
+                                  </span>
+                                )}
+                                {typeof step.output?.videoUrl === "string" && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <Upload size={10} />
+                                    Clip ready
+                                  </span>
+                                )}
+                                {typeof step.metrics?.generationMs === "number" && (
+                                  <span>
+                                    Generate: {formatDurationMs(step.metrics.generationMs)}
+                                  </span>
+                                )}
+                              </div>
+
+                              {typeof step.error?.message === "string" && (
+                                <p className="text-[10px] text-red-300">
+                                  {step.error.message}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {!isEngineLoading && engineSteps.length === 0 && (
+                          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-muted)]">
+                            No engine step records yet.
+                          </div>
+                        )}
+                      </div>
+                      </div>
+
+                      {engineEvents.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                            Events
+                          </p>
+                          <div className="grid gap-2">
+                            {engineEvents.slice(-12).map((event) => (
+                              <div
+                                key={event.id}
+                                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-[11px] text-[var(--color-muted)] space-y-1"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[var(--color-foreground)] font-medium">
+                                      {formatStepLabel(event.event_type.replace(/\./g, "_"))}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px]",
+                                        event.level === "error"
+                                          ? "border-red-500/30 bg-red-500/10 text-red-300"
+                                          : event.level === "warn"
+                                            ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                            : "border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-muted)]",
+                                      )}
+                                    >
+                                      {event.level}
+                                    </span>
+                                  </div>
+                                  {formatTimestamp(event.created_at) && (
+                                    <span>{formatTimestamp(event.created_at)}</span>
+                                  )}
+                                </div>
+                                {typeof event.payload?.message === "string" && (
+                                  <p>{event.payload.message}</p>
+                                )}
+                                {typeof event.payload?.retryReason === "string" &&
+                                  event.payload.retryReason && (
+                                    <p>Retry: {event.payload.retryReason}</p>
+                                  )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {hasSources && (
                     <div className="pt-3 border-t border-[var(--color-border)]">

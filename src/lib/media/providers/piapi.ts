@@ -69,37 +69,173 @@ function summarizePiApiInput(input: Record<string, unknown>): Record<string, unk
   return summary;
 }
 
-/** POST to the unified PiAPI create-task endpoint. Returns the upstream task_id. */
+/**
+ * piapi's plan limits the number of concurrent active tasks (free/basic plans
+ * cap at 2). When the cap is hit, the server returns HTTP 429 OR a body with
+ * `code:429` / `error.code:10001` and message "active task count N has reached
+ * the plan limit". Neither is a genuine failure — the right thing to do is
+ * wait and retry. Tunables via env:
+ *   PIAPI_CREATE_TASK_MAX_ATTEMPTS  default 6
+ *   PIAPI_CREATE_TASK_BACKOFF_MS    base backoff, default 3000 (3s)
+ *   PIAPI_CREATE_TASK_MAX_BACKOFF_MS ceiling, default 45000 (45s)
+ * Total worst-case wait with defaults: 3 + 6 + 12 + 24 + 45 = 90s before the
+ * 6th attempt, which matches observed drain time of piapi's 2-slot queue.
+ */
+function isPiapiRateLimit(info: {
+  status: number;
+  code?: number;
+  message?: string;
+  errorCode?: number;
+}): boolean {
+  if (info.status === 429) return true;
+  if (info.code === 429) return true;
+  // piapi embeds plan-limit errors inside `error.code === 10001` with a 200
+  // envelope + 429 on data. Guard against either shape.
+  if (info.errorCode === 10001) return true;
+  if (info.message && /plan limit|active task count/i.test(info.message)) return true;
+  return false;
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** POST to the unified PiAPI create-task endpoint. Returns the upstream task_id.
+ *  Retries on 429 / plan-limit errors with exponential backoff. */
 async function createTask(body: {
   model: string;
   task_type: string;
   input: Record<string, unknown>;
   config?: Record<string, unknown>;
 }): Promise<string> {
-  const start = Date.now();
   const modelTag = `${body.model}:${body.task_type}`;
-  logPiApi("createTask.request", { model: body.model, task_type: body.task_type });
-  let res: Response;
-  try {
-    res = await fetch(`${BASE_URL}/api/v1/task`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify(body),
+  const maxAttempts = Number(process.env.PIAPI_CREATE_TASK_MAX_ATTEMPTS ?? 6);
+  const baseBackoffMs = Number(process.env.PIAPI_CREATE_TASK_BACKOFF_MS ?? 3000);
+  const maxBackoffMs = Number(process.env.PIAPI_CREATE_TASK_MAX_BACKOFF_MS ?? 45000);
+
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const start = Date.now();
+    logPiApi("createTask.request", {
+      model: body.model,
+      task_type: body.task_type,
+      attempt,
     });
-  } catch (err) {
-    logPiApiError("createTask.networkError", {
-      model: modelTag,
-      durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
-      inputSummary: summarizePiApiInput(body.input),
-    });
-    throw err;
-  }
-  if (!res.ok) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE_URL}/api/v1/task`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      logPiApiError("createTask.networkError", {
+        model: modelTag,
+        attempt,
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+        inputSummary: summarizePiApiInput(body.input),
+      });
+      throw err;
+    }
+
+    // Success path — parse + validate envelope, return taskId.
+    if (res.ok) {
+      const json = await res.json();
+      if (json.code !== 200) {
+        const inputSummary = summarizePiApiInput(body.input);
+        const rateLimited = isPiapiRateLimit({
+          status: res.status,
+          code: json.code,
+          message: json.message,
+          errorCode: json.data?.error?.code,
+        });
+        if (rateLimited && attempt < maxAttempts) {
+          const backoff = Math.min(
+            baseBackoffMs * 2 ** (attempt - 1),
+            maxBackoffMs,
+          );
+          logPiApi("createTask.retryScheduled", {
+            model: modelTag,
+            attempt,
+            nextDelayMs: backoff,
+            reason: "plan_limit",
+            code: json.code,
+            message: json.message,
+          });
+          await sleep(backoff);
+          lastErr = new Error(
+            `piapi createTask error ${json.code}: ${json.message}`,
+          );
+          continue;
+        }
+        logPiApiError("createTask.apiError", {
+          model: modelTag,
+          attempt,
+          code: json.code,
+          message: json.message,
+          durationMs: Date.now() - start,
+          inputSummary,
+        });
+        throw new Error(
+          `piapi createTask error ${json.code}: ${json.message} [model=${modelTag}, input=${JSON.stringify(inputSummary)}]`,
+        );
+      }
+      const taskId = json.data?.task_id as string;
+      if (!taskId) {
+        throw new Error(
+          `piapi createTask: missing task_id in response: ${JSON.stringify(json)}`,
+        );
+      }
+      logPiApi("createTask.response", {
+        taskId,
+        model: modelTag,
+        attempt,
+        durationMs: Date.now() - start,
+      });
+      return taskId;
+    }
+
+    // HTTP error path — 429 is retryable; other non-2xx is fatal.
     const text = await res.text();
     const inputSummary = summarizePiApiInput(body.input);
+    // Some plan-limit responses are 429 at the HTTP layer with the 10001 body;
+    // try to parse to detect them either way.
+    let parsedErrorCode: number | undefined;
+    let parsedMessage: string | undefined;
+    try {
+      const parsed = JSON.parse(text);
+      parsedErrorCode = parsed?.data?.error?.code ?? parsed?.code;
+      parsedMessage = parsed?.message ?? parsed?.data?.error?.message;
+    } catch {
+      /* body was not JSON — fall through with raw text */
+    }
+    const rateLimited = isPiapiRateLimit({
+      status: res.status,
+      errorCode: parsedErrorCode,
+      message: parsedMessage ?? text,
+    });
+
+    if (rateLimited && attempt < maxAttempts) {
+      const backoff = Math.min(
+        baseBackoffMs * 2 ** (attempt - 1),
+        maxBackoffMs,
+      );
+      logPiApi("createTask.retryScheduled", {
+        model: modelTag,
+        attempt,
+        nextDelayMs: backoff,
+        reason: "http_rate_limit",
+        status: res.status,
+      });
+      await sleep(backoff);
+      lastErr = new Error(
+        `piapi createTask ${res.status}: ${text.slice(0, 200)}`,
+      );
+      continue;
+    }
+
     logPiApiError("createTask.httpError", {
       model: modelTag,
+      attempt,
       status: res.status,
       body: text,
       durationMs: Date.now() - start,
@@ -109,30 +245,15 @@ async function createTask(body: {
       `piapi createTask ${res.status}: ${text} [model=${modelTag}, input=${JSON.stringify(inputSummary)}]`,
     );
   }
-  const json = await res.json();
-  if (json.code !== 200) {
-    const inputSummary = summarizePiApiInput(body.input);
-    logPiApiError("createTask.apiError", {
-      model: modelTag,
-      code: json.code,
-      message: json.message,
-      durationMs: Date.now() - start,
-      inputSummary,
-    });
-    throw new Error(
-      `piapi createTask error ${json.code}: ${json.message} [model=${modelTag}, input=${JSON.stringify(inputSummary)}]`,
-    );
-  }
-  const taskId = json.data?.task_id as string;
-  if (!taskId) {
-    throw new Error(`piapi createTask: missing task_id in response: ${JSON.stringify(json)}`);
-  }
-  logPiApi("createTask.response", {
-    taskId,
+
+  // Exhausted retries.
+  logPiApiError("createTask.retryExhausted", {
     model: modelTag,
-    durationMs: Date.now() - start,
+    maxAttempts,
+    lastError: lastErr?.message,
   });
-  return taskId;
+  throw lastErr ??
+    new Error(`piapi createTask: retries exhausted (${maxAttempts})`);
 }
 
 /** PiAPI status enum is inconsistently cased across docs. Normalize. */

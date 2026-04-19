@@ -1,0 +1,1 @@
+This directory should contain royalty-free MP3s: `luxury_cinematic.mp3`, `family_warm.mp3`, `upbeat_fast.mp3`, `investor_corporate.mp3`, `premium_elegant.mp3`. Resolved at runtime by `audio.ts`. Override directory with `ENGINE_MUSIC_DIR`.
