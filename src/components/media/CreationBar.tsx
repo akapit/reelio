@@ -12,31 +12,28 @@ import {
   Mic,
   Music,
   Image as ImageIcon,
-  LayoutTemplate,
-  Film,
-  Zap,
-  Clock,
-  Wand2,
   Check,
   ChevronDown,
-  Sun,
-  MoveHorizontal,
-  Plane,
-  Compass,
-  Frame,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
 import { useProcess } from "@/hooks/use-process";
 import { useEngineGenerate } from "@/hooks/use-engine-generate";
-import { useTemplates, type Template } from "@/hooks/use-templates";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
-import type { TemplateName as EngineTemplateName } from "@/lib/engine/models";
-import {
-  VIDEO_EFFECTS,
-  type VideoEffect,
-} from "@/lib/media/effects/library";
+
+/**
+ * Minimum source-image count required to kick off a video generation. Matches
+ * the luxury_30s template's `minUsableImages` in
+ * src/lib/engine/templates/luxury_30s.json. If we drop below this the planner
+ * starts trimming slots, so we gate the UI here rather than let the server
+ * produce a shorter-than-intended cut.
+ */
+const MIN_IMAGES_FOR_VIDEO = 6;
+
+/** The only template surfaced in the UI today. See engine/templates/luxury_30s.json. */
+const ENGINE_TEMPLATE = "luxury_30s" as const;
 
 export interface RerunAssetRef {
   id: string;
@@ -45,13 +42,20 @@ export interface RerunAssetRef {
   assetType: "image" | "video";
 }
 
+/**
+ * Payload the project page hands to CreationBar when the user clicks "Re-run"
+ * on a past or in-flight generation. The `videoModel`/`duration`/`effectId`
+ * fields are retained for backwards-compat with older asset metadata, but are
+ * no longer consumed by the simplified bar — engine runs always use the
+ * luxury template and server-side model defaults.
+ */
 export interface RerunPayload {
   /** Monotonic nonce — change it to signal a fresh preload. */
   nonce: number;
   prompt: string;
+  /** @deprecated Not consumed by CreationBar anymore; kept for payload compat. */
   videoModel: VideoModel;
-  /** Total video duration in seconds. For Kling this is N × per-shot; for
-   * Seedance it's the single-clip duration. */
+  /** @deprecated Not consumed by CreationBar anymore; kept for payload compat. */
   duration: number;
   voiceoverText?: string;
   musicPrompt?: string;
@@ -59,13 +63,9 @@ export interface RerunPayload {
   musicVolume?: number;
   /** The primary source image (FK'd via `source_asset_id`). */
   sourceAsset: RerunAssetRef;
-  /** Additional reference images (from `metadata.referenceAssetIds`). Kept
-   * separate from `sourceAsset` so the primary stays at index 0 when they're
-   * re-installed as `existingAssets`. Optional for backwards-compat with
-   * older callers / re-runs of single-image generations. */
+  /** Additional reference images. Primary stays at index 0 when reattached. */
   referenceAssets?: RerunAssetRef[];
-  /** Effect id snapshotted at original generation time. Looked up in
-   * VIDEO_EFFECTS on preload to restore the picker state. */
+  /** @deprecated Effects are gone from the UI. */
   effectId?: string;
 }
 
@@ -92,25 +92,6 @@ type CreationMode = "enhance" | "video" | null;
 
 const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic|mp4|mov|webm|avi)$/i;
 
-const TEMPLATE_ICONS: Record<string, typeof Sparkles> = {
-  film: Film,
-  zap: Zap,
-  sparkles: Sparkles,
-  video: Video,
-  sun: Sun,
-  "move-horizontal": MoveHorizontal,
-  plane: Plane,
-  wand: Wand2,
-  compass: Compass,
-  frame: Frame,
-};
-
-const VIDEO_MODELS: { id: VideoModel; label: string; description: string }[] = [
-  { id: "kling", label: "Kling", description: "Multi-shot cinematic (auto-concatenated)" },
-  { id: "seedance", label: "Seedance 2.0", description: "Stylized, versatile animation" },
-  { id: "seedance-fast", label: "Seedance 2.0 Fast", description: "Quicker runs, lower cost" },
-];
-
 type AspectRatioOption = "16:9" | "9:16" | "1:1";
 const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = [
   { id: "16:9", label: "Landscape", icon: "▬" },
@@ -118,100 +99,26 @@ const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = 
   { id: "1:1", label: "Square", icon: "◼" },
 ];
 
-/**
- * Scene-engine templates exposed in the UI. Labels are shown in the picker;
- * ids must match `TEMPLATE_NAMES` in @/lib/engine/models and correspond to
- * JSON files under src/lib/engine/templates/.
- */
-const ENGINE_TEMPLATE_META: {
-  id: EngineTemplateName;
-  label: string;
-  description: string;
-}[] = [
-  { id: "fast_15s", label: "Social Reel · 15s", description: "Short, punchy, 9:16 — Instagram/TikTok" },
-  { id: "investor_20s", label: "Investor · 20s", description: "Crisp, data-forward pitch" },
-  { id: "family_30s", label: "Family · 30s", description: "Warm, story-led walkthrough" },
-  { id: "luxury_30s", label: "Luxury · 30s", description: "Cinematic listing tour" },
-  { id: "premium_45s", label: "Premium · 45s", description: "Full hero-to-close reel" },
-];
-
-/** Kling 2.6 auto-fan caps at 8 shots; each shot is 5s or 10s. */
-const KLING_MAX_SHOTS_UI = 8;
-
-interface DurationConstraints {
-  min: number;
-  max: number;
-  step: number;
-}
-
-/** Slider bounds for the given model. The slider now controls PER-SHOT
- *  duration for Kling (since each attached image becomes a shot and each
- *  shot is 5s or 10s). Seedance remains a single-clip range. Image count
- *  is no longer a factor — multiplying the min by N made the minimum
- *  jump to 20s+ when a re-run re-attached reference images, which users
- *  (rightly) found confusing.
- *  - Kling:    step 5s; range [5, 10] per shot (total = per-shot × N).
- *  - Seedance: step 1s; range [4, 15] (kie.ai single-clip integer range). */
-function getDurationConstraints(model: VideoModel): DurationConstraints {
-  if (model === "kling") {
-    return { min: 5, max: 10, step: 5 };
-  }
-  return { min: 4, max: 15, step: 1 };
-}
-
-/** Snap `value` into [min, max] on the step grid. */
-function clampDuration(value: number, c: DurationConstraints): number {
-  const bounded = Math.max(c.min, Math.min(c.max, value));
-  return Math.round((bounded - c.min) / c.step) * c.step + c.min;
-}
-
-/** Kling only: compute the fan-out total for N shots all at `perShot` duration.
- *  Capped at KLING_MAX_SHOTS_UI since the auto-fan won't exceed that. */
-function klingTotalDuration(perShot: number, imageCount: number): number {
-  const n = Math.min(Math.max(imageCount, 1), KLING_MAX_SHOTS_UI);
-  return perShot * n;
-}
-
 export function CreationBar({ projectId, preload }: CreationBarProps) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [existingAssets, setExistingAssets] = useState<ExistingAsset[]>([]);
   const [prompt, setPrompt] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const [mode, setMode] = useState<CreationMode>(null);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [selectedEffectId, setSelectedEffectId] = useState<string | null>(null);
 
   const [generatingScript, setGeneratingScript] = useState(false);
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
 
-  // Video options — `videoDuration` is PER-SHOT for Kling (5 or 10) and the
-  // single-clip duration for Seedance (4..15). The wire protocol to /api/process
-  // and /api/generate-video-prompt expects TOTAL; we multiply by the image
-  // count at submit time for Kling so the server-side fan-out math is unchanged.
-  const [videoDuration, setVideoDuration] = useState<number>(5);
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
   const [voiceoverText, setVoiceoverText] = useState("");
-  // Music is generated by ElevenLabs separately from the video model and
-  // muxed onto the full-length (post-concat for Kling) video at the end.
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState(
     "Soft ambient piano, luxury real estate"
   );
   // 0..100 in UI; divided by 100 when sent server-side.
   const [musicVolume, setMusicVolume] = useState(20);
-  // Default to Seedance Fast — ~5× faster than Kling on kie.ai today (and
-  // a single-clip generation, so no fan-out latency stacking). Users can
-  // still pick Kling from the model dropdown for multi-shot cinematic output.
-  const [videoModel, setVideoModel] = useState<VideoModel>("seedance-fast");
-  const [videoModelOpen, setVideoModelOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
   const [aspectRatioOpen, setAspectRatioOpen] = useState(false);
-  // Scene-engine template selection. Drives /api/engine/generate when mode
-  // is "video". Default fast_15s matches the most-requested social-reel format.
-  const [engineTemplate, setEngineTemplate] =
-    useState<EngineTemplateName>("fast_15s");
-  const [engineTemplateOpen, setEngineTemplateOpen] = useState(false);
 
   // @-mention autocomplete state. `startIndex` is the position of the '@' in `prompt`.
   const [mention, setMention] = useState<{
@@ -223,50 +130,33 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const templatesRef = useRef<HTMLDivElement>(null);
-  const videoModelRef = useRef<HTMLDivElement>(null);
   const aspectRatioRef = useRef<HTMLDivElement>(null);
   const upload = useUpload(projectId);
   const process = useProcess();
   const engine = useEngineGenerate();
-  const { data: templates } = useTemplates();
 
-  const uploadedAssetIds = [
-    ...pendingFiles
-      .map((f) => f.uploadedAssetId)
-      .filter((id): id is string => id !== null),
-    ...existingAssets.map((a) => a.id),
-  ];
+  const uploadedAssetIds = useMemo(
+    () => [
+      ...pendingFiles
+        .map((f) => f.uploadedAssetId)
+        .filter((id): id is string => id !== null),
+      ...existingAssets.map((a) => a.id),
+    ],
+    [pendingFiles, existingAssets],
+  );
 
   const isUploading = pendingFiles.some((f) => f.isUploading);
   const hasAssets = uploadedAssetIds.length > 0;
-  const canSubmit = hasAssets && !isUploading && mode !== null;
 
-  // Achievable slider range for the active model. Per-shot for Kling,
-  // single-clip for Seedance — image count is no longer a multiplier on
-  // the slider itself.
-  const durationConstraints = useMemo(
-    () => getDurationConstraints(videoModel),
-    [videoModel],
+  // Video requires ≥ MIN_IMAGES_FOR_VIDEO; enhance requires ≥ 1. Show the
+  // actual gate ("need N more") as inline copy under the thumbnail strip,
+  // and disable submit until we clear it.
+  const videoImageShortfall = Math.max(
+    0,
+    MIN_IMAGES_FOR_VIDEO - uploadedAssetIds.length,
   );
-
-  // Keep `videoDuration` inside the current range when the model switches
-  // (e.g. picking 12s on Seedance then switching to Kling should snap to
-  // 10s per shot).
-  useEffect(() => {
-    const clamped = clampDuration(videoDuration, durationConstraints);
-    if (clamped !== videoDuration) setVideoDuration(clamped);
-  }, [durationConstraints, videoDuration]);
-
-  // Effects are Kling-only in v1. Silently clear any selected effect when the
-  // user switches to a non-Kling model (same pattern as duration snapping —
-  // no toast). Re-selecting Kling leaves the picker empty; the user can pick
-  // an effect again.
-  useEffect(() => {
-    if (videoModel !== "kling" && selectedEffectId !== null) {
-      setSelectedEffectId(null);
-    }
-  }, [videoModel, selectedEffectId]);
+  const videoGateMet = mode !== "video" || videoImageShortfall === 0;
+  const canSubmit = hasAssets && !isUploading && mode !== null && videoGateMet;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -284,36 +174,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Close templates dropdown on outside click
-  useEffect(() => {
-    if (!templatesOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        templatesRef.current &&
-        !templatesRef.current.contains(e.target as Node)
-      ) {
-        setTemplatesOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [templatesOpen]);
-
-  // Close video-model dropdown on outside click
-  useEffect(() => {
-    if (!videoModelOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        videoModelRef.current &&
-        !videoModelRef.current.contains(e.target as Node)
-      ) {
-        setVideoModelOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [videoModelOpen]);
-
+  // Close aspect-ratio dropdown on outside click
   useEffect(() => {
     if (!aspectRatioOpen) return;
     function handleClick(e: MouseEvent) {
@@ -328,14 +189,12 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [aspectRatioOpen]);
 
-  // Preload from a "Re-run" click on a past asset. Keyed on `nonce` so the
-  // same payload can be reapplied by bumping the nonce from the parent.
+  // Preload from a "Re-run" click on a past or in-flight generation. Keyed on
+  // `nonce` so the same payload can be reapplied by bumping the nonce from
+  // the parent. Model/duration/effect fields on the payload are ignored —
+  // the simplified bar has no UI for them and the server picks defaults.
   useEffect(() => {
     if (!preload) return;
-    // Replace existing uploads with the source asset PLUS any reference
-    // images from the original run. Primary stays at index 0 (Kling's first
-    // shot / Seedance's `first_frame_url`); references follow. Clear any
-    // pending blob-backed files — they'd be stale for this flow.
     setPendingFiles((prev) => {
       prev.forEach((f) => URL.revokeObjectURL(f.preview));
       return [];
@@ -347,17 +206,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     setExistingAssets(reattachedAssets);
     setMode("video");
     setPrompt(preload.prompt);
-    setVideoModel(preload.videoModel);
-    // Metadata stores TOTAL duration (what the server-side fan-out saw). The
-    // slider now holds PER-SHOT for Kling — convert by dividing by N and
-    // snapping to [5, 10]. Seedance stored total equals the slider value.
-    if (preload.videoModel === "kling") {
-      const n = Math.max(1, reattachedAssets.length);
-      const perShot = Math.round(preload.duration / n / 5) * 5;
-      setVideoDuration(Math.max(5, Math.min(10, perShot)));
-    } else {
-      setVideoDuration(preload.duration);
-    }
     if (preload.voiceoverText) {
       setVoiceoverEnabled(true);
       setVoiceoverText(preload.voiceoverText);
@@ -368,19 +216,12 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     if (preload.musicPrompt) {
       setMusicEnabled(true);
       setMusicPrompt(preload.musicPrompt);
-      // stored as 0..1; UI is 0..100
       if (preload.musicVolume != null) {
         setMusicVolume(Math.round(preload.musicVolume * 100));
       }
     } else {
       setMusicEnabled(false);
     }
-    setSelectedTemplateId(null);
-    // Restore the effect picker from the snapshotted id. `getEffect` returns
-    // null for stale / removed ids, in which case the picker just starts
-    // empty — the stored `effectPhrases` in metadata still describe what the
-    // original run used.
-    setSelectedEffectId(preload.effectId ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preload?.nonce]);
 
@@ -394,8 +235,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
       // Default to "video" mode the moment the first asset lands and no
       // mode has been chosen — without this, drag-drop users never see
       // the Auto-prompt button (it gates on `mode === "video"`).
-      // We do NOT override an explicit user choice (e.g. they picked
-      // "enhance" first, then dragged photos in).
       setMode((prev) => prev ?? "video");
 
       const newPending: PendingFile[] = accepted.map((file) => ({
@@ -452,53 +291,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     setMusicEnabled(false);
     setMusicPrompt("Soft ambient piano, luxury real estate");
     setMusicVolume(20);
-    setVideoDuration(5);
-    setSelectedTemplateId(null);
-    setSelectedEffectId(null);
   }, []);
-
-  const applyTemplate = useCallback((template: Template) => {
-    if (selectedTemplateId === template.id) {
-      // Deselect — reset to defaults
-      setSelectedTemplateId(null);
-      setMode(null);
-      setPrompt("");
-      setVideoDuration(5);
-      setVoiceoverEnabled(false);
-      setVoiceoverText("");
-      setMusicEnabled(false);
-      setMusicPrompt("Soft ambient piano, luxury real estate");
-      setMusicVolume(20);
-      setTemplatesOpen(false);
-      toast.success("Template removed");
-      return;
-    }
-    setSelectedTemplateId(template.id);
-    setMode(template.tool);
-    setPrompt(template.prompt);
-    const s = template.settings;
-    if (s.duration) setVideoDuration(s.duration);
-    setVoiceoverEnabled(!!s.voiceoverEnabled);
-    if (s.voiceoverText) setVoiceoverText(s.voiceoverText);
-    setMusicEnabled(!!s.musicEnabled);
-    if (s.musicPrompt) setMusicPrompt(s.musicPrompt);
-    if (s.musicVolume !== undefined) setMusicVolume(s.musicVolume);
-    setTemplatesOpen(false);
-    toast.success(`Template "${template.name}" applied`);
-  }, [selectedTemplateId]);
-
-  // Effects are independent from templates — picking an effect only sets
-  // `selectedEffectId`. The styles block still drives base prompt / duration /
-  // voiceover config; the effect just wraps the per-shot prompts at fan-out.
-  // Clicking the same effect card again toggles it off.
-  const applyEffect = useCallback((effect: VideoEffect) => {
-    if (selectedEffectId === effect.id) {
-      setSelectedEffectId(null);
-      return;
-    }
-    setSelectedEffectId(effect.id);
-    toast.success(`Effect "${effect.name}" applied`);
-  }, [selectedEffectId]);
 
   // Drag & drop
   const handleDrop = useCallback(
@@ -513,8 +306,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
             if (prev.some((a) => a.id === asset.id)) return prev;
             return [...prev, asset];
           });
-          // Mirror the auto-mode behavior of addFiles for existing-asset
-          // drops so the Auto-prompt button appears immediately.
           setMode((prev) => prev ?? "video");
           return;
         } catch {
@@ -560,9 +351,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
 
   const detectMention = useCallback(
     (value: string, caret: number) => {
-      // Walk backward from the caret to find an '@' that opens a mention.
-      // A mention is valid if '@' is at start-of-string or preceded by whitespace,
-      // and the characters between '@' and the caret are alphanumeric only.
       let i = caret - 1;
       while (i >= 0) {
         const ch = value[i];
@@ -662,14 +450,13 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
       );
     } else if (mode === "video") {
       if (uploadedAssetIds.length > 0) {
-        // Dispatch to the scene-based engine. Per-shot model choice and
-        // cinematography prompts are decided server-side by the planner +
-        // Claude prompt writer; the UI only picks the template, aspect, and
-        // optional voiceover/music.
+        // Dispatch to the scene-based engine. The server picks the model
+        // (ENGINE_DEFAULT_MODEL env, default "kling") and drives the luxury
+        // template. No model / duration / template knobs here anymore.
         engine.mutate({
           projectId,
           imageAssetIds: uploadedAssetIds,
-          templateName: engineTemplate,
+          templateName: ENGINE_TEMPLATE,
           voiceoverText: voiceoverEnabled
             ? voiceoverText.trim() || undefined
             : undefined,
@@ -678,7 +465,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
             : undefined,
           musicVolume: musicEnabled ? musicVolume / 100 : undefined,
         });
-        // useEngineGenerate.onSuccess surfaces its own toast — no duplicate.
       }
     }
 
@@ -690,7 +476,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     process,
     engine,
     projectId,
-    engineTemplate,
     voiceoverEnabled,
     voiceoverText,
     musicEnabled,
@@ -699,24 +484,21 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     clearAll,
   ]);
 
+  // Auto-prompt is a cosmetic textarea helper — its output feeds the
+  // voiceover-script generator and the mention UX, not the engine. We hardcode
+  // the model/duration knobs the API expects to the luxury-template defaults
+  // so the helper keeps working after the UI sliders were removed.
   const handleAutoPrompt = useCallback(async () => {
     if (generatingPrompt || isUploading || uploadedAssetIds.length === 0) return;
     setGeneratingPrompt(true);
     try {
-      // Send total duration — the prompt-generation route expects total and
-      // derives per-shot context from it server-side. For Kling we multiply
-      // per-shot × N here since the slider now holds per-shot.
-      const totalDuration =
-        videoModel === "kling"
-          ? klingTotalDuration(videoDuration, uploadedAssetIds.length)
-          : videoDuration;
       const res = await fetch("/api/generate-video-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          videoModel,
+          videoModel: "seedance",
           imageAssetIds: uploadedAssetIds,
-          duration: totalDuration,
+          duration: 30,
         }),
       });
       if (!res.ok) {
@@ -724,10 +506,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           error?: string;
           code?: string;
         };
-        // Distinguish "auth fetch failed" (transient network) from
-        // genuine 401 so the user gets actionable copy. The route now
-        // emits `code: "auth_fetch_failed"` with status 503 when the
-        // Supabase auth check itself fails.
         if (res.status === 503 && body.code === "auth_fetch_failed") {
           toast.error("Couldn't verify session — please try again.");
         } else {
@@ -736,8 +514,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
         return;
       }
       const { prompt: generated } = (await res.json()) as { prompt?: string };
-      // Defensive: never silently overwrite the textarea with an empty
-      // string from a malformed success response.
       if (typeof generated === "string" && generated.trim().length > 0) {
         setPrompt(generated);
         toast.success("Prompt generated — review and edit before generating");
@@ -749,7 +525,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     } finally {
       setGeneratingPrompt(false);
     }
-  }, [generatingPrompt, isUploading, uploadedAssetIds, videoModel, videoDuration]);
+  }, [generatingPrompt, isUploading, uploadedAssetIds]);
 
   const toggleMode = (m: CreationMode) => {
     setMode((prev) => (prev === m ? null : m));
@@ -871,12 +647,50 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
         )}
       </AnimatePresence>
 
+      {/* Min-image gate feedback — visible the moment mode=video, any time the
+          user is short of MIN_IMAGES_FOR_VIDEO. Framed as progress ("4 / 6")
+          so uploads feel like a fill meter instead of a scolding. */}
+      <AnimatePresence>
+        {mode === "video" && videoImageShortfall > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: "auto", marginBottom: 10 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" as const }}
+            className="overflow-hidden"
+          >
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2",
+                "text-xs",
+                "bg-[var(--color-accent)]/8 border border-[var(--color-accent)]/25",
+                "text-[var(--color-foreground)]"
+              )}
+              role="status"
+              aria-live="polite"
+            >
+              <ImageIcon
+                size={13}
+                className="text-[var(--color-accent)] shrink-0"
+              />
+              <span>
+                <span className="font-medium tabular-nums">
+                  {uploadedAssetIds.length} / {MIN_IMAGES_FOR_VIDEO}
+                </span>
+                <span className="text-[var(--color-muted)]">
+                  {" "}
+                  — add {videoImageShortfall} more{" "}
+                  {videoImageShortfall === 1 ? "photo" : "photos"} to generate a
+                  video.
+                </span>
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Text input */}
       <div className="relative">
-        {/* Auto-generate prompt button — only visible in video mode with at
-            least one image. Sized at text-xs (12px) and always shows the
-            label so users notice it; the previous text-[10px] icon-on-mobile
-            treatment was below accessibility thresholds and easy to miss. */}
         {mode === "video" && uploadedAssetIds.length >= 1 && !isUploading && (
           <button
             type="button"
@@ -908,14 +722,11 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           onChange={handlePromptChange}
           onKeyDown={handlePromptKeyDown}
           onBlur={() => {
-            // Delay so a click on a suggestion can fire before we close.
             setTimeout(closeMention, 120);
           }}
           placeholder={
             mode === "video"
-              ? videoModel === "kling"
-                ? "Describe the video — each attached image becomes its own scene at the selected duration..."
-                : "Describe the shot — type @ to reference images (e.g. '@image1 pans slowly')..."
+              ? "Describe the video (optional) — type @ to reference images..."
               : mode === "enhance"
                 ? "Describe the enhancement (or leave empty for auto)..."
                 : "Drop photos and select what to create..."
@@ -925,8 +736,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
             "w-full bg-transparent resize-none outline-none",
             "text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
             "leading-relaxed",
-            // Reserve room on the right so typed text never slides under
-            // the absolutely-positioned Auto-prompt button.
             mode === "video" && uploadedAssetIds.length >= 1 && !isUploading
               ? "pr-32"
               : ""
@@ -959,7 +768,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                     role="option"
                     aria-selected={active}
                     onMouseDown={(e) => {
-                      // Prevent textarea blur before click fires.
                       e.preventDefault();
                     }}
                     onClick={() => applyMention(name)}
@@ -1017,9 +825,9 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                     onClick={async () => {
                       setGeneratingScript(true);
                       try {
-                        // `videoDuration` is already the total — send it
-                        // straight through to the narration generator.
-                        const totalSec = videoDuration;
+                        // luxury_30s target is 30s; pass that through to the
+                        // narration generator so it sizes the script correctly.
+                        const totalSec = 30;
                         const res = await fetch("/api/generate-script", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -1146,7 +954,8 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           <span className="hidden sm:inline">Video</span>
         </button>
 
-        {/* Video options — inline icons, only when video mode active */}
+        {/* Video options — voiceover + music only now. Model / duration /
+            template pickers are gone; server picks defaults. */}
         <AnimatePresence>
           {mode === "video" && (
             <motion.div
@@ -1156,63 +965,8 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
               transition={{ duration: 0.15, ease: "easeOut" as const }}
               className="inline-flex items-center gap-0.5 overflow-hidden"
             >
-              {/* Separator */}
               <div className="w-px h-5 bg-[var(--color-border)] mx-1.5" />
 
-              {/* Duration slider — per-shot for Kling (5 or 10), single-clip
-                  for Seedance. For multi-image Kling runs the label shows
-                  "5s × N = 20s" so the user sees the total they'll get. */}
-              {(() => {
-                const imageCount = Math.max(1, uploadedAssetIds.length);
-                const isKlingMulti =
-                  videoModel === "kling" && imageCount > 1;
-                const klingTotal = isKlingMulti
-                  ? klingTotalDuration(videoDuration, imageCount)
-                  : null;
-                const tooltip = isKlingMulti
-                  ? `${videoDuration}s per shot × ${imageCount} images = ${klingTotal}s total`
-                  : `${videoDuration}s`;
-                return (
-                  <div
-                    className="inline-flex items-center gap-1.5 px-1.5"
-                    title={tooltip}
-                  >
-                    <Clock
-                      size={11}
-                      className="text-[var(--color-muted)] flex-shrink-0"
-                    />
-                    <input
-                      type="range"
-                      min={durationConstraints.min}
-                      max={durationConstraints.max}
-                      step={durationConstraints.step}
-                      value={videoDuration}
-                      onChange={(e) =>
-                        setVideoDuration(Number(e.target.value))
-                      }
-                      aria-label={
-                        videoModel === "kling"
-                          ? "Duration per shot in seconds"
-                          : "Video duration in seconds"
-                      }
-                      className={cn(
-                        "h-1 rounded-full cursor-pointer",
-                        "accent-[var(--color-accent)]",
-                        // Compact width fitting the toolbar; grows slightly
-                        // on wider screens for finer control.
-                        "w-16 sm:w-24",
-                      )}
-                    />
-                    <span className="text-xs font-medium tabular-nums text-[var(--color-foreground)] text-right whitespace-nowrap">
-                      {isKlingMulti
-                        ? `${videoDuration}s × ${imageCount} = ${klingTotal}s`
-                        : `${videoDuration}s`}
-                    </span>
-                  </div>
-                );
-              })()}
-
-              {/* Voiceover icon toggle */}
               <button
                 type="button"
                 onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
@@ -1227,7 +981,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                 <Mic size={13} />
               </button>
 
-              {/* Music icon toggle — ElevenLabs music muxed on the final video */}
               <button
                 type="button"
                 onClick={() => setMusicEnabled(!musicEnabled)}
@@ -1241,187 +994,9 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
               >
                 <Music size={13} />
               </button>
-
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Engine template picker — drives /api/engine/generate. The scene
-            planner and per-shot Claude prompt writer decide model + duration
-            per scene from this single choice. */}
-        {mode === "video" && (
-          <div className="relative flex items-center">
-            <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
-            <button
-              type="button"
-              onClick={() => setEngineTemplateOpen((prev) => !prev)}
-              title="Template"
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-                "text-xs font-medium transition-colors duration-150 outline-none",
-                engineTemplateOpen
-                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-              )}
-            >
-              <LayoutTemplate size={12} className="shrink-0" />
-              <span className="truncate max-w-[120px] sm:max-w-none">
-                {ENGINE_TEMPLATE_META.find((t) => t.id === engineTemplate)?.label ?? engineTemplate}
-              </span>
-              <ChevronDown
-                size={11}
-                className={cn(
-                  "transition-transform duration-150",
-                  engineTemplateOpen && "rotate-180"
-                )}
-              />
-            </button>
-            <AnimatePresence>
-              {engineTemplateOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12, ease: "easeOut" as const }}
-                  className={cn(
-                    "absolute bottom-full left-0 mb-2 z-50",
-                    "w-64 rounded-xl overflow-hidden",
-                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
-                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-                  )}
-                >
-                  <div className="p-1.5">
-                    {ENGINE_TEMPLATE_META.map((t) => {
-                      const isSelected = engineTemplate === t.id;
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => {
-                            setEngineTemplate(t.id);
-                            setEngineTemplateOpen(false);
-                          }}
-                          className={cn(
-                            "w-full flex flex-col items-start gap-0.5 px-3 py-2 rounded-lg text-left",
-                            "transition-colors duration-150",
-                            isSelected
-                              ? "bg-[var(--color-accent)]/10 text-[var(--color-foreground)]"
-                              : "hover:bg-[var(--color-surface)] text-[var(--color-foreground)]"
-                          )}
-                        >
-                          <span className="text-xs font-medium flex items-center gap-1.5">
-                            {t.label}
-                            {isSelected && (
-                              <Check size={12} className="text-[var(--color-accent)]" />
-                            )}
-                          </span>
-                          <span className="text-[10px] text-[var(--color-muted)] leading-tight">
-                            {t.description}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
-        {/* Video model picker — sibling of the animated options block so its
-            dropdown panel isn't clipped by that block's overflow-hidden. */}
-        {mode === "video" && (
-          <div ref={videoModelRef} className="relative flex items-center">
-            <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
-            <button
-              type="button"
-              onClick={() => setVideoModelOpen((prev) => !prev)}
-              title="Video model"
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-                "text-xs font-medium transition-colors duration-150 outline-none",
-                videoModelOpen
-                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-              )}
-            >
-              <span className="truncate max-w-[80px] sm:max-w-none">
-                {VIDEO_MODELS.find((m) => m.id === videoModel)?.label ?? "Model"}
-              </span>
-              <ChevronDown
-                size={11}
-                className={cn(
-                  "transition-transform duration-150",
-                  videoModelOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            <AnimatePresence>
-              {videoModelOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12, ease: "easeOut" as const }}
-                  className={cn(
-                    "absolute bottom-full left-0 mb-2 z-50",
-                    "w-56 rounded-xl overflow-hidden",
-                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
-                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-                  )}
-                >
-                  <div className="p-1.5">
-                    {VIDEO_MODELS.map((m) => {
-                      const isSelected = videoModel === m.id;
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            setVideoModel(m.id);
-                            setVideoModelOpen(false);
-                          }}
-                          className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left",
-                            "transition-colors duration-150",
-                            isSelected
-                              ? "bg-[var(--color-accent)]/12"
-                              : "hover:bg-[var(--color-accent)]/8"
-                          )}
-                        >
-                          <div className="w-4 h-4 shrink-0 flex items-center justify-center">
-                            {isSelected && (
-                              <Check
-                                size={13}
-                                className="text-[var(--color-accent)]"
-                              />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium truncate",
-                                isSelected
-                                  ? "text-[var(--color-accent)]"
-                                  : "text-[var(--color-foreground)]"
-                              )}
-                            >
-                              {m.label}
-                            </p>
-                            <p className="text-[11px] text-[var(--color-muted)] truncate mt-0.5">
-                              {m.description}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
 
         {/* Aspect ratio picker */}
         {mode === "video" && (
@@ -1439,9 +1014,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                   : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
               )}
             >
-              <span className="truncate">
-                {aspectRatio}
-              </span>
+              <span className="truncate">{aspectRatio}</span>
               <ChevronDown
                 size={11}
                 className={cn(
@@ -1517,160 +1090,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           </div>
         )}
 
-        {/* Separator */}
-        {templates && templates.length > 0 && (
-          <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
-        )}
-
-        {/* Templates dropdown — also hosts the Effects picker (Kling-only).
-            A single "active" state on the trigger button covers either a
-            style OR an effect being selected (spec §4: one accent indicator). */}
-        {templates && templates.length > 0 && (
-          <div ref={templatesRef} className="relative">
-            <button
-              type="button"
-              onClick={() => setTemplatesOpen(!templatesOpen)}
-              title="Templates"
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-                "text-xs font-medium transition-colors duration-150 outline-none",
-                templatesOpen
-                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
-                  : selectedTemplateId || selectedEffectId
-                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
-                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-              )}
-            >
-              <LayoutTemplate size={14} />
-              <span className="hidden sm:inline">Templates</span>
-            </button>
-
-            <AnimatePresence>
-              {templatesOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12, ease: "easeOut" as const }}
-                  className={cn(
-                    "absolute bottom-full left-0 mb-2 z-50",
-                    "w-64 rounded-xl overflow-hidden",
-                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
-                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-                  )}
-                >
-                  <div className="p-1.5">
-                    {/* STYLES — existing templates, unchanged behavior. */}
-                    <p className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                      Styles
-                    </p>
-                    {templates.map((template) => {
-                      const Icon =
-                        TEMPLATE_ICONS[template.icon] ?? Sparkles;
-                      const isSelected = selectedTemplateId === template.id;
-                      return (
-                        <button
-                          key={template.id}
-                          type="button"
-                          onClick={() => applyTemplate(template)}
-                          className={cn(
-                            "w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left",
-                            "transition-colors duration-150",
-                            isSelected
-                              ? "bg-[var(--color-accent)]/12 ring-1 ring-[var(--color-accent)]/25"
-                              : "hover:bg-[var(--color-accent)]/8"
-                          )}
-                        >
-                          <div
-                            className={cn(
-                              "w-8 h-8 rounded-lg shrink-0 flex items-center justify-center",
-                              "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                            )}
-                          >
-                            <Icon size={15} />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-[var(--color-foreground)] truncate">
-                              {template.name}
-                            </p>
-                            {template.description && (
-                              <p className="text-xs text-[var(--color-muted)] mt-0.5 line-clamp-1">
-                                {template.description}
-                              </p>
-                            )}
-                          </div>
-                          <span
-                            className={cn(
-                              "shrink-0 ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider",
-                              template.tool === "video"
-                                ? "bg-blue-500/10 text-blue-400"
-                                : "bg-emerald-500/10 text-emerald-400"
-                            )}
-                          >
-                            {template.tool}
-                          </span>
-                        </button>
-                      );
-                    })}
-
-                    {/* EFFECTS — Kling only in v1. The section collapses
-                        entirely (no header, no placeholder) when Seedance
-                        is selected; silent clear on model switch handles
-                        the "selected-but-hidden" case. */}
-                    {videoModel === "kling" && (
-                      <>
-                        <div className="mx-2 my-1.5 border-t border-[var(--color-border)]" />
-                        <p className="px-2 pt-1 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                          Effects
-                          <span className="ml-1.5 text-[10px] font-normal normal-case tracking-normal text-[var(--color-muted)]/70">
-                            (Kling only)
-                          </span>
-                        </p>
-                        {VIDEO_EFFECTS.map((effect) => {
-                          const Icon =
-                            TEMPLATE_ICONS[effect.icon] ?? Sparkles;
-                          const isSelected = selectedEffectId === effect.id;
-                          return (
-                            <button
-                              key={effect.id}
-                              type="button"
-                              onClick={() => applyEffect(effect)}
-                              className={cn(
-                                "w-full flex items-start gap-3 px-3 py-2.5 rounded-lg text-left",
-                                "transition-colors duration-150",
-                                isSelected
-                                  ? "bg-[var(--color-accent)]/12 ring-1 ring-[var(--color-accent)]/25"
-                                  : "hover:bg-[var(--color-accent)]/8"
-                              )}
-                            >
-                              <div
-                                className={cn(
-                                  "w-8 h-8 rounded-lg shrink-0 flex items-center justify-center",
-                                  "bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
-                                )}
-                              >
-                                <Icon size={15} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium text-[var(--color-foreground)] truncate">
-                                  {effect.name}
-                                </p>
-                                <p className="text-xs text-[var(--color-muted)] mt-0.5 line-clamp-1">
-                                  {effect.description}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
         <div className="flex-1" />
 
         {/* Browse */}
@@ -1697,9 +1116,13 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
               ? "Add photos first"
               : !mode
                 ? "Select a mode"
-                : mode === "enhance"
-                  ? "Enhance photos"
-                  : "Generate video"
+                : mode === "video" && videoImageShortfall > 0
+                  ? `Add ${videoImageShortfall} more photo${
+                      videoImageShortfall === 1 ? "" : "s"
+                    } to generate`
+                  : mode === "enhance"
+                    ? "Enhance photos"
+                    : "Generate video"
           }
           className={cn(
             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg",

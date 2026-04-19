@@ -12,9 +12,16 @@ const BodySchema = z.object({
   templateName: z.enum(TEMPLATE_NAMES),
   /**
    * Video-generation backend. Optional; server default resolves from
-   * ENGINE_VIDEO_PROVIDER env or "piapi".
+   * ENGINE_VIDEO_PROVIDER env or "kieai".
    */
   videoProvider: z.enum(["piapi", "kieai"]).optional(),
+  /**
+   * User's video-model selection. When present, every scene is hard-overridden
+   * to this choice after the LLM prompt writer returns — the LLM still writes
+   * the motion prompt, but doesn't get to pick the model. Omit to let the LLM
+   * pick per scene.
+   */
+  modelChoice: z.enum(["kling", "seedance", "seedance-fast"]).optional(),
   /** Optional ElevenLabs voiceover text (max ~2000 chars). */
   voiceoverText: z.string().max(2000).optional(),
   voiceoverVoiceId: z.string().optional(),
@@ -52,6 +59,7 @@ export async function POST(req: NextRequest) {
     imageAssetIds,
     templateName,
     videoProvider,
+    modelChoice,
     voiceoverText,
     voiceoverVoiceId,
     musicPrompt,
@@ -121,10 +129,19 @@ export async function POST(req: NextRequest) {
       thumbnail_url: firstAsset.original_url,
       source_asset_id: firstAsset.id,
       metadata: {
+        // Mirror the reference ids at the top level so the AssetGrid preview
+        // modal (and the re-run preload on CreationBar) can reconstruct the
+        // full source-image strip for an in-flight run. Without this, an
+        // in-progress processing card would only surface the primary
+        // (source_asset_id) and the user couldn't see which other photos they
+        // attached until the run completed. The list excludes the primary
+        // to match the shape the modal already reads for finished videos.
+        referenceAssetIds: imageAssetIds.slice(1),
         engineRequest: {
           templateName,
           imageAssetIds,
           ...(videoProvider ? { videoProvider } : {}),
+          ...(modelChoice ? { modelChoice } : {}),
           ...(voiceoverText ? { voiceoverText } : {}),
           ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
           ...(musicPrompt ? { musicPrompt } : {}),
@@ -143,9 +160,11 @@ export async function POST(req: NextRequest) {
     await tasks.trigger<typeof engineGenerateTask>("engine-generate", {
       assetId: placeholder.id,
       userId: user.id,
+      projectId,
       imageUrls: imageUrls as string[],
       templateName,
       ...(videoProvider ? { videoProvider } : {}),
+      ...(modelChoice ? { modelChoice } : {}),
       ...(voiceoverText ? { voiceoverText } : {}),
       ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
       ...(musicPrompt ? { musicPrompt } : {}),

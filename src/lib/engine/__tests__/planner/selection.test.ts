@@ -73,22 +73,15 @@ describe("pickImage", () => {
     expect(picked!.roomType).toBe("dining");
   });
 
-  it("filters out images below quality floor 0.4", () => {
+  it("skips images the quality check marked !usable", () => {
     const dataset = makeDataset([
       ...twelveImageFixture(),
-      // Add a low-quality exterior — should be filtered out despite high hero.
+      // An unusable exterior — should be filtered out regardless of roomType.
       {
         path: "/img/ext-junk.jpg",
         roomType: "exterior",
-        scores: {
-          quality: 0.2,
-          lighting: 0.5,
-          composition: 0.5,
-          wow: 0.5,
-          detail: 0.5,
-          hero: 0.99,
-        },
-        eligibility: { asHero: false, asWow: false, asClosing: false },
+        usable: false,
+        reason: "blurry",
         dims: { width: 1920, height: 1080, aspectRatio: 1.78 },
         visionLabels: [],
         visionObjects: [],
@@ -101,6 +94,7 @@ describe("pickImage", () => {
       onMissing: "use_hero",
     });
     const picked = pickImage(s, dataset, new Set());
+    // Should pick the first usable exterior in fixture order.
     expect(picked!.path).toBe("/img/ext-1.jpg");
   });
 });

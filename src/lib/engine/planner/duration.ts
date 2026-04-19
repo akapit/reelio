@@ -2,12 +2,16 @@ import type { ImageMetadata, TemplateSlot } from "@/lib/engine/models";
 
 export type DurationChoice = { slot: TemplateSlot; image: ImageMetadata };
 
-const WEIGHT_FLOOR = 0.01;
 const MAX_REDISTRIBUTE_PASSES = 5;
 
-function weightFor(image: ImageMetadata): number {
-  const raw = image.scores.quality + 0.5 * image.scores.composition;
-  return Math.max(raw, WEIGHT_FLOOR);
+/**
+ * Per-choice weight for the initial duration allocation. With scoring removed
+ * every usable image is equal — return 1.0 so durations start as a uniform
+ * split of `targetDurationSec`, then the clamp + redistribute passes honour
+ * each slot's `[minDuration, maxDuration]` window.
+ */
+function weightFor(_image: ImageMetadata): number {
+  return 1;
 }
 
 export function distribute(

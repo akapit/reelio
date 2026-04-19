@@ -1,17 +1,18 @@
 import pLimit from "p-limit";
-import path from "node:path";
-import { tmpdir } from "node:os";
 
 import { piapiProvider } from "@/lib/media/providers/piapi";
 import { kieaiProvider } from "@/lib/media/providers/kieai";
 import type { IMediaProvider, VideoGenerationOptions } from "@/lib/media/types";
+import { evaluateSceneVideo } from "@/lib/engine/scene-evaluator/evaluator";
+import { prepareSceneSource } from "@/lib/engine/scene-generator/source-prep";
 import type {
   ImageMetadata,
+  PreparedSceneSource,
   Scene,
   ScenePrompt,
+  SceneQualityEvaluation,
   SceneVideo,
 } from "@/lib/engine/models";
-import { computeCropRect, applyCrop } from "@/lib/engine/vision/smartCrop";
 
 /**
  * Logical name of the video-generation backend. Both providers expose
@@ -27,8 +28,9 @@ const PROVIDER_REGISTRY: Record<VideoProviderName, IMediaProvider> = {
 
 /**
  * Resolve a provider by name. Env fallback:
- *   ENGINE_VIDEO_PROVIDER=kieai  →  kieai (else piapi)
- * Explicit `name` always wins.
+ *   ENGINE_VIDEO_PROVIDER=piapi  →  piapi (else kieai)
+ * Explicit `name` always wins. kie.ai is the default because its plan
+ * allows ~100+ concurrent tasks (20 requests/10s) vs piapi's 2-task cap.
  */
 export function resolveVideoProvider(
   name?: VideoProviderName,
@@ -36,7 +38,7 @@ export function resolveVideoProvider(
   const resolved =
     name ??
     (process.env.ENGINE_VIDEO_PROVIDER as VideoProviderName | undefined) ??
-    "piapi";
+    "kieai";
   const provider = PROVIDER_REGISTRY[resolved];
   if (!provider) {
     throw new Error(
@@ -54,10 +56,25 @@ export interface GenerateScenesInput {
   scenes: Scene[];
   prompts: ScenePrompt[];
   aspectRatio: "16:9" | "9:16" | "1:1";
-  onSceneStart?: (scene: Scene, prompt: ScenePrompt) => Promise<void> | void;
-  onSceneTaskId?: (scene: Scene, piapiTaskId: string) => Promise<void> | void;
-  onSceneDone?: (scene: Scene, video: SceneVideo) => Promise<void> | void;
-  onSceneFailed?: (scene: Scene, error: Error) => Promise<void> | void;
+  onSceneStart?: (
+    scene: Scene,
+    context: SceneAttemptContext,
+  ) => Promise<void> | void;
+  onSceneTaskId?: (
+    scene: Scene,
+    piapiTaskId: string,
+    context: SceneAttemptContext,
+  ) => Promise<void> | void;
+  onSceneDone?: (
+    scene: Scene,
+    video: SceneVideo,
+    context: SceneAttemptContext,
+  ) => Promise<void> | void;
+  onSceneFailed?: (
+    scene: Scene,
+    error: Error,
+    context: SceneAttemptContext,
+  ) => Promise<void> | void;
   /** Parallelism cap. Defaults to 3 to avoid piapi rate limits. */
   concurrency?: number;
   /**
@@ -74,10 +91,16 @@ export interface GenerateScenesInput {
    */
   imagesByPath?: Map<string, ImageMetadata>;
   /**
-   * Where cropped images are written. Defaults to `os.tmpdir()/engine-crop`.
-   * When `ENGINE_CACHE_DIR` is set, cropped images land there (cache-friendly).
+   * Where downloaded/cropped sources are written. Defaults to `ENGINE_CACHE_DIR`
+   * or an OS temp directory.
    */
   cropScratchDir?: string;
+  /** Prefix used when uploading prepared sources back to R2. */
+  preparedAssetPrefix?: string;
+  /** Default 2. Retry a scene once when generation fails or QA rejects it. */
+  maxAttempts?: number;
+  /** Disable the post-generation QA pass. Default true. */
+  evaluateScenes?: boolean;
   /** Optional provider override for tests. Bypasses `videoProvider`. */
   provider?: {
     generateVideo: (
@@ -95,11 +118,28 @@ export interface GenerateScenesResult {
   failed: Array<{ sceneId: string; error: string }>;
 }
 
+export interface SceneAttemptContext {
+  attempt: number;
+  maxAttempts: number;
+  prompt: ScenePrompt;
+  preparedSource: PreparedSceneSource;
+  providerName: string;
+  evaluation?: SceneQualityEvaluation;
+  willRetry?: boolean;
+  retryReason?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Duration helpers
 // ---------------------------------------------------------------------------
 
-const KLING_MAX_DURATION = 10;
+// Kling 2.5 Turbo Pro accepts ONLY the discrete values 5 and 10 — any integer
+// in between (6, 7, 8, 9) returns a kie.ai 500 "duration is not within the
+// range of allowed options" error. Product decision: always pick 5s for Kling
+// regardless of the planner's requested duration. Rationale: luxury_30s slot
+// durations are all 3-6s, so 5s covers them naturally; jumping to 10s would
+// double the cost and nearly always overshoot what the planner asked for.
+const KLING_FIXED_DURATION = 5 as const;
 const SEEDANCE_MIN_DURATION = 4;
 const SEEDANCE_MAX_DURATION = 15;
 const GLOBAL_MIN_DURATION = 5; // piapi i2v floor
@@ -108,11 +148,12 @@ function clampDuration(
   rawSec: number,
   model: ScenePrompt["modelChoice"],
 ): number {
-  const rounded = Math.max(GLOBAL_MIN_DURATION, Math.round(rawSec));
   if (model === "kling") {
-    return Math.min(KLING_MAX_DURATION, rounded);
+    // Kling: always 5s. See KLING_FIXED_DURATION note above.
+    return KLING_FIXED_DURATION;
   }
   // seedance / seedance-fast
+  const rounded = Math.max(GLOBAL_MIN_DURATION, Math.round(rawSec));
   return Math.min(SEEDANCE_MAX_DURATION, Math.max(SEEDANCE_MIN_DURATION, rounded));
 }
 
@@ -134,65 +175,24 @@ function log(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Smart-crop preprocessing
-// ---------------------------------------------------------------------------
+function buildRetryPrompt(prompt: ScenePrompt, feedback?: string | null): ScenePrompt {
+  const stabilityNudge =
+    "Keep the motion subtle, smooth, and geometrically stable. Avoid warping, flicker, and exaggerated zoom.";
+  const retryPrompt = feedback?.trim()
+    ? feedback.trim()
+    : prompt.prompt.includes(stabilityNudge)
+      ? prompt.prompt
+      : `${prompt.prompt} ${stabilityNudge}`;
 
-const ASPECT_AR: Record<GenerateScenesInput["aspectRatio"], number> = {
-  "16:9": 16 / 9,
-  "9:16": 9 / 16,
-  "1:1": 1,
-};
-
-function isHttpUrl(p: string): boolean {
-  return /^https?:\/\//i.test(p);
-}
-
-function resolveCropScratchDir(input: GenerateScenesInput): string {
-  if (input.cropScratchDir) return input.cropScratchDir;
-  const cacheDir = process.env.ENGINE_CACHE_DIR;
-  if (cacheDir) return path.join(cacheDir, "crops");
-  return path.join(tmpdir(), "engine-crop");
-}
-
-/**
- * Run smart-crop on the source image if we have the metadata AND the source
- * is a local path. Returns either the cropped path or the original input.
- * Never throws — any failure is logged and the original path is used.
- */
-async function maybeSmartCrop(
-  scene: Scene,
-  aspectRatio: GenerateScenesInput["aspectRatio"],
-  input: GenerateScenesInput,
-): Promise<string> {
-  const meta = input.imagesByPath?.get(scene.imagePath);
-  if (!meta) {
-    return scene.imagePath;
-  }
-  if (isHttpUrl(scene.imagePath)) {
-    // smartCrop needs a local file for ffmpeg; URLs get passed through.
-    // TODO: fetch-then-crop-then-upload would allow smart-crop on R2 URLs too.
-    return scene.imagePath;
-  }
-  try {
-    const rect = computeCropRect(meta.dims, meta.visionObjects, ASPECT_AR[aspectRatio]);
-    log("smartCrop.rect", scene.sceneId, {
-      reason: rect.reason,
-      noop: rect.noop,
-      sourceDims: meta.dims,
-      rect: rect.noop ? undefined : { x: rect.x, y: rect.y, w: rect.w, h: rect.h },
-      targetAR: aspectRatio,
-      objectCount: meta.visionObjects.length,
-    });
-    if (rect.noop) return scene.imagePath;
-    const scratchDir = resolveCropScratchDir(input);
-    return await applyCrop(scene.imagePath, rect, scratchDir);
-  } catch (err) {
-    log("smartCrop.failed", scene.sceneId, {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return scene.imagePath;
-  }
+  return {
+    ...prompt,
+    prompt: retryPrompt,
+    modelChoice:
+      prompt.modelChoice === "seedance-fast" ? "seedance" : prompt.modelChoice,
+    modelReason: prompt.modelReason
+      ? `${prompt.modelReason} Retry tuned for higher stability.`
+      : "retry tuned for higher stability",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -201,98 +201,157 @@ async function maybeSmartCrop(
 
 async function generateOneScene(
   scene: Scene,
-  prompt: ScenePrompt,
+  initialPrompt: ScenePrompt,
   aspectRatio: GenerateScenesInput["aspectRatio"],
   input: GenerateScenesInput,
 ): Promise<SceneVideo> {
-  const wallStart = Date.now();
   const provider = input.provider ?? resolveVideoProvider(input.videoProvider);
   const providerName =
     input.provider !== undefined
       ? "test-override"
       : (input.videoProvider ??
           (process.env.ENGINE_VIDEO_PROVIDER as VideoProviderName | undefined) ??
-          "piapi");
+          "kieai");
 
-  log("scene.start", scene.sceneId, {
-    model: prompt.modelChoice,
-    provider: providerName,
-    order: scene.order,
-    imagePath: scene.imagePath,
-  });
-  await input.onSceneStart?.(scene, prompt);
-
-  // --- Smart crop preprocessing (best-effort; never fails the scene) ---
-  const croppedPath = await maybeSmartCrop(scene, aspectRatio, input);
-
-  const duration = clampDuration(scene.durationSec, prompt.modelChoice);
-
-  const opts: VideoGenerationOptions & { onTaskId?: (id: string) => void } = {
-    imageUrl: croppedPath,
-    prompt: prompt.prompt,
-    model: prompt.modelChoice,
-    duration,
+  const preparedSource = await prepareSceneSource({
+    scene,
     aspectRatio,
-    onTaskId: async (piapiTaskId: string) => {
-      log("scene.taskId", scene.sceneId, { piapiTaskId, model: prompt.modelChoice });
-      await input.onSceneTaskId?.(scene, piapiTaskId);
-    },
-  };
-
-  // Pass Kling mode param when explicitly set.
-  if (prompt.modelChoice === "kling" && prompt.modelParams?.mode) {
-    // VideoGenerationOptions does not expose `mode` directly — it is an
-    // internal piapi field. Cast through unknown to keep the provider
-    // contract intact while forwarding the caller's intent. The piapi
-    // provider reads `options.mode` off the options bag if present.
-    (opts as Record<string, unknown>)["mode"] = prompt.modelParams.mode;
-  }
-
-  const result = await provider.generateVideo(opts);
-  const generationMs = Date.now() - wallStart;
-
-  if (!result.outputUrl) {
-    throw new Error(
-      `piapi returned empty outputUrl for scene ${scene.sceneId} (model=${prompt.modelChoice})`,
-    );
-  }
-
-  // Derive model string from result — the provider fills this in.
-  const model =
-    "model" in result && typeof result.model === "string"
-      ? result.model
-      : prompt.modelChoice;
-
-  // Extract the piapi task ID from the result if available.
-  const piapiTaskId =
-    "externalIds" in result &&
-    result.externalIds != null &&
-    typeof result.externalIds === "object" &&
-    "taskId" in result.externalIds &&
-    typeof result.externalIds.taskId === "string"
-      ? result.externalIds.taskId
-      : undefined;
-
-  const video: SceneVideo = {
-    sceneId: scene.sceneId,
-    videoUrl: result.outputUrl,
-    model,
-    generationMs,
-    ...(piapiTaskId !== undefined ? { piapiTaskId } : {}),
-    // piapi does not return the actual clip length; caller can derive from
-    // the clamped duration we requested.
-    durationSec: duration,
-  };
-
-  log("scene.done", scene.sceneId, {
-    piapiTaskId,
-    model,
-    durationSec: duration,
-    generationMs,
+    imagesByPath: input.imagesByPath,
+    scratchDir: input.cropScratchDir,
+    uploadPrefix: input.preparedAssetPrefix,
   });
-  await input.onSceneDone?.(scene, video);
+  const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
+  let prompt = initialPrompt;
+  let lastError: Error | null = null;
 
-  return video;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const wallStart = Date.now();
+    const attemptContext: SceneAttemptContext = {
+      attempt,
+      maxAttempts,
+      prompt,
+      preparedSource,
+      providerName,
+    };
+
+    log("scene.start", scene.sceneId, {
+      model: prompt.modelChoice,
+      provider: providerName,
+      order: scene.order,
+      imagePath: scene.imagePath,
+      preparedImageUrl: preparedSource.providerImageUrl,
+      attempt,
+    });
+    await input.onSceneStart?.(scene, attemptContext);
+
+    const duration = clampDuration(scene.durationSec, prompt.modelChoice);
+    const opts: VideoGenerationOptions & { onTaskId?: (id: string) => void } = {
+      imageUrl: preparedSource.providerImageUrl,
+      prompt: prompt.prompt,
+      model: prompt.modelChoice,
+      duration,
+      aspectRatio,
+      onTaskId: async (piapiTaskId: string) => {
+        log("scene.taskId", scene.sceneId, {
+          piapiTaskId,
+          model: prompt.modelChoice,
+          attempt,
+        });
+        await input.onSceneTaskId?.(scene, piapiTaskId, attemptContext);
+      },
+    };
+
+    if (prompt.modelChoice === "kling" && prompt.modelParams?.mode) {
+      (opts as Record<string, unknown>)["mode"] = prompt.modelParams.mode;
+    }
+
+    try {
+      const result = await provider.generateVideo(opts);
+      const generationMs = Date.now() - wallStart;
+
+      if (!result.outputUrl) {
+        throw new Error(
+          `provider returned empty outputUrl for scene ${scene.sceneId} (model=${prompt.modelChoice})`,
+        );
+      }
+
+      const model =
+        "model" in result && typeof result.model === "string"
+          ? result.model
+          : prompt.modelChoice;
+
+      const piapiTaskId =
+        "externalIds" in result &&
+        result.externalIds != null &&
+        typeof result.externalIds === "object" &&
+        "taskId" in result.externalIds &&
+        typeof result.externalIds.taskId === "string"
+          ? result.externalIds.taskId
+          : undefined;
+
+      const video: SceneVideo = {
+        sceneId: scene.sceneId,
+        videoUrl: result.outputUrl,
+        model,
+        generationMs,
+        attemptOrder: attempt,
+        prompt,
+        preparedSource,
+        ...(piapiTaskId !== undefined ? { piapiTaskId } : {}),
+        durationSec: duration,
+      };
+
+      if (input.evaluateScenes !== false) {
+        const evaluation = await evaluateSceneVideo({
+          scene,
+          prompt,
+          video,
+          preparedSource,
+        });
+        video.evaluation = evaluation;
+        attemptContext.evaluation = evaluation;
+
+        if (!evaluation.passed && attempt < maxAttempts) {
+          const retryPrompt = buildRetryPrompt(prompt, evaluation.retryPrompt);
+          const retryError = new Error(
+            `scene quality rejected: ${evaluation.summary}`,
+          );
+          attemptContext.willRetry = true;
+          attemptContext.retryReason =
+            evaluation.retryReason ?? evaluation.summary;
+          await input.onSceneFailed?.(scene, retryError, attemptContext);
+          prompt = retryPrompt;
+          lastError = retryError;
+          continue;
+        }
+      }
+
+      log("scene.done", scene.sceneId, {
+        piapiTaskId,
+        model,
+        durationSec: duration,
+        generationMs,
+        attempt,
+        evaluationPassed: video.evaluation?.passed,
+        evaluationScore: video.evaluation?.score,
+      });
+      await input.onSceneDone?.(scene, video, attemptContext);
+      return video;
+    } catch (raw) {
+      const err = raw instanceof Error ? raw : new Error(String(raw));
+      const willRetry = attempt < maxAttempts;
+      attemptContext.willRetry = willRetry;
+      attemptContext.retryReason = willRetry ? "provider failure retry" : null;
+      await input.onSceneFailed?.(scene, err, attemptContext);
+      lastError = err;
+      if (!willRetry) {
+        throw err;
+      }
+      prompt = buildRetryPrompt(prompt, null);
+    }
+  }
+
+  throw lastError ?? new Error(`scene generation failed for ${scene.sceneId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +382,28 @@ export async function generateScenes(
           );
           log("scene.failed", scene.sceneId, { error: err.message });
           failed.push({ sceneId: scene.sceneId, error: err.message });
-          await input.onSceneFailed?.(scene, err);
+          await input.onSceneFailed?.(scene, err, {
+            attempt: 1,
+            maxAttempts: Math.max(1, input.maxAttempts ?? 2),
+            prompt: {
+              sceneId: scene.sceneId,
+              prompt: "",
+              modelChoice: "kling",
+            },
+            preparedSource: {
+              originalImagePath: scene.imagePath,
+              providerImageUrl: scene.imagePath,
+              localizedFromRemote: false,
+              crop: null,
+              sourceLocalPath: null,
+              preparedLocalPath: null,
+              uploadedPreparedUrl: null,
+            },
+            providerName:
+              input.videoProvider ??
+              (process.env.ENGINE_VIDEO_PROVIDER as VideoProviderName | undefined) ??
+              "kieai",
+          });
           return;
         }
 
@@ -337,7 +417,8 @@ export async function generateScenes(
             model: prompt.modelChoice,
           });
           failed.push({ sceneId: scene.sceneId, error: err.message });
-          await input.onSceneFailed?.(scene, err);
+          // The per-attempt callback has already been fired inside
+          // `generateOneScene`; avoid duplicating attempt rows/events here.
         }
       }),
     ),

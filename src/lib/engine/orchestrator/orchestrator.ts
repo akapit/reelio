@@ -20,16 +20,25 @@ import { analyzeImages } from "../vision/analyzer";
 import { loadTemplate } from "../templates/loader";
 import { planTimeline } from "../planner/planner";
 import { writeScenePrompts } from "../prompt-writer/writer";
-import { generateScenes, type VideoProviderName } from "../scene-generator/generator";
+import {
+  generateScenes,
+  type VideoProviderName,
+} from "../scene-generator/generator";
 import { mergeScenes } from "../merge/ffmpeg";
 import {
   generateVoiceover,
   generateBackgroundMusic,
 } from "../../audio/elevenlabs";
 import {
+  appendEngineEvent,
   startRun,
   startStep,
   finishStep,
+  finishSceneAttempt,
+  startSceneAttempt,
+  updateScenePrompts,
+  updateSceneStatus,
+  upsertScenes,
   withStep,
   completeRun,
   mergeRunSummary,
@@ -137,9 +146,70 @@ function mergeSceneInfoIntoSummary(
     if (v) {
       img.sceneVideoUrl = v.videoUrl;
       img.piapiTaskId = v.piapiTaskId;
+      img.attemptOrder = v.attemptOrder ?? null;
+      img.preparedSource = v.preparedSource ?? null;
+      img.evaluation = v.evaluation ?? null;
+      if (v.prompt) {
+        img.finalPrompt = v.prompt.prompt;
+        img.finalModelChoice = v.prompt.modelChoice;
+      }
     }
   }
   return Array.from(imageByUrl.values());
+}
+
+function buildSceneSummary(
+  scenes: Scene[],
+  prompts: ScenePrompt[],
+  videos: SceneVideo[],
+): Array<Record<string, unknown>> {
+  const promptBySceneId = new Map(prompts.map((p) => [p.sceneId, p]));
+  const videoBySceneId = new Map(videos.map((v) => [v.sceneId, v]));
+  return scenes.map((scene) => {
+    const prompt = promptBySceneId.get(scene.sceneId);
+    const video = videoBySceneId.get(scene.sceneId);
+    return {
+      sceneId: scene.sceneId,
+      order: scene.order,
+      slotId: scene.slotId,
+      sceneRole: scene.sceneRole,
+      imagePath: scene.imagePath,
+      imageRoomType: scene.imageRoomType,
+      durationSec: scene.durationSec,
+      motionIntent: scene.motionIntent,
+      overlayText: scene.overlayText,
+      transitionOut: scene.transitionOut,
+      transitionDurationSec: scene.transitionDurationSec,
+      prompt: prompt
+        ? {
+            prompt: prompt.prompt,
+            modelChoice: prompt.modelChoice,
+            modelReason: prompt.modelReason ?? null,
+            modelParams: prompt.modelParams ?? null,
+          }
+        : null,
+      output: video
+        ? {
+            videoUrl: video.videoUrl,
+            model: video.model,
+            piapiTaskId: video.piapiTaskId ?? null,
+            durationSec: video.durationSec ?? null,
+            generationMs: video.generationMs ?? null,
+            attemptOrder: video.attemptOrder ?? null,
+            preparedSource: video.preparedSource ?? null,
+            evaluation: video.evaluation ?? null,
+            prompt: video.prompt
+              ? {
+                  prompt: video.prompt.prompt,
+                  modelChoice: video.prompt.modelChoice,
+                  modelReason: video.prompt.modelReason ?? null,
+                  modelParams: video.prompt.modelParams ?? null,
+                }
+              : null,
+          }
+        : null,
+    };
+  });
 }
 
 export async function runEngineJob(
@@ -162,6 +232,8 @@ export async function runEngineJob(
 
   // --- Start run (optional tracking) ---
   let runId: string | undefined;
+  const sceneRecordIdBySceneId = new Map<string, string>();
+  const sceneAttemptIdByAttemptKey = new Map<string, string>();
   if (tracking) {
     try {
       runId = await startRun({
@@ -175,6 +247,18 @@ export async function runEngineJob(
           hasVoiceover: !!request.voiceoverText,
           hasMusic: !!request.musicPrompt,
           musicVolume: request.musicVolume,
+        },
+      });
+      await appendEngineEvent({
+        runId,
+        eventType: "run.started",
+        payload: {
+          imageCount: imagePaths.length,
+          templateName,
+          videoProvider:
+            request.videoProvider ??
+            (process.env.ENGINE_VIDEO_PROVIDER as string | undefined) ??
+            "piapi",
         },
       });
     } catch (err) {
@@ -235,16 +319,11 @@ export async function runEngineJob(
     return jobErr;
   }
 
-  if (dataset.usableCount < template.minUsableImages) {
-    const jobErr = makeError(
-      "planner",
-      "insufficient_images",
-      `usableCount=${dataset.usableCount} < minUsableImages=${template.minUsableImages}`,
-      { usableCount: dataset.usableCount, required: template.minUsableImages },
-    );
-    await failRun(jobErr);
-    return jobErr;
-  }
+  // Note: do NOT short-circuit on `usableCount < template.minUsableImages`.
+  // `planTimeline` degrades gracefully by auto-enabling image reuse on every
+  // slot when the count is below the nominal minimum, and only throws
+  // `InsufficientImages` when `usableCount === 0`. Short-circuiting here would
+  // bypass that recovery path and fail runs that the planner could have saved.
 
   let timeline: SceneTimeline;
   try {
@@ -284,6 +363,27 @@ export async function runEngineJob(
       return jobErr;
     }
     timeline = planResult.timeline;
+    if (runId) {
+      try {
+        const rows = await upsertScenes({ runId, scenes: timeline.scenes });
+        for (const row of rows) {
+          sceneRecordIdBySceneId.set(row.scene_id, row.id);
+        }
+        await appendEngineEvent({
+          runId,
+          eventType: "plan.completed",
+          payload: {
+            sceneCount: timeline.scenes.length,
+            warnings: timeline.warnings,
+            unfilledSlotIds: timeline.unfilledSlotIds,
+          },
+        });
+      } catch (err) {
+        log("run.sceneUpsertFailed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   } catch (err) {
     const jobErr = makeError(
       "planner",
@@ -326,6 +426,20 @@ export async function runEngineJob(
           },
         )
       : (await writeScenePrompts({ scenes: timeline.scenes, templateName })).prompts;
+    if (runId) {
+      await updateScenePrompts({ runId, prompts: scenePrompts }).catch((err) => {
+        log("run.scenePromptPersistFailed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+      await appendEngineEvent({
+        runId,
+        eventType: "scene_prompt.completed",
+        payload: {
+          sceneCount: scenePrompts.length,
+        },
+      });
+    }
   } catch (err) {
     const jobErr = makeError(
       "orchestrator",
@@ -338,6 +452,10 @@ export async function runEngineJob(
 
   // --- Step 4: Scene generate (parallel, one engine_step row per scene) ---
   const sceneStepIdBySceneId = new Map<string, string>();
+  const resolvedVideoProvider =
+    request.videoProvider ??
+    (process.env.ENGINE_VIDEO_PROVIDER as string | undefined) ??
+    "piapi";
   let sceneGen;
   try {
     sceneGen = await generateScenes({
@@ -346,30 +464,77 @@ export async function runEngineJob(
       aspectRatio: timeline.aspectRatio,
       videoProvider: request.videoProvider,
       imagesByPath: new Map(dataset.images.map((img) => [img.path, img])),
-      onSceneStart: async (scene, prompt) => {
+      preparedAssetPrefix: tracking?.userId ?? "engine",
+      onSceneStart: async (scene, context) => {
         if (!runId) return;
         try {
+          const attemptKey = `${scene.sceneId}:${context.attempt}`;
+          const sceneRecordId = sceneRecordIdBySceneId.get(scene.sceneId);
+          if (sceneRecordId) {
+            await updateSceneStatus({
+              runId,
+              sceneId: scene.sceneId,
+              status: "running",
+              output: {
+                preparedSource: context.preparedSource,
+                latestAttempt: context.attempt,
+              },
+            });
+            const attemptId = await startSceneAttempt({
+              runId,
+              sceneRecordId,
+              attemptOrder: context.attempt,
+              provider: resolvedVideoProvider,
+              modelChoice: context.prompt.modelChoice,
+              prompt: {
+                prompt: context.prompt.prompt,
+                modelChoice: context.prompt.modelChoice,
+                modelReason: context.prompt.modelReason ?? null,
+                modelParams: context.prompt.modelParams ?? null,
+                preparedSource: context.preparedSource,
+              },
+            });
+            sceneAttemptIdByAttemptKey.set(attemptKey, attemptId);
+            await appendEngineEvent({
+              runId,
+              sceneRecordId,
+              attemptId,
+              eventType: "scene.attempt.started",
+              payload: {
+                sceneId: scene.sceneId,
+                sceneOrder: scene.order,
+                attempt: context.attempt,
+                provider: resolvedVideoProvider,
+                modelChoice: context.prompt.modelChoice,
+                preparedSource: context.preparedSource,
+              },
+            });
+          }
           const stepId = await startStep({
             runId,
-            stepOrder: 100 + scene.order, // reserve 100+ for per-scene steps
+            stepOrder: 100 + scene.order * 10 + context.attempt,
             stepType: "scene_generate",
             input: {
               sceneId: scene.sceneId,
               sceneOrder: scene.order,
+              attempt: context.attempt,
               sceneRole: scene.sceneRole,
               imagePath: scene.imagePath,
-              prompt: prompt.prompt,
-              modelChoice: prompt.modelChoice,
+              preparedSource: context.preparedSource,
+              prompt: context.prompt.prompt,
+              modelChoice: context.prompt.modelChoice,
               durationSec: scene.durationSec,
             },
           });
-          sceneStepIdBySceneId.set(scene.sceneId, stepId);
+          sceneStepIdBySceneId.set(attemptKey, stepId);
         } catch {
           /* logged in tracking helper */
         }
       },
-      onSceneTaskId: async (scene, piapiTaskId) => {
-        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+      onSceneTaskId: async (scene, piapiTaskId, context) => {
+        const attemptKey = `${scene.sceneId}:${context.attempt}`;
+        const stepId = sceneStepIdBySceneId.get(attemptKey);
+        const attemptId = sceneAttemptIdByAttemptKey.get(attemptKey);
         if (!stepId) return;
         try {
           await finishStep({
@@ -377,34 +542,180 @@ export async function runEngineJob(
             status: "running",
             externalIds: { piapiTaskId },
           });
+          if (attemptId) {
+            await finishSceneAttempt({
+              attemptId,
+              status: "running",
+              externalIds: { piapiTaskId },
+            });
+          }
+          const sceneRecordId = sceneRecordIdBySceneId.get(scene.sceneId);
+          if (sceneRecordId) {
+            await appendEngineEvent({
+              runId: runId!,
+              sceneRecordId,
+              attemptId: attemptId ?? null,
+              eventType: "scene.taskId.received",
+              payload: {
+                sceneId: scene.sceneId,
+                attempt: context.attempt,
+                piapiTaskId,
+              },
+            });
+          }
         } catch {
           /* already logged */
         }
       },
-      onSceneDone: async (scene, video) => {
-        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+      onSceneDone: async (scene, video, context) => {
+        const attemptKey = `${scene.sceneId}:${context.attempt}`;
+        const stepId = sceneStepIdBySceneId.get(attemptKey);
+        const attemptId = sceneAttemptIdByAttemptKey.get(attemptKey);
         if (!stepId) return;
         try {
           await finishStep({
             stepId,
             status: "done",
-            output: { videoUrl: video.videoUrl, durationSec: video.durationSec, model: video.model },
+            output: {
+              videoUrl: video.videoUrl,
+              durationSec: video.durationSec,
+              model: video.model,
+              preparedSource: video.preparedSource ?? null,
+              evaluation: video.evaluation ?? null,
+            },
             externalIds: video.piapiTaskId ? { piapiTaskId: video.piapiTaskId } : undefined,
-            metrics: { generationMs: video.generationMs },
+            metrics: {
+              generationMs: video.generationMs,
+              evaluationScore: video.evaluation?.score ?? null,
+            },
           });
+          if (attemptId) {
+            await finishSceneAttempt({
+              attemptId,
+              status: "done",
+              externalIds: video.piapiTaskId ? { piapiTaskId: video.piapiTaskId } : undefined,
+              metrics: {
+                generationMs: video.generationMs,
+                evaluationScore: video.evaluation?.score ?? null,
+                evaluationPassed: video.evaluation?.passed ?? null,
+              },
+              output: {
+                videoUrl: video.videoUrl,
+                durationSec: video.durationSec,
+                model: video.model,
+                prompt: video.prompt ?? null,
+                preparedSource: video.preparedSource ?? null,
+                evaluation: video.evaluation ?? null,
+              },
+            });
+          }
+          await updateSceneStatus({
+            runId: runId!,
+            sceneId: scene.sceneId,
+            status: "done",
+            output: {
+              videoUrl: video.videoUrl,
+              durationSec: video.durationSec,
+              model: video.model,
+              piapiTaskId: video.piapiTaskId ?? null,
+              generationMs: video.generationMs ?? null,
+              attemptOrder: video.attemptOrder ?? null,
+              prompt: video.prompt ?? null,
+              preparedSource: video.preparedSource ?? null,
+              evaluation: video.evaluation ?? null,
+            },
+          });
+          const sceneRecordId = sceneRecordIdBySceneId.get(scene.sceneId);
+          if (sceneRecordId) {
+            await appendEngineEvent({
+              runId: runId!,
+              sceneRecordId,
+              attemptId: attemptId ?? null,
+              eventType: "scene.completed",
+              payload: {
+                sceneId: scene.sceneId,
+                attempt: context.attempt,
+                videoUrl: video.videoUrl,
+                model: video.model,
+                evaluation: video.evaluation ?? null,
+              },
+            });
+          }
         } catch {
           /* already logged */
         }
       },
-      onSceneFailed: async (scene, error) => {
-        const stepId = sceneStepIdBySceneId.get(scene.sceneId);
+      onSceneFailed: async (scene, error, context) => {
+        const attemptKey = `${scene.sceneId}:${context.attempt}`;
+        const stepId = sceneStepIdBySceneId.get(attemptKey);
+        const attemptId = sceneAttemptIdByAttemptKey.get(attemptKey);
         if (!stepId) return;
         try {
           await finishStep({
             stepId,
             status: "failed",
-            error: { message: error.message },
+            output: {
+              preparedSource: context.preparedSource,
+              evaluation: context.evaluation ?? null,
+            },
+            error: {
+              message: error.message,
+              retryReason: context.retryReason ?? null,
+              willRetry: context.willRetry ?? false,
+            },
           });
+          if (attemptId) {
+            await finishSceneAttempt({
+              attemptId,
+              status: "failed",
+              metrics: {
+                evaluationScore: context.evaluation?.score ?? null,
+                evaluationPassed: context.evaluation?.passed ?? null,
+              },
+              output: {
+                prompt: context.prompt,
+                preparedSource: context.preparedSource,
+                evaluation: context.evaluation ?? null,
+              },
+              error: {
+                message: error.message,
+                retryReason: context.retryReason ?? null,
+                willRetry: context.willRetry ?? false,
+              },
+            });
+          }
+          await updateSceneStatus({
+            runId: runId!,
+            sceneId: scene.sceneId,
+            status: context.willRetry ? "running" : "failed",
+            output: {
+              preparedSource: context.preparedSource,
+              latestAttempt: context.attempt,
+              latestEvaluation: context.evaluation ?? null,
+              retryReason: context.retryReason ?? null,
+              nextPrompt: context.willRetry ? context.prompt.prompt : null,
+            },
+            error: context.willRetry
+              ? null
+              : { message: error.message, retryReason: context.retryReason ?? null },
+          });
+          const sceneRecordId = sceneRecordIdBySceneId.get(scene.sceneId);
+          if (sceneRecordId) {
+            await appendEngineEvent({
+              runId: runId!,
+              sceneRecordId,
+              attemptId: attemptId ?? null,
+              eventType: context.willRetry ? "scene.retry.scheduled" : "scene.failed",
+              level: context.willRetry ? "warn" : "error",
+              payload: {
+                sceneId: scene.sceneId,
+                attempt: context.attempt,
+                message: error.message,
+                evaluation: context.evaluation ?? null,
+                retryReason: context.retryReason ?? null,
+              },
+            });
+          }
         } catch {
           /* already logged */
         }
@@ -562,6 +873,7 @@ export async function runEngineJob(
     try {
       await mergeRunSummary(runId, {
         images,
+        scenes: buildSceneSummary(timeline.scenes, scenePrompts, sceneGen.videos),
         timeline: {
           templateName: timeline.templateName,
           totalDurationSec: timeline.totalDurationSec,
@@ -581,7 +893,6 @@ export async function runEngineJob(
         },
         scenesFailed: sceneGen.failed,
       });
-      await completeRun({ runId, status: "done" });
     } catch (err) {
       log("run.summaryFailed", {
         error: err instanceof Error ? err.message : String(err),

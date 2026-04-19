@@ -86,10 +86,28 @@ export async function runFfmpeg(
       }
 
       if (code !== 0) {
-        log("run.failed", { ms, code, signal });
+        // Surface the stderr tail both in the structured log AND in the
+        // thrown Error message. Previously only `code` reached callers
+        // (via err.message), which meant engine_steps.error had no diagnostic
+        // — you'd see "ffmpeg exited with code 234" with no hint WHY. The
+        // tail is truncated to 4 KB so it stays readable in logs/DB.
+        const stderrOneLine = stderr
+          .split("\n")
+          .filter((l) => l.trim().length > 0)
+          .slice(-6)
+          .join(" | ")
+          .slice(0, 800);
+        log("run.failed", {
+          ms,
+          code,
+          signal,
+          argsPreview: argsPreview(args),
+          stderrTail: stderr,
+        });
         reject(
           new FfmpegError(
-            `ffmpeg exited with code ${code}${signal ? ` (signal ${signal})` : ""}`,
+            `ffmpeg exited with code ${code}${signal ? ` (signal ${signal})` : ""}` +
+              (stderrOneLine ? ` — ${stderrOneLine}` : ""),
             stderr,
           ),
         );

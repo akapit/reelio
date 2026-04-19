@@ -10,7 +10,8 @@ import {
 } from "../models";
 import { googleVision, type VisionProvider, type VisionRaw } from "./googleVision";
 import { classifyRoom } from "./roomClassifier";
-import { computeEligibility, computeScores } from "./scoring";
+import { checkImageQuality } from "./qualityCheck";
+import { gcvCost } from "../cost/pricing";
 
 export class VisionApiError extends Error {
   public readonly cause?: unknown;
@@ -21,9 +22,27 @@ export class VisionApiError extends Error {
   }
 }
 
+export interface AnalyzeCostSummary {
+  /** GCV cost for all images successfully annotated. */
+  gcvUsd: number;
+  /** Claude VLM quality-check cost for this run (0 if no QC fired). */
+  qualityCheckUsd: number;
+  totalUsd: number;
+  /** Raw token metadata for the QC call, for inspector drill-down. */
+  qcTokens?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
+}
+
 export interface AnalyzeDeps {
   provider?: VisionProvider;
   loadBytes?: (path: string) => Promise<Buffer>;
+  /** Optional sink for cost telemetry — callers that record to engine_steps
+   *  metrics pass a closure; test callers / the legacy pipeline ignore it. */
+  onCost?: (cost: AnalyzeCostSummary) => void;
 }
 
 async function defaultLoadBytes(path: string): Promise<Buffer> {
@@ -59,19 +78,14 @@ function topLabels(raw: VisionRaw): VisionLabel[] {
     .map((l) => ({ name: l.description, confidence: l.score }));
 }
 
-function failedImage(path: string): ImageMetadata {
+/** Metadata for an image that failed GCV entirely. We still include it in the
+ *  dataset as unusable so the UI can surface the error. */
+function failedImage(path: string, reason: string): ImageMetadata {
   return {
     path,
     roomType: "other",
-    scores: {
-      quality: 0,
-      lighting: 0.5,
-      composition: 0,
-      wow: 0,
-      detail: 0,
-      hero: 0,
-    },
-    eligibility: { asHero: false, asWow: false, asClosing: false },
+    usable: false,
+    reason,
     dims: { width: 1, height: 1, aspectRatio: 1 },
     visionLabels: [],
     visionObjects: [],
@@ -80,9 +94,6 @@ function failedImage(path: string): ImageMetadata {
 }
 
 function toMetadata(path: string, raw: VisionRaw): ImageMetadata {
-  const scores = computeScores(raw);
-  const eligibility = computeEligibility(scores);
-
   const labels: VisionLabel[] = raw.labelAnnotations.map((l) => ({
     name: l.description.toLowerCase(),
     confidence: l.score,
@@ -109,11 +120,13 @@ function toMetadata(path: string, raw: VisionRaw): ImageMetadata {
   const width = raw.width > 0 ? raw.width : 1;
   const height = raw.height > 0 ? raw.height : 1;
 
+  // Default to usable; the Claude VLM pass overrides this per image in
+  // `analyzeImages`. If the QC call fails we leave `usable=true` so infra
+  // blips don't block generation.
   return {
     path,
     roomType,
-    scores,
-    eligibility,
+    usable: true,
     dims: {
       width,
       height,
@@ -169,13 +182,21 @@ export async function analyzeImages(
   const loadBytes = deps.loadBytes ?? defaultLoadBytes;
   const limit = pLimit(5);
 
+  // Step 1: GCV per image in parallel (produces roomType + bboxes + dims).
+  //         Keep the raw bytes around so we can hand them to Claude for QC
+  //         without loading the image twice.
   const results = await Promise.all(
     paths.map((path) =>
-      limit(async (): Promise<{ path: string; meta: ImageMetadata; ok: boolean }> => {
+      limit(async (): Promise<{
+        path: string;
+        meta: ImageMetadata;
+        bytes: Buffer | null;
+        ok: boolean;
+      }> => {
         try {
           const bytes = await loadBytes(path);
           const raw = await provider.annotate(bytes);
-          return { path, meta: toMetadata(path, raw), ok: true };
+          return { path, meta: toMetadata(path, raw), bytes, ok: true };
         } catch (err) {
           console.log(
             JSON.stringify({
@@ -185,7 +206,15 @@ export async function analyzeImages(
               message: err instanceof Error ? err.message : String(err),
             }),
           );
-          return { path, meta: failedImage(path), ok: false };
+          return {
+            path,
+            meta: failedImage(
+              path,
+              err instanceof Error ? err.message : "vision failed",
+            ),
+            bytes: null,
+            ok: false,
+          };
         }
       }),
     ),
@@ -198,10 +227,79 @@ export async function analyzeImages(
     );
   }
 
+  // Step 2: Batched Claude VLM quality pass on the images that survived GCV.
+  //         Overlay `usable`/`reason` onto each image's metadata.
+  const qcInput = results
+    .filter((r): r is typeof r & { bytes: Buffer } => r.ok && r.bytes !== null)
+    .map((r) => ({ path: r.path, bytes: r.bytes }));
+
+  let qcFallback = false;
+  let qualityCheckUsd = 0;
+  let qcTokens: AnalyzeCostSummary["qcTokens"];
+  if (qcInput.length > 0) {
+    try {
+      const qc = await checkImageQuality({ images: qcInput });
+      qcFallback = qc.fallbackUsed;
+      qualityCheckUsd = qc.costUsd;
+      qcTokens = {
+        inputTokens: qc.tokensIn,
+        outputTokens: qc.tokensOut,
+        cacheReadTokens: qc.cacheReadTokens,
+        cacheWriteTokens: qc.cacheWriteTokens,
+      };
+      for (const r of results) {
+        const v = qc.verdicts.get(r.path);
+        if (v && r.ok) {
+          r.meta = { ...r.meta, usable: v.usable, reason: v.reason };
+        }
+      }
+      console.log(
+        JSON.stringify({
+          source: "vision",
+          event: "qualityCheck.ok",
+          inputCount: qcInput.length,
+          unusableCount: Array.from(qc.verdicts.values()).filter(
+            (v) => !v.usable,
+          ).length,
+          fallbackUsed: qc.fallbackUsed,
+          tokensIn: qc.tokensIn,
+          tokensOut: qc.tokensOut,
+          cacheReadTokens: qc.cacheReadTokens,
+          costUsd: qc.costUsd,
+        }),
+      );
+    } catch (err) {
+      // Fallback: treat everything as usable. Never block a run on a QC infra
+      // blip — an unusable photo in a video is recoverable, but a dead run is
+      // not.
+      qcFallback = true;
+      console.log(
+        JSON.stringify({
+          source: "vision",
+          event: "qualityCheck.failed",
+          level: "warn",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  // Emit cost telemetry to the caller. GCV is priced per successful GCV
+  // annotation; failed ones aren't billed.
+  if (deps.onCost) {
+    const gcvUsd = gcvCost(results.filter((r) => r.ok).length);
+    deps.onCost({
+      gcvUsd,
+      qualityCheckUsd,
+      totalUsd: gcvUsd + qualityCheckUsd,
+      qcTokens,
+    });
+  }
+
   const images = results.map((r) => r.meta);
-  const usableCount = images.filter((m) => m.scores.quality >= 0.4).length;
+  const usableCount = images.filter((m) => m.usable).length;
   const availableRoomTypes = Array.from(
-    new Set(images.map((m) => m.roomType)),
+    new Set(images.filter((m) => m.usable).map((m) => m.roomType)),
   ) as RoomType[];
 
   const dataset = ImageDataset.parse({
@@ -210,6 +308,9 @@ export async function analyzeImages(
     usableCount,
     analyzedAt: new Date().toISOString(),
   });
+  // Quality-check-fallback state is a transient warning; we don't surface it
+  // through the schema today. Logged above, visible in Trigger.dev output.
+  void qcFallback;
   await saveCachedDataset(dataset);
   return dataset;
 }

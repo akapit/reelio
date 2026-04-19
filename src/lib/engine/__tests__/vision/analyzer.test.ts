@@ -90,7 +90,7 @@ describe("analyzeImages — resilience", () => {
     expect(ds.images).toHaveLength(3);
     const failed = ds.images.find((m) => m.path === "/boom.jpg");
     expect(failed).toBeDefined();
-    expect(failed?.scores.quality).toBe(0);
+    expect(failed?.usable).toBe(false);
     expect(failed?.roomType).toBe("other");
   });
 
@@ -107,7 +107,7 @@ describe("analyzeImages — resilience", () => {
       loadBytes,
     });
     expect(ds.images).toHaveLength(2);
-    expect(ds.images[1].scores.quality).toBe(0);
+    expect(ds.images[1].usable).toBe(false);
   });
 
   it("throws VisionApiError when every image fails", async () => {

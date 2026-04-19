@@ -8,20 +8,19 @@ import type {
 type MakeImageInput = {
   path: string;
   roomType: RoomType;
+  /** @deprecated ignored — scores are no longer consumed. Retained so the
+   *  existing fixture literals keep compiling without a large rewrite. */
   scores?: Partial<ImageScores>;
   aspectRatio?: number;
+  /** @deprecated no longer used; retained to avoid rewriting callers. */
   asHero?: boolean;
+  /** @deprecated */
   asWow?: boolean;
+  /** @deprecated */
   asClosing?: boolean;
-};
-
-const DEFAULT_SCORES: ImageScores = {
-  quality: 0.6,
-  lighting: 0.6,
-  composition: 0.6,
-  wow: 0.6,
-  detail: 0.6,
-  hero: 0.6,
+  /** Defaults to true. Flip to false to simulate an unusable photo. */
+  usable?: boolean;
+  reason?: string;
 };
 
 export function makeImage(input: MakeImageInput): ImageMetadata {
@@ -31,12 +30,8 @@ export function makeImage(input: MakeImageInput): ImageMetadata {
   return {
     path: input.path,
     roomType: input.roomType,
-    scores: { ...DEFAULT_SCORES, ...(input.scores ?? {}) },
-    eligibility: {
-      asHero: input.asHero ?? false,
-      asWow: input.asWow ?? false,
-      asClosing: input.asClosing ?? false,
-    },
+    usable: input.usable ?? true,
+    ...(input.reason ? { reason: input.reason } : {}),
     dims: {
       width,
       height,
@@ -52,7 +47,7 @@ export function makeDataset(images: ImageMetadata[]): ImageDataset {
   return {
     images,
     availableRoomTypes: Array.from(new Set(images.map((i) => i.roomType))),
-    usableCount: images.filter((i) => i.scores.quality >= 0.4).length,
+    usableCount: images.filter((i) => i.usable).length,
     analyzedAt: "2026-01-01T00:00:00.000Z",
   };
 }

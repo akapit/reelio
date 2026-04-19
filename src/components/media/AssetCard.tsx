@@ -108,22 +108,32 @@ export function AssetCard({
           <>
             {/* Shimmer processing state */}
             <div
+              onClick={() => onPreview?.()}
               className="w-full h-full flex flex-col items-center justify-center gap-3"
               style={{
                 background:
                   "linear-gradient(110deg, var(--color-surface) 30%, rgba(201,168,76,0.08) 50%, var(--color-surface) 70%)",
                 backgroundSize: "200% 100%",
                 animation: "shimmer 2s ease-in-out infinite",
+                cursor: onPreview ? "pointer" : "default",
               }}
             >
               <Loader2 size={24} className="animate-spin text-[var(--color-muted)]" />
               <span className="text-xs text-[var(--color-muted)]">
                 {toolUsed ? processingLabels[toolUsed] : "Processing..."}
               </span>
+              {onPreview && (
+                <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-muted)]/80">
+                  Inspect run
+                </span>
+              )}
             </div>
 
-            {/* Cancel button on hover */}
-            <div className="absolute inset-0 flex items-center justify-center">
+            {/* Cancel button on hover.
+                The wrapper is pointer-events-none so the shimmer div behind it
+                still receives the click that opens the inspector. Only the
+                button itself re-enables pointer events. */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <button
                 type="button"
                 title="Cancel processing"
@@ -137,7 +147,8 @@ export function AssetCard({
                   "border border-[var(--color-border)]",
                   "hover:border-red-500/50 transition-colors duration-150",
                   "text-[var(--color-muted)] hover:text-red-400",
-                  "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                  "opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+                  "pointer-events-auto"
                 )}
               >
                 <Square size={10} className="fill-current" />

@@ -47,7 +47,7 @@ There are two fire-and-forget pipelines, both split between a Next.js API route 
 
 CLI harness for the engine: `scripts/test-engine.ts` (see `npx tsx scripts/test-engine.ts --help`). Flags: `--template <name>`, `--provider piapi|kieai`, `--resume`, `-v`.
 
-**Provider toggle**: `ENGINE_VIDEO_PROVIDER=piapi|kieai` env or `videoProvider` field in the API body. Default `piapi`. Both satisfy the same `IMediaProvider.generateVideo` interface.
+**Provider toggle**: `ENGINE_VIDEO_PROVIDER=kieai|piapi` env or `videoProvider` field in the API body. Default `kieai` — its plan allows ~100 concurrent tasks (20 req/10s) vs piapi's 2-task cap. Both satisfy the same `IMediaProvider.generateVideo` interface.
 
 If you add a new image tool, extend Path A. New video templates go in `src/lib/engine/templates/*.json` + `TEMPLATE_NAMES` in `models.ts`. New video models plug in via the planner's `VideoModelChoice` enum and the provider's model-slug map.
 

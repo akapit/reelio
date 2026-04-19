@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { buildAnthropicImageContent } from "@/lib/engine/llm/anthropicImage";
 import type { Scene, ScenePrompt as ScenePromptType } from "../models";
 import { ScenePrompt, VideoModelChoice } from "../models";
+import { anthropicCost } from "../cost/pricing";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -10,6 +12,13 @@ import { ScenePrompt, VideoModelChoice } from "../models";
 export interface WriteScenePromptsInput {
   scenes: Scene[];
   templateName: string;
+  /**
+   * The video model every scene will run on (the orchestrator hard-overrides
+   * to a single model per run). Drives the system prompt — Kling wants a
+   * terse motion-only sentence; Seedance handles richer, slightly longer
+   * prompts with atmospheric hints. Default: "kling".
+   */
+  targetModel?: "kling" | "seedance" | "seedance-fast";
   /** Optional dep injection for tests */
   client?: Anthropic | { messages: Anthropic["messages"] };
   /** Default: "claude-sonnet-4-6" */
@@ -24,6 +33,8 @@ export interface WriteScenePromptsResult {
   tokensOut?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Estimated USD cost of the Anthropic call(s), 0 if no tokens were spent. */
+  costUsd: number;
   /** true if the LLM failed and we used deterministic fallback */
   fallbackUsed: boolean;
 }
@@ -37,69 +48,179 @@ export { fallbackPromptFor };
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 // ---------------------------------------------------------------------------
-// System prompt (static — eligible for prompt caching)
+// System prompts — one per target video model.
+//
+// The orchestrator hard-overrides every scene to ONE model per run (env:
+// ENGINE_DEFAULT_MODEL, default "kling"). We pick the system prompt that
+// matches that model's prompt-style sensibilities:
+//
+//   • Kling 2.5 — rewards terse, motion-only sentences. Long atmospheric
+//     prose produces flatter / more jittery output. Best practices docs
+//     emphasize "camera verb + subject, minimal adjectives".
+//
+//   • Seedance 2 — the model actually prefers richer prompts. The kie.ai
+//     seedance adapter already has a tier-2 LLM translator that enriches
+//     terse prompts, so writing short prompts here means the translator
+//     will fire more often and add its own description — effectively
+//     undoing the "short prompt" goal. Instead, give Seedance 1-2 sentences
+//     with atmosphere, subject hint, and speed.
+//
+// Both system prompts share the same JSON output contract so the downstream
+// parser needs no change.
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `You are a real-estate cinematography prompt writer for Kling 2.5 image-to-video (i2v). Your sole job is to produce short, concrete motion prompts that, when fed to the Kling i2v model, produce smooth and visually compelling clips from still real-estate photos.
+const SYSTEM_PROMPT_KLING = `You write motion prompts for Kling 2.5 image-to-video.
 
-## Template moods
-Match the energy of the template when choosing motion speed, language, and camera behaviour:
-- luxury_30s    — Elegant, slow, premium feel. Unhurried dolly moves, warm tones, refined descriptors.
-- family_30s    — Warm, inviting. Gentle pans, natural light, approachable energy.
-- fast_15s      — Energetic, punchy. Brisk camera moves, dynamic cuts, bold language.
-- investor_20s  — Clean, data-forward. Steady push-ins, minimal visual noise, clear framing.
-- premium_45s   — Cinematic, unhurried. Wide reveals, long glides, rich atmosphere.
+## Storyboard mindset — READ FIRST
+You are writing ALL the scenes for ONE short real-estate tour video in a single
+pass. Before writing any prompt, read the "Storyboard" block in the user
+message: it lists every scene in order with role + room type. Then write the
+prompts as a COHERENT SEQUENCE, not as isolated sentences.
 
-## How Kling i2v works — write for motion, not description
-Kling animates a still image. The prompt tells the model what MOTION to create, not what the image looks like. Do NOT describe the room contents — Kling can already see them. Instead describe:
-- The camera move (dolly-in, pan left, crane up, orbit, handheld drift, etc.)
-- Subject motion you want to emerge (curtains swaying, steam rising, leaves rustling)
-- Atmospheric quality (soft warm light, afternoon haze, morning mist)
-- Speed and weight (slow and weighted, brisk and light)
+Continuity rules:
+1. VARY camera movements across the sequence. Repeating the same verb in
+   consecutive scenes is a failure mode. Rotate through the verb list below.
+2. Opening and closing are EVENTS — not just "slow and steady". The viewer
+   should feel the video start and end with intent. Give them bolder,
+   more cinematic motion than the filler scenes.
+3. If two adjacent scenes share a room type, differentiate the motion so
+   they don't feel like one continuous shot. Prefer a perpendicular move
+   (e.g. scene 1 pushes in, scene 2 pans across).
+4. Honour each scene's planner motionIntent as a hint, not a directive. If
+   the planner hinted the same motion for every scene, DEFY the hint to
+   preserve variety — your job is the final edit.
 
-## Example prompts
-- "Slow dolly-in toward the marble kitchen island, soft warm light, subtle steam rising off the espresso cup, cinematic depth of field."
-- "Gentle pan right across the living room, afternoon sun casting long shadows, floating dust motes in the beam, steady and unhurried."
-- "Smooth crane reveal from below the roofline, exposing the facade and landscaping, golden-hour glow, premium feel."
+## Kling best practices
+- ONE sentence, <= 20 words.
+- Camera VERB + short qualifier. Nothing else.
+- NO room description. NO adjective stacking. NO atmospheric prose.
+- Kling animates what it sees. Longer prompts dilute the motion signal.
 
-## Scene roles
-Respect each scene's sceneRole:
-- opening  — Establish the property. Wide, inviting reveal move.
-- hero     — The money shot. Most compelling room; premium, slow, immersive motion.
-- wow      — Surprise the viewer. Slightly more dynamic, unexpected camera path.
-- filler   — Pace-setter between highlights. Keep it simple and brief.
-- closing  — Send-off. Pull back or settle; create a lasting impression.
+## Allowed camera verbs
+dolly-in, push-in, pan-right, pan-left, tilt-up, tilt-down, pull-back,
+orbit, tracking-right, tracking-left, rise, descend, static-drift.
 
-## motionIntent
-Each scene includes a motionIntent string (hint from the planner). Use it as a starting point — you may refine the phrasing to make it more evocative, but honour the intent.
+DO NOT USE "crane-reveal" — it produces unpredictable output on this model.
 
-## Model selection
-Choose the generation model per scene:
-- kling        — Default for most scenes. Excellent smooth motion from stills.
-- seedance     — Use when the scene strongly benefits from rich atmospheric motion (drone shot through window, dramatic exterior reveal, hero scene with complex depth).
-- seedance-fast — Use ONLY for short filler scenes where quality matters less than throughput.
+## Pace — default MEDIUM, not slow
+Real-estate viewers scroll away from lethargic clips. Keep the camera
+moving with intent. Use modifiers like "smooth", "confident", "flowing",
+"purposeful", "decisive" — NOT "slow", "gentle", "unhurried", "calm",
+"measured". Reserve "slow" for genuine deceleration beats; never lead with it.
 
-Provide a brief modelReason (one line) explaining the choice.
+## Scene roles (motion character, not just pace)
+- opening  — ATTENTION-GRABBING. A decisive push-in, a confident rise,
+             or a bold tracking move. The first second has to hook. "Pro" mode.
+- hero     — smooth and cinematic, a move that shows off the shot.
+- wow      — dynamic and unexpected. An orbit, a tracking arc, a fast
+             push-through. "Pro" mode.
+- filler   — crisp single move, brisk but not rushed.
+- closing  — CONCLUSIVE. A confident pull-back that widens out, or a
+             decisive tilt/pan that settles the image. Never static. "Pro" mode.
 
-## modelParams
-Always include:
-- mode: "pro" for hero/wow/opening scenes, "std" for filler/closing.
-- cameraMovement: a short slug describing the move (e.g. "dolly-in", "pan-right", "crane-reveal", "static-drift").
+## Good examples (target length, medium pace)
+- "Smooth push-in, confident and flowing."
+- "Crisp pan-right across the counter."
+- "Purposeful tilt-up to the ceiling line."
+- "Decisive pull-back widening the frame."
+- "Flowing orbit around the island, cinematic."
+- "Confident rise over the bedroom, smooth arc."
 
-## Output format — CRITICAL
-Return ONLY a JSON object. No prose, no markdown, no code fences. Exactly this shape:
+## modelParams (required)
+- mode: "pro" for opening, hero, wow, closing. "std" for filler only.
+- cameraMovement: short slug from the allowed list above ("push-in",
+  "pan-right", "pull-back", "orbit", "tilt-up", "tracking-right", etc.).
+
+## Output — CRITICAL
+Return ONLY a JSON object, no prose or code fences:
 {
   "prompts": [
     {
       "sceneId": "...",
       "prompt": "...",
-      "modelChoice": "kling" | "seedance" | "seedance-fast",
+      "modelChoice": "kling",
       "modelReason": "...",
       "modelParams": { "mode": "std" | "pro", "cameraMovement": "..." }
     }
   ]
 }
-The prompts array MUST contain one entry per scene in the request, preserving sceneId exactly.`;
+One entry per scene, preserving sceneId. Every \`modelChoice\` is "kling". Every \`prompt\` is a single sentence of <= 20 words.`;
+
+const SYSTEM_PROMPT_SEEDANCE = `You write motion prompts for ByteDance Seedance 2 image-to-video.
+
+## Storyboard mindset — READ FIRST
+You are writing ALL the scenes for ONE short real-estate tour video in a single
+pass. Read the "Storyboard" block in the user message first: it lists every
+scene in order with role + room type. Write the prompts as a COHERENT
+SEQUENCE that guides the viewer through the property.
+
+Continuity rules:
+1. VARY camera movements. Consecutive scenes should not use the same verb.
+   Rotate through dolly-in, pan-left/right, crane-reveal, push-through,
+   orbit, pull-back, tilt-up/down.
+2. Opening sets tone (slow, atmospheric). Middle develops. Closing settles
+   or pulls back.
+3. Adjacent same-room scenes need perpendicular motion so they don't blur
+   together.
+4. The planner's motionIntent is a hint, not a directive. If it would
+   make every scene identical, defy it for variety.
+
+## Seedance best practices
+- 1-2 sentences, up to ~45 words.
+- Seedance rewards richer context: a camera verb + subject hint + atmosphere.
+- You MAY reference light, mood, and a subtle secondary motion (leaves, curtains, reflections).
+- Do NOT exhaustively describe the room — the model sees the image. Give it direction, not inventory.
+- Avoid vague verbs like "show" or "display".
+
+## Allowed camera verbs
+dolly-in, push-in, pan-right, pan-left, tilt-up, tilt-down, pull-back,
+orbit, tracking-right, tracking-left, rise, descend, push-through.
+
+DO NOT USE "crane-reveal" — it produces unpredictable output on this model.
+
+## Pace — default MEDIUM, not slow
+Real-estate viewers scroll fast. Keep the camera moving with intent. Prefer
+modifiers like "smooth", "confident", "flowing", "decisive" over "slow",
+"gentle", "unhurried". Use "slow" only for intentional deceleration beats.
+
+## Scene roles (motion character, not just pace)
+- opening  — ATTENTION-GRABBING. A decisive push-in or confident rise,
+             paired with atmospheric light. The first second has to hook.
+- hero     — smooth, immersive, a cinematic move that highlights the subject.
+- wow      — dynamic and unexpected. An orbit, a tracking arc, a confident
+             push-through with atmospheric detail.
+- filler   — crisp single move, brisker than slow.
+- closing  — CONCLUSIVE. A confident pull-back widening out, or a decisive
+             settle. Never static.
+
+## Good examples (typical length)
+- "Slow dolly-in toward the living-room window, warm afternoon light drifting across the frame, steady and cinematic."
+- "Crane reveal over the terrace, late-afternoon glow, a subtle breeze moving the curtains."
+- "Smooth push-through toward the kitchen island, golden reflections on the stone, unhurried."
+
+## modelParams (required)
+- mode: "pro" for hero/wow/opening, "std" otherwise.
+- cameraMovement: short slug ("dolly-in", "pan-right", "crane-reveal", "push-through").
+
+## Output — CRITICAL
+Return ONLY a JSON object, no prose or code fences:
+{
+  "prompts": [
+    {
+      "sceneId": "...",
+      "prompt": "...",
+      "modelChoice": "seedance" | "seedance-fast",
+      "modelReason": "...",
+      "modelParams": { "mode": "std" | "pro", "cameraMovement": "..." }
+    }
+  ]
+}
+One entry per scene, preserving sceneId.`;
+
+function systemPromptFor(target: "kling" | "seedance" | "seedance-fast"): string {
+  return target === "kling" ? SYSTEM_PROMPT_KLING : SYSTEM_PROMPT_SEEDANCE;
+}
+
 
 // ---------------------------------------------------------------------------
 // Validation schema for the LLM response
@@ -144,26 +265,41 @@ function fallbackPromptFor(scene: Scene): ScenePromptType {
   const mode: "pro" | "std" =
     sceneRole === "hero" || sceneRole === "wow" || sceneRole === "opening" ? "pro" : "std";
 
-  // Derive a sensible camera movement slug from motionIntent
+  // Derive a sensible camera movement slug from motionIntent. Note:
+  // "crane-reveal" is deliberately NOT in this map — it's banned globally
+  // because Kling/Seedance produce unpredictable motion for it. Any intent
+  // that mentions crane/aerial gets rewritten to "rise" (vertical ascent),
+  // which produces similar-looking output far more reliably.
   const intentLower = motionIntent.toLowerCase();
-  let cameraMovement = "dolly-in";
+  let cameraMovement = "push-in";
   if (intentLower.includes("pan left")) cameraMovement = "pan-left";
   else if (intentLower.includes("pan right")) cameraMovement = "pan-right";
   else if (intentLower.includes("zoom out") || intentLower.includes("pull")) cameraMovement = "pull-back";
-  else if (intentLower.includes("zoom in") || intentLower.includes("push")) cameraMovement = "dolly-in";
+  else if (intentLower.includes("zoom in") || intentLower.includes("push")) cameraMovement = "push-in";
   else if (intentLower.includes("static")) cameraMovement = "static-drift";
-  else if (intentLower.includes("crane") || intentLower.includes("aerial")) cameraMovement = "crane-reveal";
+  else if (intentLower.includes("tilt")) cameraMovement = "tilt-up";
+  else if (intentLower.includes("orbit")) cameraMovement = "orbit";
+  else if (intentLower.includes("crane") || intentLower.includes("aerial")) cameraMovement = "rise";
 
-  // Build a mood-aware prefix
-  let moodPrefix = "Slow cinematic";
-  if (templateMood === "fast_15s") moodPrefix = "Brisk dynamic";
-  else if (templateMood === "investor_20s") moodPrefix = "Clean steady";
-  else if (templateMood === "luxury_30s" || templateMood === "premium_45s") moodPrefix = "Elegant slow";
-  else if (templateMood === "family_30s") moodPrefix = "Warm gentle";
+  // Pace modifier — biased toward MEDIUM/confident rather than slow. The
+  // opening/closing get a stronger verb; fillers stay crisp but not rushed.
+  const isBookend =
+    sceneRole === "opening" || sceneRole === "closing" || sceneRole === "hero" || sceneRole === "wow";
+  let moodPrefix: string;
+  if (templateMood === "fast_15s") {
+    moodPrefix = isBookend ? "Decisive" : "Brisk";
+  } else if (templateMood === "investor_20s") {
+    moodPrefix = isBookend ? "Confident" : "Crisp";
+  } else if (templateMood === "luxury_30s" || templateMood === "premium_45s") {
+    moodPrefix = isBookend ? "Cinematic flowing" : "Smooth";
+  } else if (templateMood === "family_30s") {
+    moodPrefix = isBookend ? "Warm confident" : "Smooth";
+  } else {
+    moodPrefix = isBookend ? "Confident" : "Smooth";
+  }
 
-  const prompt =
-    `${moodPrefix} ${cameraMovement.replace("-", " ")} across the ${imageRoomType}, ` +
-    `${motionIntent}, soft natural light, photorealistic, steady camera.`;
+  const tail = isBookend ? "purposeful and cinematic" : "steady and flowing";
+  const prompt = `${moodPrefix} ${cameraMovement.replace("-", " ")} across the ${imageRoomType}, ${tail}.`;
 
   return {
     sceneId,
@@ -226,40 +362,110 @@ function alignPrompts(
 export async function writeScenePrompts(
   input: WriteScenePromptsInput,
 ): Promise<WriteScenePromptsResult> {
-  const { scenes, templateName, model = DEFAULT_MODEL } = input;
+  const {
+    scenes,
+    templateName,
+    targetModel = "kling",
+    model = DEFAULT_MODEL,
+  } = input;
+
+  const systemPrompt = systemPromptFor(targetModel);
 
   const client: Anthropic | { messages: Anthropic["messages"] } =
     input.client ?? new Anthropic();
 
-  // Build compact scene briefs — no image bytes, just analysis output
+  // Minimal per-scene context: roomType + role + motion intent + duration.
+  // Scores, dominant colors, and the top-labels list have been intentionally
+  // removed — the LLM was stacking adjectives from them and producing
+  // 150-250-word prompts when Kling/Seedance only reliably act on the first
+  // clause. The reference image itself (attached below) is the primary
+  // grounding signal.
   const sceneBriefs = scenes.map((s) => ({
     sceneId: s.sceneId,
-    imageUrl: s.imagePath,
     roomType: s.imageRoomType,
-    scores: s.imageScores,
-    dominantColorsHex: s.imageDominantColorsHex,
-    topLabels: s.imageLabels.slice(0, 5).map((l) => l.name),
     sceneRole: s.sceneRole,
     motionIntent: s.motionIntent,
     durationSec: s.durationSec,
+    overlayText: s.overlayText,
   }));
 
-  const userMessage = JSON.stringify({ templateName, scenes: sceneBriefs }, null, 2);
+  // Storyboard summary — a compact list of every scene in order, given to
+  // the LLM BEFORE any individual brief or image so it can plan the camera-
+  // movement variety across the sequence (not just react to each scene in
+  // isolation). This is the single biggest lever we have for cohesion:
+  // without it, the LLM produces "5 independent sentences" because each
+  // scene brief looks the same to it locally. With it, Claude can see that
+  // scenes 1-2 are both living rooms and needs to differentiate, or that
+  // every planner motionIntent says "ken-burns upward reveal" and it
+  // should vary verbs anyway.
+  const storyboardLines = scenes.map((s) => {
+    const parts = [
+      `Scene ${s.order + 1}/${scenes.length}`,
+      s.sceneRole,
+      s.imageRoomType,
+      `${s.durationSec}s`,
+      `intent=${s.motionIntent || "none"}`,
+    ];
+    return `  ${parts.join(" · ")}`;
+  });
+  const storyboardBlock =
+    `Storyboard (full sequence — read this FIRST before writing any prompt):\n` +
+    storyboardLines.join("\n") +
+    `\n\n` +
+    `Write varied camera movements. Consecutive scenes and same-room scenes ` +
+    `must use different verbs. Treat this as a single cohesive tour, not ` +
+    `${scenes.length} independent prompts.`;
+
+  const userContent: Array<Record<string, unknown>> = [
+    {
+      type: "text",
+      text:
+        `Template name: ${templateName}\n\n` +
+        storyboardBlock +
+        `\n\n` +
+        "Below: each scene's individual brief + reference image, in order. " +
+        "Plan camera-verb variety first using the Storyboard above, THEN write each prompt.",
+    },
+  ];
+
+  for (const scene of scenes) {
+    const brief = sceneBriefs.find((item) => item.sceneId === scene.sceneId);
+    userContent.push({
+      type: "text",
+      text:
+        `Scene ${scene.order + 1}/${scenes.length} (${scene.sceneRole})\n` +
+        JSON.stringify(brief, null, 2),
+    });
+    try {
+      userContent.push(await buildAnthropicImageContent(scene.imagePath));
+    } catch (error) {
+      userContent.push({
+        type: "text",
+        text:
+          `Reference image unavailable for scene ${scene.sceneId}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
 
   log("call.start", {
     model,
+    targetModel,
     templateName,
     sceneCount: scenes.length,
   });
 
   // Helper to call the API with an optional retry message appended
   async function callAnthropic(
-    extraMessages: Array<{ role: "user" | "assistant"; content: string }> = [],
+    extraMessages: Array<{
+      role: "user" | "assistant";
+      content: string | Array<Record<string, unknown>>;
+    }> = [],
   ): Promise<Anthropic.Message> {
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: userMessage },
+    const messages = [
+      { role: "user", content: userContent as any },
       ...extraMessages,
-    ];
+    ] as any;
 
     // Prompt caching: `cache_control` is not in this SDK version's TextBlockParam
     // type, but the API accepts it at runtime regardless of beta header. The
@@ -269,7 +475,7 @@ export async function writeScenePrompts(
       model,
       max_tokens: 4096,
       system: [
-        { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
+        { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
       ],
       messages,
     };
@@ -354,6 +560,13 @@ export async function writeScenePrompts(
         prompts,
         anthropicRequestId,
         ...usageMeta,
+        costUsd: anthropicCost({
+          model,
+          inputTokens: usageMeta.tokensIn,
+          outputTokens: usageMeta.tokensOut,
+          cacheReadTokens: usageMeta.cacheReadTokens,
+          cacheWriteTokens: usageMeta.cacheWriteTokens,
+        }),
         fallbackUsed: false,
       };
     }
@@ -410,6 +623,13 @@ export async function writeScenePrompts(
           prompts,
           anthropicRequestId,
           ...usageMeta,
+          costUsd: anthropicCost({
+            model,
+            inputTokens: usageMeta.tokensIn,
+            outputTokens: usageMeta.tokensOut,
+            cacheReadTokens: usageMeta.cacheReadTokens,
+            cacheWriteTokens: usageMeta.cacheWriteTokens,
+          }),
           fallbackUsed: false,
         };
       }
@@ -442,6 +662,13 @@ export async function writeScenePrompts(
     prompts,
     anthropicRequestId,
     ...usageMeta,
+    costUsd: anthropicCost({
+      model,
+      inputTokens: usageMeta.tokensIn,
+      outputTokens: usageMeta.tokensOut,
+      cacheReadTokens: usageMeta.cacheReadTokens,
+      cacheWriteTokens: usageMeta.cacheWriteTokens,
+    }),
     fallbackUsed: true,
   };
 }

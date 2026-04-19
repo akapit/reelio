@@ -86,8 +86,11 @@ export type VisionObject = z.infer<typeof VisionObject>;
 export const ImageMetadata = z.object({
   path: z.string(),
   roomType: RoomType,
-  scores: ImageScores,
-  eligibility: ImageEligibility,
+  /** Binary quality gate from Claude VLM. When false, the image is excluded
+   *  from the timeline and surfaced in the UI pre-flight panel. */
+  usable: z.boolean().default(true),
+  /** One-line human-readable reason when !usable (e.g. "blurry", "watermark"). */
+  reason: z.string().optional(),
   dims: ImageDims,
   visionLabels: z.array(VisionLabel).default([]),
   /**
@@ -95,6 +98,12 @@ export const ImageMetadata = z.object({
    * to center the 9:16 crop on the dominant subject(s). Defaults to [].
    */
   visionObjects: z.array(VisionObject).default([]),
+  /** @deprecated no longer consumed; retained as optional for historical rows
+   *  in engine_runs.summary. Not populated for new runs. */
+  scores: ImageScores.optional(),
+  /** @deprecated same as scores — retained for historical rows only. */
+  eligibility: ImageEligibility.optional(),
+  /** @deprecated — the prompt writer no longer uses colour palette context. */
   dominantColorsHex: z.array(z.string()).default([]),
 });
 export type ImageMetadata = z.infer<typeof ImageMetadata>;
@@ -250,6 +259,19 @@ export const TEMPLATE_NAMES = [
 ] as const;
 export type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
+/**
+ * Nominal slot count per template. Used by the UI pre-flight helper to show
+ * "X images for a template that uses Y slots → Z scenes" before the user hits
+ * generate. Kept in sync with the JSON files in `src/lib/engine/templates/*`.
+ */
+export const TEMPLATE_SLOT_COUNTS: Record<TemplateName, number> = {
+  luxury_30s: 8,
+  family_30s: 8,
+  fast_15s: 6,
+  investor_20s: 6,
+  premium_45s: 10,
+};
+
 // --- New scene-based pipeline models ---------------------------------------
 
 export const SceneRole = z.enum(["opening", "hero", "wow", "filler", "closing"]);
@@ -258,6 +280,20 @@ export type SceneRole = z.infer<typeof SceneRole>;
 export const VideoModelChoice = z.enum(["kling", "seedance", "seedance-fast"]);
 export type VideoModelChoice = z.infer<typeof VideoModelChoice>;
 
+/**
+ * Resolve the server-side default video model. Applied as a hard override to
+ * every scene when the request did not come with a user-selected model.
+ * Falls back to "kling" — the most conservative choice for interior motion.
+ * The env var also lets us A/B kling vs seedance without a deploy.
+ */
+export function resolveDefaultVideoModel(): VideoModelChoice {
+  const raw = process.env.ENGINE_DEFAULT_MODEL;
+  if (raw === "kling" || raw === "seedance" || raw === "seedance-fast") {
+    return raw;
+  }
+  return "kling";
+}
+
 /** One planned scene. Produced by the planner, consumed by the prompt writer. */
 export const Scene = z.object({
   sceneId: z.string(),
@@ -265,8 +301,11 @@ export const Scene = z.object({
   slotId: z.string(),
   imagePath: z.string(),
   imageRoomType: RoomType,
-  imageScores: ImageScores,
+  /** @deprecated the writer no longer reads scores. Optional for back-compat. */
+  imageScores: ImageScores.optional(),
+  /** @deprecated no longer consumed by the writer. */
   imageDominantColorsHex: z.array(z.string()).default([]),
+  /** Top few labels from GCV (compact signal for the writer). */
   imageLabels: z.array(VisionLabel).default([]),
   sceneRole: SceneRole,
   durationSec: z.number().positive(),
@@ -293,6 +332,45 @@ export const ScenePrompt = z.object({
 });
 export type ScenePrompt = z.infer<typeof ScenePrompt>;
 
+export const PreparedSceneCrop = z.object({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  w: z.number().int().positive(),
+  h: z.number().int().positive(),
+  noop: z.boolean(),
+  reason: z.string(),
+});
+export type PreparedSceneCrop = z.infer<typeof PreparedSceneCrop>;
+
+export const PreparedSceneSource = z.object({
+  originalImagePath: z.string(),
+  providerImageUrl: z.string(),
+  sourceLocalPath: z.string().nullable().optional(),
+  preparedLocalPath: z.string().nullable().optional(),
+  uploadedPreparedUrl: z.string().nullable().optional(),
+  localizedFromRemote: z.boolean().default(false),
+  crop: PreparedSceneCrop.nullable().optional(),
+});
+export type PreparedSceneSource = z.infer<typeof PreparedSceneSource>;
+
+export const SceneQualityEvaluation = z.object({
+  passed: z.boolean(),
+  score: z.number().min(0).max(1),
+  summary: z.string(),
+  issues: z.array(z.string()).default([]),
+  retryPrompt: z.string().nullable().default(null),
+  retryReason: z.string().nullable().default(null),
+  fallbackUsed: z.boolean().default(false),
+  anthropicRequestId: z.string().nullable().optional(),
+  tokensIn: z.number().nullable().optional(),
+  tokensOut: z.number().nullable().optional(),
+  cacheReadTokens: z.number().nullable().optional(),
+  cacheWriteTokens: z.number().nullable().optional(),
+  /** Estimated USD cost of the Anthropic evaluator call (0 when fallback). */
+  costUsd: z.number().nullable().optional(),
+});
+export type SceneQualityEvaluation = z.infer<typeof SceneQualityEvaluation>;
+
 /** Produced by the per-scene generator (piapi). */
 export const SceneVideo = z.object({
   sceneId: z.string(),
@@ -301,6 +379,10 @@ export const SceneVideo = z.object({
   durationSec: z.number().positive().optional(),
   model: z.string(),
   generationMs: z.number().int().nonnegative().optional(),
+  attemptOrder: z.number().int().positive().optional(),
+  prompt: ScenePrompt.optional(),
+  preparedSource: PreparedSceneSource.optional(),
+  evaluation: SceneQualityEvaluation.optional(),
 });
 export type SceneVideo = z.infer<typeof SceneVideo>;
 
@@ -336,12 +418,23 @@ export const StepType = z.enum([
   "plan",
   "scene_prompt",
   "scene_generate",
+  "scene_evaluate",
   "voiceover",
   "music",
   "merge",
   "upload",
+  "finalize_asset",
 ]);
 export type StepType = z.infer<typeof StepType>;
+
+export const SceneRecordStatus = z.enum(["pending", "running", "done", "failed"]);
+export type SceneRecordStatus = z.infer<typeof SceneRecordStatus>;
+
+export const SceneAttemptStatus = z.enum(["running", "done", "failed"]);
+export type SceneAttemptStatus = z.infer<typeof SceneAttemptStatus>;
+
+export const EventLevel = z.enum(["info", "warn", "error"]);
+export type EventLevel = z.infer<typeof EventLevel>;
 
 /** engine_runs row (subset we care about in app code). */
 export const RunRecord = z.object({
@@ -370,3 +463,55 @@ export const StepRecord = z.object({
   error: z.record(z.unknown()).nullable(),
 });
 export type StepRecord = z.infer<typeof StepRecord>;
+
+export const EngineSceneRecord = z.object({
+  id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  scene_id: z.string(),
+  scene_order: z.number().int().nonnegative(),
+  slot_id: z.string(),
+  status: SceneRecordStatus,
+  image_path: z.string(),
+  room_type: z.string(),
+  scene_role: z.string(),
+  duration_sec: z.number(),
+  motion_intent: z.string().nullable().optional(),
+  overlay_text: z.string().nullable().optional(),
+  transition_out: z.string().nullable().optional(),
+  transition_duration_sec: z.number().nullable().optional(),
+  planner: z.record(z.unknown()),
+  prompt: z.record(z.unknown()),
+  output: z.record(z.unknown()),
+  error: z.record(z.unknown()).nullable(),
+});
+export type EngineSceneRecord = z.infer<typeof EngineSceneRecord>;
+
+export const EngineSceneAttemptRecord = z.object({
+  id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  scene_record_id: z.string().uuid(),
+  attempt_order: z.number().int().positive(),
+  status: SceneAttemptStatus,
+  provider: z.string().nullable().optional(),
+  model_choice: z.string().nullable().optional(),
+  prompt: z.record(z.unknown()),
+  external_ids: z.record(z.unknown()),
+  metrics: z.record(z.unknown()),
+  output: z.record(z.unknown()),
+  error: z.record(z.unknown()).nullable(),
+  started_at: z.string().datetime(),
+  completed_at: z.string().datetime().nullable(),
+});
+export type EngineSceneAttemptRecord = z.infer<typeof EngineSceneAttemptRecord>;
+
+export const EngineEventRecord = z.object({
+  id: z.string().uuid(),
+  run_id: z.string().uuid(),
+  scene_record_id: z.string().uuid().nullable().optional(),
+  attempt_id: z.string().uuid().nullable().optional(),
+  level: EventLevel,
+  event_type: z.string(),
+  payload: z.record(z.unknown()),
+  created_at: z.string().datetime(),
+});
+export type EngineEventRecord = z.infer<typeof EngineEventRecord>;

@@ -14,11 +14,9 @@ import {
 import { distribute, type DurationChoice } from "./duration";
 import { InsufficientImages } from "./fallback";
 import { assign as assignMotion, AR_BIAS_THRESHOLD, describeMotionIntent } from "./motion";
-import { pickImage } from "./selection";
+import { pickImage, pickImageDetailed, type PickTier } from "./selection";
 
 export { InsufficientImages, PlannerAbort } from "./fallback";
-
-const QUALITY_FLOOR = 0.4;
 
 // ---------------------------------------------------------------------------
 // Shared internal types
@@ -28,52 +26,101 @@ type Choice = {
   slot: TemplateSlot;
   image: ImageMetadata;
   fallbackApplied: string | null;
+  /** How the image ended up attached to this slot. "relaxed" means the
+   *  room-type constraint had to be dropped to avoid leaving the image
+   *  unused; the planner emits a recommendation warning so the UI can
+   *  tell the user what to upload next time. Optional for backwards
+   *  compatibility with the legacy `buildTimeline` caller. */
+  matchTier?: PickTier;
 };
+
+/**
+ * Room types that matter enough to surface as a recommendation when
+ * missing. Chosen to match what a listing agent would typically want
+ * captured but some users skip. Keep in sync with the roomClassifier's
+ * output categories in src/lib/engine/vision/roomClassifier.ts.
+ */
+const RECOMMENDABLE_ROOM_TYPES = new Set<string>([
+  "kitchen",
+  "bedroom",
+  "bathroom",
+  "exterior",
+  "balcony",
+  "dining",
+]);
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * `onMissing: "use_hero"` fallback. Fires when `pickImage` couldn't satisfy
+ * the slot's required room type. Same unused-preferring tier order as
+ * `pickImage`:
+ *   1. UNUSED exterior image
+ *   2. UNUSED any usable image (first in dataset order)
+ *   3. If allowReuse: USED exterior
+ *   4. If allowReuse: USED any
+ * Returns null if nothing matches.
+ *
+ * Key fix: the old version took `pool[0]` even when that image was already
+ * used elsewhere, so `1_exterior` and `6_closing` would both grab the same
+ * photo while bedroom/kitchen shots sat unused.
+ */
 function heroFallback(
   dataset: ImageDataset,
   used: Set<string>,
   allowReuse: boolean,
 ): ImageMetadata | null {
-  const candidates = dataset.images.filter(
-    (img) =>
-      (allowReuse || !used.has(img.path)) && img.scores.quality >= QUALITY_FLOOR,
-  );
-  if (candidates.length === 0) return null;
-  let best = candidates[0];
-  for (let i = 1; i < candidates.length; i++) {
-    const c = candidates[i];
-    if (
-      c.scores.hero > best.scores.hero ||
-      (c.scores.hero === best.scores.hero && c.scores.quality > best.scores.quality)
-    ) {
-      best = c;
-    }
+  const usable = dataset.images.filter((img) => img.usable);
+  if (usable.length === 0) return null;
+
+  const unused = usable.filter((img) => !used.has(img.path));
+  const usedPool = usable.filter((img) => used.has(img.path));
+
+  const unusedExterior = unused.find((img) => img.roomType === "exterior");
+  if (unusedExterior) return unusedExterior;
+  if (unused.length > 0) return unused[0];
+
+  if (allowReuse) {
+    const usedExterior = usedPool.find((img) => img.roomType === "exterior");
+    if (usedExterior) return usedExterior;
+    if (usedPool.length > 0) return usedPool[0];
   }
-  return best;
+  return null;
 }
 
+/**
+ * `onMissing: "use_wow"` fallback. Same tiering as heroFallback but biased
+ * toward balcony/exterior/dining as "wow" candidates.
+ */
 function wowFallback(
   dataset: ImageDataset,
   used: Set<string>,
   allowReuse: boolean,
 ): ImageMetadata | null {
-  const candidates = dataset.images.filter(
-    (img) =>
-      (allowReuse || !used.has(img.path)) && img.scores.quality >= QUALITY_FLOOR,
-  );
-  if (candidates.length === 0) return null;
-  let best = candidates[0];
-  for (let i = 1; i < candidates.length; i++) {
-    if (candidates[i].scores.wow > best.scores.wow) {
-      best = candidates[i];
-    }
+  const usable = dataset.images.filter((img) => img.usable);
+  if (usable.length === 0) return null;
+
+  const unused = usable.filter((img) => !used.has(img.path));
+  const usedPool = usable.filter((img) => used.has(img.path));
+
+  const preferred = ["balcony", "exterior", "dining"] as const;
+
+  for (const type of preferred) {
+    const match = unused.find((img) => img.roomType === type);
+    if (match) return match;
   }
-  return best;
+  if (unused.length > 0) return unused[0];
+
+  if (allowReuse) {
+    for (const type of preferred) {
+      const match = usedPool.find((img) => img.roomType === type);
+      if (match) return match;
+    }
+    if (usedPool.length > 0) return usedPool[0];
+  }
+  return null;
 }
 
 /**
@@ -84,28 +131,61 @@ function fillSlots(
   dataset: ImageDataset,
   template: Template,
   logFn: (event: string, data?: Record<string, unknown>) => void,
-): { choices: Choice[]; unfilled: string[]; aborts: string[] } {
+): {
+  choices: Choice[];
+  unfilled: string[];
+  aborts: string[];
+  used: Set<string>;
+} {
   const used = new Set<string>();
   const choices: Choice[] = [];
   const unfilled: string[] = [];
   const aborts: string[] = [];
 
   for (const slot of template.slots) {
-    const picked = pickImage(slot, dataset, used);
-    if (picked) {
+    const pickResult = pickImageDetailed(slot, dataset, used);
+    if (pickResult) {
+      const picked = pickResult.image;
       if (!slot.allowReuse) used.add(picked.path);
-      choices.push({ slot, image: picked, fallbackApplied: null });
-      logFn("plan.slotFilled", { slotId: slot.id, imagePath: picked.path });
+      choices.push({
+        slot,
+        image: picked,
+        fallbackApplied:
+          pickResult.tier === "fallback"
+            ? "room_fallback"
+            : pickResult.tier === "relaxed"
+              ? "room_relaxed"
+              : pickResult.tier === "reused"
+                ? "reused"
+                : null,
+        matchTier: pickResult.tier,
+      });
+      logFn("plan.slotFilled", {
+        slotId: slot.id,
+        imagePath: picked.path,
+        tier: pickResult.tier,
+        pickedRoomType: picked.roomType,
+        requiredRoomType: slot.requiredRoomType,
+      });
       continue;
     }
 
-    // No direct pick — consult onMissing.
+    // pickImageDetailed returns null ONLY when there are truly no usable
+    // images left (or the slot disallows reuse AND every image is already
+    // used). The onMissing branches below are retained for defensive
+    // coverage — in practice they rarely fire now that the "relaxed" tier
+    // accepts any unused image regardless of room type.
     switch (slot.onMissing) {
       case "use_hero": {
         const hero = heroFallback(dataset, used, slot.allowReuse);
         if (hero) {
           if (!slot.allowReuse) used.add(hero.path);
-          choices.push({ slot, image: hero, fallbackApplied: "hero_fallback" });
+          choices.push({
+            slot,
+            image: hero,
+            fallbackApplied: "hero_fallback",
+            matchTier: "fallback",
+          });
           logFn("plan.slotFilled", {
             slotId: slot.id,
             imagePath: hero.path,
@@ -121,7 +201,12 @@ function fillSlots(
         const wow = wowFallback(dataset, used, slot.allowReuse);
         if (wow) {
           if (!slot.allowReuse) used.add(wow.path);
-          choices.push({ slot, image: wow, fallbackApplied: "wow_fallback" });
+          choices.push({
+            slot,
+            image: wow,
+            fallbackApplied: "wow_fallback",
+            matchTier: "fallback",
+          });
           logFn("plan.slotFilled", {
             slotId: slot.id,
             imagePath: wow.path,
@@ -147,7 +232,7 @@ function fillSlots(
     }
   }
 
-  return { choices, unfilled, aborts };
+  return { choices, unfilled, aborts, used };
 }
 
 // ---------------------------------------------------------------------------
@@ -438,24 +523,44 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
     throw new InsufficientImages(0, template.minUsableImages);
   }
 
-  // Soft floor: when we're under the template's nominal minUsableImages,
-  // auto-enable image reuse and proceed with a warning. Better than a 500 at
-  // the API layer. The downstream effect is that some images may appear in
-  // multiple scenes (different motions/prompts per scene still differentiate
-  // them), which is preferable to no video at all.
-  const lowImageCount = dataset.usableCount < template.minUsableImages;
-  const lowImageWarning = lowImageCount
-    ? `low_image_count:${dataset.usableCount}/${template.minUsableImages}:auto_reuse_enabled`
-    : null;
-  if (lowImageCount) {
-    template = {
-      ...template,
-      slots: template.slots.map((s) => ({ ...s, allowReuse: true })),
+  // Slot trim: if we have fewer usable images than slots, shrink the
+  // timeline to match. Keeps each scene on a unique image (no silent reuse).
+  // Preserves the first slot (opening) and the last slot (closing) as
+  // bookends; drops from the middle. Total duration shrinks
+  // proportionally via the existing `distribute()` redistribution.
+  let slotsTrimmed: {
+    from: number;
+    to: number;
+    droppedSlotIds: string[];
+  } | null = null;
+  const budget = dataset.usableCount;
+  if (budget < template.slots.length) {
+    const originalSlots = template.slots;
+    const originalCount = originalSlots.length;
+    const kept: TemplateSlot[] = [];
+    if (budget >= 1) kept.push(originalSlots[0]);
+    const middle = originalSlots.slice(1, originalCount - 1);
+    const middleBudget = Math.max(0, budget - 2); // reserve 1 for opening + 1 for closing
+    if (middleBudget > 0) kept.push(...middle.slice(0, middleBudget));
+    if (budget >= 2) kept.push(originalSlots[originalCount - 1]);
+    // Edge case: budget === 1. Only keep the opening (most important establish
+    // shot). The closing would otherwise overwrite it.
+    const finalSlots = budget === 1 ? [originalSlots[0]] : kept;
+    const droppedSlotIds = originalSlots
+      .filter((s) => !finalSlots.some((k) => k.id === s.id))
+      .map((s) => s.id);
+    template = { ...template, slots: finalSlots };
+    slotsTrimmed = {
+      from: originalCount,
+      to: finalSlots.length,
+      droppedSlotIds,
     };
-    logPlanner("plan.autoReuseEnabled", {
+    logPlanner("plan.slotsTrimmed", {
       templateName: template.name,
-      usableCount: dataset.usableCount,
-      minUsableImages: input.template.minUsableImages,
+      fromCount: originalCount,
+      toCount: finalSlots.length,
+      usableCount: budget,
+      droppedSlotIds,
     });
   }
 
@@ -464,10 +569,14 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
     imageCount: dataset.images.length,
     usableCount: dataset.usableCount,
     slotCount: template.slots.length,
-    lowImageCount,
+    trimmed: slotsTrimmed !== null,
   });
 
-  const { choices, unfilled, aborts } = fillSlots(dataset, template, logPlanner);
+  const { choices, unfilled, aborts, used } = fillSlots(
+    dataset,
+    template,
+    logPlanner,
+  );
 
   if (aborts.length > 0) {
     logPlanner("plan.done", {
@@ -488,6 +597,63 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
     return { timeline: undefined as unknown as SceneTimeline, abortedSlotIds: allSlotIds };
   }
 
+  // Extras pass: when the user uploaded MORE usable images than the
+  // template has slots, append the leftovers as synthetic filler scenes.
+  // This enforces the "never exclude an uploaded image" product policy —
+  // every photo the user attached becomes a scene, even if the template
+  // wasn't sized for them. Extras are spliced BEFORE the closing slot so
+  // the video still ends on the closing beat.
+  //
+  // IMPORTANT: we key the "unused" filter on the set of actually-picked
+  // image paths (from `choices`), NOT on `used`. `used` only tracks paths
+  // for slots where `allowReuse=false`; luxury_30s's closing slot has
+  // `allowReuse=true` (so other slots may borrow the closing image), which
+  // means its picked image never lands in `used` and would otherwise get
+  // double-counted as "unused" here. The picked-paths set reflects the
+  // ground truth: "these images already have a scene attached to them".
+  const pickedPaths = new Set(choices.map((c) => c.image.path));
+  const extraImages = dataset.images.filter(
+    (img) => img.usable && !pickedPaths.has(img.path),
+  );
+  if (extraImages.length > 0) {
+    const closingIdx = choices.length - 1;
+    const closingChoice = choices[closingIdx];
+    // Drop the closing; we'll re-append after inserting extras.
+    const body = choices.slice(0, closingIdx);
+    for (let i = 0; i < extraImages.length; i++) {
+      const img = extraImages[i];
+      const syntheticSlot: TemplateSlot = {
+        id: `extra_${i + 1}_${img.roomType}`,
+        label: `Extra ${img.roomType}`,
+        requiredRoomType: null, // accept anything
+        fallbackRoomTypes: [],
+        onMissing: "skip",
+        minDuration: 3,
+        maxDuration: 5,
+        defaultMotion: "ken_burns_in",
+        transitionOut: "cut",
+        allowReuse: false,
+        overlayText: null,
+      };
+      body.push({
+        slot: syntheticSlot,
+        image: img,
+        fallbackApplied: "extras_pass",
+        matchTier: "exact",
+      });
+      used.add(img.path);
+    }
+    // Re-append closing so the last scene remains semantically "closing".
+    body.push(closingChoice);
+    choices.length = 0;
+    choices.push(...body);
+    logPlanner("plan.extrasAppended", {
+      templateName: template.name,
+      extraCount: extraImages.length,
+      totalScenes: choices.length,
+    });
+  }
+
   const durationInputs: DurationChoice[] = choices.map((c) => ({
     slot: c.slot,
     image: c.image,
@@ -495,7 +661,47 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
   const durations = distribute(durationInputs, template.targetDurationSec);
 
   const warnings: string[] = [];
-  if (lowImageWarning) warnings.push(lowImageWarning);
+  if (slotsTrimmed) {
+    warnings.push(
+      `slots_trimmed:${slotsTrimmed.from}->${slotsTrimmed.to}:images=${budget}`,
+    );
+  }
+  if (extraImages.length > 0) {
+    warnings.push(
+      `extras_appended:${extraImages.length}:images=${dataset.usableCount}:templateSlots=${template.slots.length}`,
+    );
+  }
+
+  // Per-slot relaxation warnings + aggregate recommendations.
+  // Goal: never silently paper over a room-type miss. Every slot that was
+  // filled with a relaxed (wrong-room-type) pick shows up in the inspector
+  // as "slot X wanted bathroom, got living — consider uploading a bathroom
+  // photo next time".
+  const relaxedSlots = choices.filter((c) => c.matchTier === "relaxed");
+  for (const c of relaxedSlots) {
+    if (!c.slot.requiredRoomType) continue;
+    warnings.push(
+      `room_relaxed:${c.slot.id}:wanted=${c.slot.requiredRoomType}:got=${c.image.roomType}`,
+    );
+  }
+  // Collect the DISTINCT room types the template asked for but we couldn't
+  // satisfy. Only recommendable types surface (bathroom/bedroom/kitchen
+  // etc.) — no point suggesting the user upload a "filler" photo.
+  const missingRoomTypes = new Set<string>();
+  for (const c of relaxedSlots) {
+    const wanted = c.slot.requiredRoomType;
+    if (wanted && RECOMMENDABLE_ROOM_TYPES.has(wanted)) {
+      // Confirm it's actually missing from the dataset (vs. already consumed
+      // by a different slot — in that case a second copy wouldn't help).
+      const haveAny = dataset.images.some(
+        (img) => img.usable && img.roomType === wanted,
+      );
+      if (!haveAny) missingRoomTypes.add(wanted);
+    }
+  }
+  for (const room of missingRoomTypes) {
+    warnings.push(`recommend_upload:${room}`);
+  }
   const mood = templateMoodFor(template.name, template.music.mood);
   const lastIndex = choices.length - 1;
 
@@ -536,8 +742,10 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
       slotId: c.slot.id,
       imagePath: c.image.path,
       imageRoomType: c.image.roomType,
-      imageScores: c.image.scores,
-      imageDominantColorsHex: c.image.dominantColorsHex,
+      // `imageScores` is deprecated and now optional — omit entirely.
+      // `imageDominantColorsHex` is still required on the output type (via
+      // Zod `.default([])`), so pass an empty array.
+      imageDominantColorsHex: [],
       imageLabels: topLabels,
       sceneRole,
       durationSec,

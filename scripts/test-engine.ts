@@ -175,7 +175,7 @@ Options:
   --no-advisor           Disable Anthropic advisor-tool mode (on by default: Sonnet executor
                          with Opus as a server-side advisor tool). Sets ENGINE_ADVISOR_MODE=0
                          and uses the Opus executor instead.
-  --provider <name>      Video-generation backend: "piapi" (default) or "kieai".
+  --provider <name>      Video-generation backend: "kieai" (default) or "piapi".
                          Env fallback: ENGINE_VIDEO_PROVIDER.
   --verbose, -v          Log full orchestrator loop: Claude text, tool inputs, tool results
   -h, --help             Show this message
@@ -291,26 +291,12 @@ async function runAnalyzeOnly(imagePaths: string[]): Promise<void> {
   // Per-image report.
   for (const img of dataset.images) {
     const name = basename(img.path);
-    const usableFlags: string[] = [];
-    if (img.eligibility.asHero) usableFlags.push("hero");
-    if (img.eligibility.asWow) usableFlags.push("wow");
-    if (img.eligibility.asClosing) usableFlags.push("closing");
-    const usable = usableFlags.length > 0;
-    const usableStr = usable
-      ? `${GREEN}usable: ${usableFlags.join(", ")}${RESET}`
-      : `${RED}not usable${RESET}`;
+    const usableStr = img.usable
+      ? `${GREEN}usable${RESET}`
+      : `${RED}not usable${img.reason ? ` (${img.reason})` : ""}${RESET}`;
 
-    console.log(`${BOLD}${name}${RESET} ${DIM}—${RESET} ${CYAN}${img.roomType}${RESET} ${DIM}—${RESET} ${usableStr}`);
-
-    // Scores row.
-    const s = img.scores;
     console.log(
-      `  ${DIM}quality${RESET} ${pct(s.quality)}` +
-      `  ${DIM}lighting${RESET} ${pct(s.lighting)}` +
-      `  ${DIM}composition${RESET} ${pct(s.composition)}` +
-      `  ${DIM}wow${RESET} ${pct(s.wow)}` +
-      `  ${DIM}detail${RESET} ${pct(s.detail)}` +
-      `  ${DIM}hero${RESET} ${pct(s.hero)}`,
+      `${BOLD}${name}${RESET} ${DIM}—${RESET} ${CYAN}${img.roomType}${RESET} ${DIM}—${RESET} ${usableStr}`,
     );
 
     // Top 3 labels.
@@ -450,7 +436,7 @@ async function main(): Promise<void> {
   const providerResolved =
     args.videoProvider ??
     (process.env.ENGINE_VIDEO_PROVIDER as VideoProviderArg | undefined) ??
-    "piapi";
+    "kieai";
   console.log(`[test-engine] template=${args.template} images=${imagePaths.length} out=${args.out}`);
   console.log(`[test-engine] videoProvider=${providerResolved}`);
   if (!args.direct) {
