@@ -567,9 +567,9 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       animate={{
         borderColor: isDragOver
           ? "var(--color-accent)"
-          : "rgba(201,168,76,0.5)",
+          : "rgba(212,168,79,0.5)",
         backgroundColor: isDragOver
-          ? "rgba(201,168,76,0.04)"
+          ? "rgba(212,168,79,0.04)"
           : "var(--color-surface)",
       }}
       transition={{ duration: 0.15 }}
@@ -578,7 +578,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         "transition-[border-color,box-shadow] duration-200",
         "shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35),0_4px_16px_-2px_rgba(0,0,0,0.2),0_0_0_1px_rgba(255,255,255,0.02)]",
         "focus-within:!border-[var(--color-accent)]",
-        "focus-within:shadow-[0_0_0_2px_rgba(201,168,76,0.55),0_12px_40px_-4px_rgba(201,168,76,0.14),0_4px_16px_-2px_rgba(0,0,0,0.3)]"
+        "focus-within:shadow-[0_0_0_2px_rgba(212,168,79,0.55),0_12px_40px_-4px_rgba(212,168,79,0.14),0_4px_16px_-2px_rgba(0,0,0,0.3)]"
       )}
     >
       {/* Thumbnail strip */}

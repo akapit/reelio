@@ -74,13 +74,14 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
 
   const sidebarContent = (
     <>
-      {/* Wordmark */}
+      {/* Wordmark — lowercase, slightly-open tracking per the Reelio brand
+          spec (premium, calm, modern; never overpowers the symbol). */}
       <div className="flex items-center justify-between h-16 px-6 border-b border-[var(--color-border)] shrink-0">
         <span
-          className="text-2xl font-semibold text-[var(--color-accent)] tracking-wide"
+          className="text-2xl font-medium text-[var(--color-accent)] tracking-[0.06em]"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          Reelio
+          reelio
         </span>
         <button
           type="button"

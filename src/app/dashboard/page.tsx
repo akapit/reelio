@@ -32,13 +32,13 @@ export default function DashboardPage() {
         {/* Hero heading */}
         <motion.div {...fadeUp(0)}>
           <h2
-            className="text-3xl lg:text-4xl font-semibold text-[var(--color-foreground)] leading-tight"
+            className="text-3xl lg:text-4xl font-semibold text-[var(--color-foreground)] leading-tight tracking-tight"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Welcome to Reelio
+            Welcome to <span className="text-[var(--color-accent)] tracking-[0.04em] font-medium lowercase">reelio</span>
           </h2>
           <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-            AI-powered media enhancement for real estate listings.
+            Cinematic creation, intelligently guided.
           </p>
         </motion.div>
 
@@ -179,7 +179,7 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, hint }: StatCardProps) {
   return (
-    <div className="flex items-center gap-4 p-5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a] transition-shadow duration-200">
+    <div className="flex items-center gap-4 p-5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:shadow-[0_0_0_1px_#d4a84f22,0_8px_32px_#d4a84f0a] transition-shadow duration-200">
       <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/20 shrink-0">
         {icon}
       </div>

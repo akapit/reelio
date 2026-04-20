@@ -79,10 +79,10 @@ export default function SignupPage() {
         {/* Wordmark */}
         <div className="text-center mb-8">
           <span
-            className="text-4xl font-light tracking-wide text-[var(--color-accent)]"
+            className="text-4xl font-medium tracking-[0.06em] text-[var(--color-accent)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Reelio
+            reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
             Create your account

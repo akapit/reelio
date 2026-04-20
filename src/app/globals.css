@@ -1,16 +1,32 @@
 @import "tailwindcss";
 
+/*
+ * Reelio brand tokens — premium motion, warm gold on deep black.
+ *
+ *   • Deep black      #0B0B0B — primary surface
+ *   • Warm gold       #D4A84F — accent (CTAs, focus, selection)
+ *   • Rich amber      #F2A33B — accent-warm (hover / intensity)
+ *   • Soft cream      #F5F1E8 — light-mode surface (documents, premium views)
+ *   • Warm white      #F8F6F1 — foreground text
+ *
+ * Surfaces are warmed deliberately (yellow-leaning neutrals) so the gold accent
+ * feels native rather than applied. Fonts stay geometric-sans across display
+ * and body per brand: Inter for display (calm, modern, premium), Assistant for
+ * body (covers Hebrew without shifting metrics between scripts).
+ */
 @theme {
-  --color-background:     #0e0e0f;
-  --color-surface:        #161618;
-  --color-surface-raised: #1e1e21;
-  --color-border:         #2a2a2e;
-  --color-foreground:     #f5f0eb;
-  --color-muted:          #8a8480;
-  --color-accent:         #c9a84c;
+  --color-background:     #0b0b0b;
+  --color-surface:        #161513;
+  --color-surface-raised: #1f1d1a;
+  --color-border:         #2a2824;
+  --color-foreground:     #f8f6f1;
+  --color-muted:          #8a8380;
+  --color-accent:         #d4a84f;
+  --color-accent-warm:    #f2a33b;
   --color-accent-dim:     #8a6f2e;
-  --font-display:         "Cormorant Garamond", serif;
-  --font-sans:            "DM Sans", sans-serif;
+  --color-cream:          #f5f1e8;
+  --font-display:         "Inter", sans-serif;
+  --font-sans:            "Assistant", "Inter", sans-serif;
 }
 
 body {

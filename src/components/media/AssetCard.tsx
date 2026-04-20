@@ -130,8 +130,8 @@ export function AssetCard({
         "group relative flex flex-col overflow-hidden rounded-xl",
         "bg-[var(--color-surface)] border transition-[border-color,box-shadow] duration-200",
         isSelected
-          ? "border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(201,168,76,0.45),0_8px_32px_#c9a84c1a]"
-          : "border-[var(--color-border)] hover:border-[var(--color-accent)]/30 hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
+          ? "border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(212,168,79,0.45),0_8px_32px_#d4a84f1a]"
+          : "border-[var(--color-border)] hover:border-[var(--color-accent)]/30 hover:shadow-[0_0_0_1px_#d4a84f22,0_8px_32px_#d4a84f0a]",
         draggable && "cursor-grab active:cursor-grabbing",
         isSelectable && "cursor-pointer"
       )}
@@ -146,7 +146,7 @@ export function AssetCard({
               className="w-full h-full flex flex-col items-center justify-center gap-3"
               style={{
                 background:
-                  "linear-gradient(110deg, var(--color-surface) 30%, rgba(201,168,76,0.08) 50%, var(--color-surface) 70%)",
+                  "linear-gradient(110deg, var(--color-surface) 30%, rgba(212,168,79,0.08) 50%, var(--color-surface) 70%)",
                 backgroundSize: "200% 100%",
                 animation: "shimmer 2s ease-in-out infinite",
                 cursor: onPreview ? "pointer" : "default",

@@ -1,24 +1,28 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, DM_Sans } from "next/font/google";
+import { Assistant, Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const cormorant = Cormorant_Garamond({
+// Brand-aligned fonts. Inter is the display family (calm, geometric, premium —
+// per brand "clean geometric sans"); Assistant is the body family because it
+// covers Hebrew cleanly without changing vertical metrics when switching
+// scripts mid-sentence (project names in this app are bilingual).
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["300", "400", "600"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-display",
 });
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["300", "400", "500"],
+const assistant = Assistant({
+  subsets: ["latin", "hebrew"],
+  weight: ["300", "400", "500", "600"],
   variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
-  title: "Reelio | AI-Powered Real Estate Media",
+  title: "Reelio | Premium Video, In Motion",
   description:
-    "Transform your property listings with AI-enhanced photos, virtual staging, and cinematic video.",
+    "Turn property photos into cinematic video. AI-assisted motion, intelligently guided.",
 };
 
 export default function RootLayout({
@@ -27,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${cormorant.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${inter.variable} ${assistant.variable}`}>
       <body className="min-h-screen antialiased">
         <Providers>{children}</Providers>
       </body>

@@ -73,7 +73,7 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
             ? "var(--color-accent)"
             : "var(--color-border)",
           backgroundColor: isDragOver
-            ? "rgba(201,168,76,0.06)"
+            ? "rgba(212,168,79,0.06)"
             : "var(--color-surface-raised)",
         }}
         transition={{ duration: 0.15 }}

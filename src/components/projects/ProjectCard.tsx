@@ -40,7 +40,7 @@ export function ProjectCard({
       className={cn(
         "group relative flex flex-col gap-4 p-5 rounded-xl cursor-pointer",
         "bg-[var(--color-surface)] border border-[var(--color-border)]",
-        "hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
+        "hover:shadow-[0_0_0_1px_#d4a84f22,0_8px_32px_#d4a84f0a]",
         "transition-shadow duration-200",
         className
       )}
