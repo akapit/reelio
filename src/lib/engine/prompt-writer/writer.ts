@@ -4,6 +4,7 @@ import { buildAnthropicImageContent } from "@/lib/engine/llm/anthropicImage";
 import type { Scene, ScenePrompt as ScenePromptType } from "../models";
 import { ScenePrompt, VideoModelChoice } from "../models";
 import { anthropicCost } from "../cost/pricing";
+import { buildOpeningPromptOverride } from "./openers";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -356,6 +357,36 @@ function alignPrompts(
 }
 
 // ---------------------------------------------------------------------------
+// Opening override — replace the first scene's prompt with a random pick
+// from the whip-pan opener bank (see ./openers.ts). This is applied AFTER
+// the LLM writes its prompts (or the deterministic fallback runs) so we
+// always have a strong entrance regardless of what the model produced.
+// ---------------------------------------------------------------------------
+
+function applyOpeningOverride(
+  prompts: ScenePromptType[],
+  scenes: Scene[],
+  targetModel: "kling" | "seedance" | "seedance-fast",
+): ScenePromptType[] {
+  const openingScene =
+    scenes.find((s) => s.sceneRole === "opening") ??
+    scenes.find((s) => s.order === 0);
+  if (!openingScene) return prompts;
+  const override = buildOpeningPromptOverride(
+    openingScene.sceneId,
+    targetModel,
+  );
+  log("opening.override", {
+    sceneId: openingScene.sceneId,
+    targetModel,
+    cameraMovement: override.modelParams?.cameraMovement,
+  });
+  return prompts.map((p) =>
+    p.sceneId === openingScene.sceneId ? override : p,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -550,7 +581,11 @@ export async function writeScenePrompts(
     const validation = validate(parsed);
 
     if (validation.success) {
-      const prompts = alignPrompts(validation.data.prompts, scenes);
+      const prompts = applyOpeningOverride(
+        alignPrompts(validation.data.prompts, scenes),
+        scenes,
+        targetModel,
+      );
       log("call.success", {
         model,
         sceneCount: scenes.length,
@@ -612,7 +647,11 @@ export async function writeScenePrompts(
       const retryValidation = validate(retryParsed);
 
       if (retryValidation.success) {
-        const prompts = alignPrompts(retryValidation.data.prompts, scenes);
+        const prompts = applyOpeningOverride(
+          alignPrompts(retryValidation.data.prompts, scenes),
+          scenes,
+          targetModel,
+        );
         log("call.success", {
           model,
           sceneCount: scenes.length,
@@ -657,7 +696,11 @@ export async function writeScenePrompts(
 
   // --- Deterministic fallback ---
   log("call.fallbackUsed", { model, sceneCount: scenes.length, ...usageMeta });
-  const prompts = scenes.map(fallbackPromptFor);
+  const prompts = applyOpeningOverride(
+    scenes.map(fallbackPromptFor),
+    scenes,
+    targetModel,
+  );
   return {
     prompts,
     anthropicRequestId,
