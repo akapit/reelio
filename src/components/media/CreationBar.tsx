@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  Sparkles,
   Video,
   Paperclip,
   X,
@@ -69,9 +68,26 @@ export interface RerunPayload {
   effectId?: string;
 }
 
+/**
+ * Payload for bulk-adding pre-uploaded assets into the bar without triggering
+ * a full rerun rehydration. The `nonce` is monotonic — bump it to push the
+ * same `assets` in again. Used by the asset library's multi-select flow so
+ * users don't have to drag images one at a time.
+ */
+export interface AddAssetsPayload {
+  nonce: number;
+  assets: Array<{
+    id: string;
+    originalUrl: string;
+    thumbnailUrl: string;
+    assetType: "image" | "video";
+  }>;
+}
+
 interface CreationBarProps {
   projectId: string;
   preload?: RerunPayload | null;
+  addAssets?: AddAssetsPayload | null;
 }
 
 interface PendingFile {
@@ -90,7 +106,10 @@ interface ExistingAsset {
 
 type CreationMode = "enhance" | "video" | null;
 
-const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic|mp4|mov|webm|avi)$/i;
+// The creation box only accepts images — both the enhance tools and the
+// scene-based video engine ingest photos only. Dropping a video here would
+// silently fail downstream, so we reject it at the boundary with a toast.
+const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic)$/i;
 
 type AspectRatioOption = "16:9" | "9:16" | "1:1";
 const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = [
@@ -99,7 +118,7 @@ const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = 
   { id: "1:1", label: "Square", icon: "◼" },
 ];
 
-export function CreationBar({ projectId, preload }: CreationBarProps) {
+export function CreationBar({ projectId, preload, addAssets }: CreationBarProps) {
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [existingAssets, setExistingAssets] = useState<ExistingAsset[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -107,10 +126,17 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
   const [mode, setMode] = useState<CreationMode>(null);
 
   const [generatingScript, setGeneratingScript] = useState(false);
-  const [generatingPrompt, setGeneratingPrompt] = useState(false);
 
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
   const [voiceoverText, setVoiceoverText] = useState("");
+  /**
+   * Short subject blurb used as the seed for the voiceover-script generator.
+   * Lives inside the voiceover panel so it's only visible when the user has
+   * actually opted into narration — replaces the old main-prompt-as-seed
+   * wiring, which was misleading because nothing else consumed that field in
+   * engine mode.
+   */
+  const [voiceoverSubject, setVoiceoverSubject] = useState("");
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState(
     "Soft ambient piano, luxury real estate"
@@ -205,7 +231,11 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     ];
     setExistingAssets(reattachedAssets);
     setMode("video");
-    setPrompt(preload.prompt);
+    // Note: we intentionally no longer restore `preload.prompt` — the main
+    // prompt textarea is hidden in video mode, and engine runs never consumed
+    // it anyway. The rerun payload keeps the field for backwards-compat.
+    setPrompt("");
+    setVoiceoverSubject("");
     if (preload.voiceoverText) {
       setVoiceoverEnabled(true);
       setVoiceoverText(preload.voiceoverText);
@@ -225,16 +255,52 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preload?.nonce]);
 
+  // Bulk-add from the asset library's multi-select flow. Unlike `preload`,
+  // this is additive — it only appends unique assets, never resets state.
+  // Videos are rejected at this boundary too (the creator only accepts images
+  // as source material).
+  useEffect(() => {
+    if (!addAssets || addAssets.assets.length === 0) return;
+    const onlyImages = addAssets.assets.filter(
+      (a) => a.assetType !== "video",
+    );
+    if (onlyImages.length === 0) {
+      toast.error("Videos can't be used as source material.");
+      return;
+    }
+    setExistingAssets((prev) => {
+      const existing = new Set(prev.map((a) => a.id));
+      const merged = [...prev];
+      for (const a of onlyImages) {
+        if (existing.has(a.id)) continue;
+        existing.add(a.id);
+        merged.push(a);
+      }
+      return merged;
+    });
+    setMode((prev) => prev ?? "video");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addAssets?.nonce]);
+
   const addFiles = useCallback(
     (files: FileList | File[]) => {
-      const accepted = Array.from(files).filter((f) =>
-        ACCEPTED_EXTENSIONS.test(f.name)
-      );
-      if (accepted.length === 0) return;
+      const all = Array.from(files);
+      const accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
+      if (accepted.length === 0) {
+        if (all.length > 0) {
+          toast.error("Only image files can be added — drop photos here.");
+        }
+        return;
+      }
+      if (accepted.length < all.length) {
+        const rejected = all.length - accepted.length;
+        toast.warning(
+          `${rejected} file${rejected === 1 ? "" : "s"} skipped — only images are accepted.`,
+        );
+      }
 
       // Default to "video" mode the moment the first asset lands and no
-      // mode has been chosen — without this, drag-drop users never see
-      // the Auto-prompt button (it gates on `mode === "video"`).
+      // mode has been chosen.
       setMode((prev) => prev ?? "video");
 
       const newPending: PendingFile[] = accepted.map((file) => ({
@@ -288,6 +354,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     setMode(null);
     setVoiceoverEnabled(false);
     setVoiceoverText("");
+    setVoiceoverSubject("");
     setMusicEnabled(false);
     setMusicPrompt("Soft ambient piano, luxury real estate");
     setMusicVolume(20);
@@ -302,6 +369,10 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
       if (assetData) {
         try {
           const asset: ExistingAsset = JSON.parse(assetData);
+          if (asset.assetType === "video") {
+            toast.error("Videos can't be used as source material — drop images.");
+            return;
+          }
           setExistingAssets((prev) => {
             if (prev.some((a) => a.id === asset.id)) return prev;
             return [...prev, asset];
@@ -484,49 +555,6 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
     clearAll,
   ]);
 
-  // Auto-prompt is a cosmetic textarea helper — its output feeds the
-  // voiceover-script generator and the mention UX, not the engine. We hardcode
-  // the model/duration knobs the API expects to the luxury-template defaults
-  // so the helper keeps working after the UI sliders were removed.
-  const handleAutoPrompt = useCallback(async () => {
-    if (generatingPrompt || isUploading || uploadedAssetIds.length === 0) return;
-    setGeneratingPrompt(true);
-    try {
-      const res = await fetch("/api/generate-video-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoModel: "seedance",
-          imageAssetIds: uploadedAssetIds,
-          duration: 30,
-        }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: string;
-          code?: string;
-        };
-        if (res.status === 503 && body.code === "auth_fetch_failed") {
-          toast.error("Couldn't verify session — please try again.");
-        } else {
-          toast.error(body.error ?? "Failed to generate prompt");
-        }
-        return;
-      }
-      const { prompt: generated } = (await res.json()) as { prompt?: string };
-      if (typeof generated === "string" && generated.trim().length > 0) {
-        setPrompt(generated);
-        toast.success("Prompt generated — review and edit before generating");
-      } else {
-        toast.error("Empty prompt returned — please try again");
-      }
-    } catch {
-      toast.error("Couldn't reach the prompt service. Please try again.");
-    } finally {
-      setGeneratingPrompt(false);
-    }
-  }, [generatingPrompt, isUploading, uploadedAssetIds]);
-
   const toggleMode = (m: CreationMode) => {
     setMode((prev) => (prev === m ? null : m));
   };
@@ -689,108 +717,84 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
         )}
       </AnimatePresence>
 
-      {/* Text input */}
-      <div className="relative">
-        {mode === "video" && uploadedAssetIds.length >= 1 && !isUploading && (
-          <button
-            type="button"
-            aria-label="Auto-generate prompt from your images"
-            title="Auto-generate prompt from your images"
-            disabled={generatingPrompt}
-            onClick={handleAutoPrompt}
-            className={cn(
-              "absolute top-0 right-0 z-10",
-              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md",
-              "text-xs font-medium transition-colors duration-150 outline-none",
-              "border",
-              generatingPrompt
-                ? "text-[var(--color-accent)]/60 border-[var(--color-accent)]/20 cursor-not-allowed"
-                : "text-[var(--color-accent)] border-[var(--color-accent)]/35 bg-[var(--color-accent)]/5 hover:bg-[var(--color-accent)]/15"
-            )}
-          >
-            {generatingPrompt ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Sparkles size={12} />
-            )}
-            <span>{generatingPrompt ? "Generating…" : "Auto-prompt"}</span>
-          </button>
-        )}
-        <textarea
-          ref={textareaRef}
-          value={prompt}
-          onChange={handlePromptChange}
-          onKeyDown={handlePromptKeyDown}
-          onBlur={() => {
-            setTimeout(closeMention, 120);
-          }}
-          placeholder={
-            mode === "video"
-              ? "Describe the video (optional) — type @ to reference images..."
-              : mode === "enhance"
+      {/* Text input — hidden in video mode. The scene-based engine derives its
+          per-scene cinematography prompts from the images + template + opener
+          bank; a user-supplied prompt was never forwarded to the engine and
+          only bred confusion. The textarea stays for enhance mode (prompts
+          still steer the image tools) and for the empty/initial state. */}
+      {mode !== "video" && (
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={handlePromptChange}
+            onKeyDown={handlePromptKeyDown}
+            onBlur={() => {
+              setTimeout(closeMention, 120);
+            }}
+            placeholder={
+              mode === "enhance"
                 ? "Describe the enhancement (or leave empty for auto)..."
                 : "Drop photos and select what to create..."
-          }
-          rows={1}
-          className={cn(
-            "w-full bg-transparent resize-none outline-none",
-            "text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-            "leading-relaxed",
-            mode === "video" && uploadedAssetIds.length >= 1 && !isUploading
-              ? "pr-32"
-              : ""
-          )}
-        />
+            }
+            rows={1}
+            className={cn(
+              "w-full bg-transparent resize-none outline-none",
+              "text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+              "leading-relaxed"
+            )}
+          />
 
-        {/* @-mention autocomplete */}
-        <AnimatePresence>
-          {mention.open && mentionSuggestions.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 4, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.98 }}
-              transition={{ duration: 0.1, ease: "easeOut" as const }}
-              className={cn(
-                "absolute left-0 bottom-full mb-2 z-50",
-                "min-w-[180px] max-h-52 overflow-y-auto rounded-xl p-1",
-                "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
-                "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-              )}
-              role="listbox"
-              aria-label="Image mentions"
-            >
-              {mentionSuggestions.map((name, i) => {
-                const active = i === mention.activeIndex;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                    }}
-                    onClick={() => applyMention(name)}
-                    onMouseEnter={() =>
-                      setMention((s) => ({ ...s, activeIndex: i }))
-                    }
-                    className={cn(
-                      "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left",
-                      "text-xs font-medium transition-colors duration-100",
-                      active
-                        ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                        : "text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/8"
-                    )}
-                  >
-                    <span className="text-[var(--color-muted)]">@</span>
-                    <span>{name}</span>
-                  </button>
-                );
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+          {/* @-mention autocomplete */}
+          <AnimatePresence>
+            {mention.open && mentionSuggestions.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 4, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                transition={{ duration: 0.1, ease: "easeOut" as const }}
+                className={cn(
+                  "absolute left-0 bottom-full mb-2 z-50",
+                  "min-w-[180px] max-h-52 overflow-y-auto rounded-xl p-1",
+                  "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
+                  "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
+                )}
+                role="listbox"
+                aria-label="Image mentions"
+              >
+                {mentionSuggestions.map((name, i) => {
+                  const active = i === mention.activeIndex;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                      }}
+                      onClick={() => applyMention(name)}
+                      onMouseEnter={() =>
+                        setMention((s) => ({ ...s, activeIndex: i }))
+                      }
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left",
+                        "text-xs font-medium transition-colors duration-100",
+                        active
+                          ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                          : "text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/8"
+                      )}
+                    >
+                      <span className="text-[var(--color-muted)]">@</span>
+                      <span>{name}</span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Expanded inputs for voiceover (only when toggled on) */}
       <AnimatePresence>
@@ -804,24 +808,42 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
           >
             <div className="mt-2 space-y-2">
               {voiceoverEnabled && (
-                <div className="relative">
-                  <textarea
-                    value={voiceoverText}
-                    onChange={(e) => setVoiceoverText(e.target.value)}
-                    placeholder="Write the narration script..."
-                    rows={2}
-                    maxLength={500}
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={voiceoverSubject}
+                    onChange={(e) => setVoiceoverSubject(e.target.value)}
+                    placeholder="What to mention (optional) — e.g. 4 beds, ocean view, rooftop deck"
+                    maxLength={240}
                     className={cn(
-                      "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-2 pr-9",
+                      "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
                       "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-                      "border border-[var(--color-border)] outline-none resize-none",
+                      "border border-[var(--color-border)] outline-none",
                       "focus:border-[var(--color-accent)]/50"
                     )}
                   />
+                  <div className="relative">
+                    <textarea
+                      value={voiceoverText}
+                      onChange={(e) => setVoiceoverText(e.target.value)}
+                      placeholder="Write the narration script..."
+                      rows={2}
+                      maxLength={500}
+                      className={cn(
+                        "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-2 pr-9",
+                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+                        "border border-[var(--color-border)] outline-none resize-none",
+                        "focus:border-[var(--color-accent)]/50"
+                      )}
+                    />
                   <button
                     type="button"
-                    title="Generate script with AI"
-                    disabled={generatingScript || !prompt.trim()}
+                    title={
+                      voiceoverSubject.trim()
+                        ? "Generate script with AI"
+                        : "Add a short subject above to generate a script"
+                    }
+                    disabled={generatingScript || !voiceoverSubject.trim()}
                     onClick={async () => {
                       setGeneratingScript(true);
                       try {
@@ -831,7 +853,10 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                         const res = await fetch("/api/generate-script", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ prompt: prompt.trim(), duration: totalSec }),
+                          body: JSON.stringify({
+                            prompt: voiceoverSubject.trim(),
+                            duration: totalSec,
+                          }),
                         });
                         if (!res.ok) {
                           const body = (await res.json().catch(() => ({}))) as {
@@ -872,7 +897,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                     className={cn(
                       "absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center",
                       "transition-colors duration-150",
-                      generatingScript || !prompt.trim()
+                      generatingScript || !voiceoverSubject.trim()
                         ? "text-[var(--color-muted)]/40 cursor-not-allowed"
                         : "text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
                     )}
@@ -883,6 +908,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
                       <Wand2 size={12} />
                     )}
                   </button>
+                  </div>
                 </div>
               )}
               {musicEnabled && (
@@ -1147,7 +1173,7 @@ export function CreationBar({ projectId, preload }: CreationBarProps) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*"
         multiple
         className="sr-only"
         onChange={handleFileChange}

@@ -1,6 +1,16 @@
 "use client";
 
-import { Download, Loader2, SlidersHorizontal, Sparkles, Square, Trash2, Video } from "lucide-react";
+import {
+  Check,
+  Download,
+  Image as ImageIcon,
+  Loader2,
+  SlidersHorizontal,
+  Sparkles,
+  Square,
+  Trash2,
+  Video,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AssetStatus = "uploaded" | "processing" | "done" | "failed";
@@ -21,6 +31,14 @@ interface AssetCardProps {
   onDelete?: () => void;
   onCancel?: () => void;
   onPreview?: () => void;
+  /**
+   * Multi-select support. When `isSelectable`, clicking anywhere on the card
+   * toggles selection instead of opening preview, and a checkbox overlay
+   * appears top-left. Consumer (AssetGrid) manages the set of selected ids.
+   */
+  isSelectable?: boolean;
+  isSelected?: boolean;
+  onSelectToggle?: () => void;
 }
 
 const statusConfig: Record<
@@ -76,17 +94,31 @@ export function AssetCard({
   onDelete,
   onCancel,
   onPreview,
+  isSelectable = false,
+  isSelected = false,
+  onSelectToggle,
 }: AssetCardProps) {
   const statusMeta = statusConfig[status];
   const displayUrl = status === "done" && processedUrl ? processedUrl : originalUrl;
   // For card thumbnail: use thumbnailUrl if available (e.g. source image for videos)
   const thumbUrl = thumbnailUrl || displayUrl;
-  const showActionButtons = status === "uploaded" || status === "done";
+  const showActionButtons =
+    !isSelectable && (status === "uploaded" || status === "done");
   const showCompare = status === "done" && !!processedUrl && toolUsed === "enhance";
+  const draggable =
+    !isSelectable && (status === "uploaded" || status === "done");
+
+  const handleCardClick = () => {
+    if (isSelectable) {
+      onSelectToggle?.();
+      return;
+    }
+    onPreview?.();
+  };
 
   return (
     <div
-      draggable={status === "uploaded" || status === "done"}
+      draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.setData(
           "application/reelio-asset",
@@ -96,10 +128,12 @@ export function AssetCard({
       }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl",
-        "bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/30",
-        "hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
-        "transition-[border-color,box-shadow] duration-200",
-        (status === "uploaded" || status === "done") && "cursor-grab active:cursor-grabbing"
+        "bg-[var(--color-surface)] border transition-[border-color,box-shadow] duration-200",
+        isSelected
+          ? "border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(201,168,76,0.45),0_8px_32px_#c9a84c1a]"
+          : "border-[var(--color-border)] hover:border-[var(--color-accent)]/30 hover:shadow-[0_0_0_1px_#c9a84c22,0_8px_32px_#c9a84c0a]",
+        draggable && "cursor-grab active:cursor-grabbing",
+        isSelectable && "cursor-pointer"
       )}
     >
       {/* Thumbnail */}
@@ -158,10 +192,14 @@ export function AssetCard({
           </>
         ) : (
           <>
-            {/* Clickable media area — calls onPreview; action buttons stop propagation */}
+            {/* Clickable media area — preview click in normal mode, selection
+                toggle in selection mode. Child action buttons stop propagation. */}
             <div
-              className={cn("w-full h-full", onPreview && "cursor-pointer")}
-              onClick={() => onPreview?.()}
+              className={cn(
+                "w-full h-full",
+                (onPreview || isSelectable) && "cursor-pointer",
+              )}
+              onClick={handleCardClick}
             >
               {assetType === "video" && !thumbnailUrl ? (
                 <video
@@ -181,31 +219,53 @@ export function AssetCard({
               )}
             </div>
 
-            {/* Delete button overlay */}
-            <div
-              className={cn(
-                "absolute top-2 left-2 z-10",
-                "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
-              )}
-            >
-              <button
-                type="button"
-                title="Remove asset"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete?.();
-                }}
+            {/* Top-left overlay — selection checkbox in select mode, delete
+                button otherwise. Only one shows at a time to avoid crowding. */}
+            {isSelectable ? (
+              <div
                 className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center",
-                  "bg-[var(--color-surface)]/90 backdrop-blur",
-                  "border border-[var(--color-border)]",
-                  "hover:border-red-500/50 transition-colors duration-150",
-                  "text-[var(--color-muted)] hover:text-red-400"
+                  "absolute top-2 left-2 z-10 pointer-events-none",
+                )}
+                aria-hidden
+              >
+                <div
+                  className={cn(
+                    "w-6 h-6 rounded-md flex items-center justify-center border",
+                    "transition-colors duration-150",
+                    isSelected
+                      ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-[var(--color-background)]"
+                      : "bg-[var(--color-surface)]/90 backdrop-blur border-[var(--color-border)] text-transparent",
+                  )}
+                >
+                  <Check size={14} strokeWidth={3} />
+                </div>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "absolute top-2 left-2 z-10",
+                  "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
                 )}
               >
-                <Trash2 size={14} />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  title="Remove asset"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete?.();
+                  }}
+                  className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center",
+                    "bg-[var(--color-surface)]/90 backdrop-blur",
+                    "border border-[var(--color-border)]",
+                    "hover:border-red-500/50 transition-colors duration-150",
+                    "text-[var(--color-muted)] hover:text-red-400"
+                  )}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
 
             {/* Action buttons overlay */}
             {showActionButtons && (
@@ -283,12 +343,32 @@ export function AssetCard({
                 Compare
               </button>
             )}
+
+            {/* Media-type indicator — icon-only so it stays legible without
+                competing with the thumbnail. Needed for videos that use their
+                source image as the poster. */}
+            <span
+              className={cn(
+                "absolute bottom-2 right-2 z-10",
+                "inline-flex items-center justify-center w-5 h-5 rounded-md",
+                "bg-black/55 text-white backdrop-blur-sm",
+                "pointer-events-none select-none",
+              )}
+              aria-label={assetType === "video" ? "Video asset" : "Image asset"}
+              title={assetType === "video" ? "Video" : "Image"}
+            >
+              {assetType === "video" ? (
+                <Video size={11} />
+              ) : (
+                <ImageIcon size={11} />
+              )}
+            </span>
           </>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-1.5 px-2.5 py-2 flex-wrap">
         {/* Status badge */}
         <span
           className={cn(

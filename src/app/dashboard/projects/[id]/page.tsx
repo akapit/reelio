@@ -6,8 +6,12 @@ import { motion } from "motion/react";
 import { ArrowLeft, MapPin, Calendar, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { CreationBar, type RerunPayload } from "@/components/media/CreationBar";
-import { AssetGrid } from "@/components/media/AssetGrid";
+import {
+  CreationBar,
+  type AddAssetsPayload,
+  type RerunPayload,
+} from "@/components/media/CreationBar";
+import { AssetGrid, type AddToCreatorAsset } from "@/components/media/AssetGrid";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -47,17 +51,26 @@ export default function ProjectPage() {
   const [creationPreload, setCreationPreload] = useState<RerunPayload | null>(
     null,
   );
+  const [creatorAdd, setCreatorAdd] = useState<AddAssetsPayload | null>(null);
   const creationBarRef = useRef<HTMLDivElement>(null);
 
-  const handleRerun = (payload: Omit<RerunPayload, "nonce">) => {
-    setCreationPreload({ ...payload, nonce: Date.now() });
-    // Scroll so the user sees the bar rehydrated.
+  const scrollToCreationBar = () => {
     requestAnimationFrame(() => {
       creationBarRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     });
+  };
+
+  const handleRerun = (payload: Omit<RerunPayload, "nonce">) => {
+    setCreationPreload({ ...payload, nonce: Date.now() });
+    scrollToCreationBar();
+  };
+
+  const handleAddToCreator = (assets: AddToCreatorAsset[]) => {
+    setCreatorAdd({ nonce: Date.now(), assets });
+    scrollToCreationBar();
   };
 
   useEffect(() => {
@@ -255,7 +268,11 @@ export default function ProjectPage() {
 
       {/* Creation bar */}
       <motion.section {...fadeUp(0.14)} ref={creationBarRef}>
-        <CreationBar projectId={project.id} preload={creationPreload} />
+        <CreationBar
+          projectId={project.id}
+          preload={creationPreload}
+          addAssets={creatorAdd}
+        />
       </motion.section>
 
       {/* Asset grid section */}
@@ -266,7 +283,11 @@ export default function ProjectPage() {
         >
           Assets
         </h3>
-        <AssetGrid projectId={project.id} onRerun={handleRerun} />
+        <AssetGrid
+          projectId={project.id}
+          onRerun={handleRerun}
+          onAddToCreator={handleAddToCreator}
+        />
       </motion.section>
     </div>
   );
