@@ -34,7 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               ? "border-red-500/70 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
               : [
                   "border-[var(--color-border)]",
-                  "hover:border-[#3a3a3e]",
+                  "hover:border-[var(--color-muted)]",
                   "focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/15",
                 ],
             "disabled:opacity-50 disabled:cursor-not-allowed",

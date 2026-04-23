@@ -4,29 +4,44 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { TEMPLATE_NAMES } from "@/lib/engine/models";
+import { SEEDANCE_MULTIREF_MAX_IMAGES } from "@/lib/engine/prompt-writer/seedance-multiref";
 import type { engineGenerateTask } from "../../../../../trigger/engine-generate";
+import type { engineGenerateSeedanceTask } from "../../../../../trigger/engine-generate-seedance";
 
 const BodySchema = z.object({
   projectId: z.string().uuid(),
   imageAssetIds: z.array(z.string().uuid()).min(1).max(20),
   templateName: z.enum(TEMPLATE_NAMES),
   /**
+   * Generation mode. "scenes" = the default scene-based engine (planner
+   * splits into N clips, ffmpeg concats). "seedance" = single-call Seedance
+   * 2 with all references in one 4-15s video. Different shape, so we branch
+   * on this at dispatch time.
+   */
+  mode: z.enum(["scenes", "seedance"]).optional(),
+  /**
    * Video-generation backend. Optional; server default resolves from
-   * ENGINE_VIDEO_PROVIDER env or "kieai".
+   * ENGINE_VIDEO_PROVIDER env or "kieai". Only applies to mode="scenes".
    */
   videoProvider: z.enum(["piapi", "kieai"]).optional(),
   /**
    * User's video-model selection. When present, every scene is hard-overridden
    * to this choice after the LLM prompt writer returns — the LLM still writes
    * the motion prompt, but doesn't get to pick the model. Omit to let the LLM
-   * pick per scene.
+   * pick per scene. Only applies to mode="scenes".
    */
   modelChoice: z.enum(["kling", "seedance", "seedance-fast"]).optional(),
+  /** Seedance mode only: target video duration 4-15s. Default 15. */
+  durationSec: z.number().int().min(4).max(15).optional(),
+  /** Seedance mode only: output aspect ratio. Default 16:9. */
+  aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
   /** Optional ElevenLabs voiceover text (max ~2000 chars). */
   voiceoverText: z.string().max(2000).optional(),
   voiceoverVoiceId: z.string().optional(),
-  /** Optional ElevenLabs background-music prompt. */
+  /** Optional ElevenLabs background-music prompt. Scene mode only. */
   musicPrompt: z.string().max(500).optional(),
+  /** Seedance mode only: pick a track from the R2 library for this mood. */
+  musicMood: z.enum(["upbeat", "luxury", "calm"]).optional(),
   /** Music loudness 0..1 in the final mix. Default 0.2 at the engine layer. */
   musicVolume: z.number().min(0).max(1).optional(),
 });
@@ -58,13 +73,29 @@ export async function POST(req: NextRequest) {
     projectId,
     imageAssetIds,
     templateName,
+    mode = "scenes",
     videoProvider,
     modelChoice,
+    durationSec,
+    aspectRatio,
     voiceoverText,
     voiceoverVoiceId,
     musicPrompt,
+    musicMood,
     musicVolume,
   } = parsed.data;
+
+  // Seedance mode: single-call generation caps at 9 references (kie.ai
+  // spec). Reject > 9 at the API boundary — the UI also gates this, but the
+  // server is the authoritative guard.
+  if (mode === "seedance" && imageAssetIds.length > SEEDANCE_MULTIREF_MAX_IMAGES) {
+    return NextResponse.json(
+      {
+        error: `Seedance mode accepts at most ${SEEDANCE_MULTIREF_MAX_IMAGES} images (received ${imageAssetIds.length})`,
+      },
+      { status: 400 },
+    );
+  }
 
   const { data: project, error: projectErr } = await supabase
     .from("projects")
@@ -138,13 +169,17 @@ export async function POST(req: NextRequest) {
         // to match the shape the modal already reads for finished videos.
         referenceAssetIds: imageAssetIds.slice(1),
         engineRequest: {
+          mode,
           templateName,
           imageAssetIds,
           ...(videoProvider ? { videoProvider } : {}),
           ...(modelChoice ? { modelChoice } : {}),
+          ...(durationSec !== undefined ? { durationSec } : {}),
+          ...(aspectRatio ? { aspectRatio } : {}),
           ...(voiceoverText ? { voiceoverText } : {}),
           ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
           ...(musicPrompt ? { musicPrompt } : {}),
+          ...(musicMood ? { musicMood } : {}),
           ...(musicVolume !== undefined ? { musicVolume } : {}),
         },
       },
@@ -157,19 +192,40 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await tasks.trigger<typeof engineGenerateTask>("engine-generate", {
-      assetId: placeholder.id,
-      userId: user.id,
-      projectId,
-      imageUrls: imageUrls as string[],
-      templateName,
-      ...(videoProvider ? { videoProvider } : {}),
-      ...(modelChoice ? { modelChoice } : {}),
-      ...(voiceoverText ? { voiceoverText } : {}),
-      ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
-      ...(musicPrompt ? { musicPrompt } : {}),
-      ...(musicVolume !== undefined ? { musicVolume } : {}),
-    });
+    if (mode === "seedance") {
+      await tasks.trigger<typeof engineGenerateSeedanceTask>(
+        "engine-generate-seedance",
+        {
+          assetId: placeholder.id,
+          userId: user.id,
+          projectId,
+          imageUrls: imageUrls as string[],
+          // Mood hint doubles as context for the prompt writer; pass the
+          // template name through so we keep one knob in the UI.
+          mood: templateName,
+          ...(durationSec !== undefined ? { durationSec } : {}),
+          ...(aspectRatio ? { aspectRatio } : {}),
+          ...(voiceoverText ? { voiceoverText } : {}),
+          ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
+          ...(musicMood ? { musicMood } : {}),
+          ...(musicVolume !== undefined ? { musicVolume } : {}),
+        },
+      );
+    } else {
+      await tasks.trigger<typeof engineGenerateTask>("engine-generate", {
+        assetId: placeholder.id,
+        userId: user.id,
+        projectId,
+        imageUrls: imageUrls as string[],
+        templateName,
+        ...(videoProvider ? { videoProvider } : {}),
+        ...(modelChoice ? { modelChoice } : {}),
+        ...(voiceoverText ? { voiceoverText } : {}),
+        ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
+        ...(musicPrompt ? { musicPrompt } : {}),
+        ...(musicVolume !== undefined ? { musicVolume } : {}),
+      });
+    }
   } catch (err) {
     console.error("[engine/generate] Failed to trigger task:", err);
     await supabase.from("assets").delete().eq("id", placeholder.id);

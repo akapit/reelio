@@ -49,6 +49,66 @@ const VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
   "seedance-fast": "bytedance/seedance-2-fast",
 };
 
+/**
+ * Kling 2.5 Turbo anti-artifact defaults.
+ *
+ * Our motion prompts are intentionally terse (see prompt-writer's Kling system
+ * prompt), so Kling has room to invent bizarre camera moves and hallucinate
+ * objects when left unconstrained. Two upstream knobs suppress this:
+ *
+ *   • `negative_prompt` enumerates failure modes we actually see in real-estate
+ *     output (warped walls, morphing furniture, duplicates, flicker, spurious
+ *     text/logos). kie.ai caps this at 500 chars; we stay under 400 to leave
+ *     headroom for retry augmentation (see `scene-generator` — the evaluator's
+ *     `issues[]` get appended on attempt 2).
+ *   • `cfg_scale` raises prompt adherence above Kling's 0.5 default. 0.6 is a
+ *     conservative lift that tightens motion fidelity without making output
+ *     rigid; the scene-generator bumps to 0.75 on retry.
+ *
+ * Both are overridable from `VideoGenerationOptions` and from env vars so we
+ * can canary changes in prod without a code push.
+ */
+export const DEFAULT_KLING_NEGATIVE_PROMPT =
+  "warped walls, morphing furniture, melted objects, duplicated people, floating items, twisted windows, flicker, jitter, text artifacts, watermarks, logos, hands, people, cartoon, anime, blurry, low quality, distorted geometry, extra limbs, deformed architecture, liquid walls";
+export const DEFAULT_KLING_CFG_SCALE = 0.6;
+/**
+ * cfg_scale used on the retry attempt when a scene fails evaluation or the
+ * provider errors. Tighter prompt adherence than the baseline — trades a hair
+ * of creative liberty for fewer invented camera moves. Overridable via
+ * ENGINE_KLING_RETRY_CFG_SCALE.
+ */
+export const DEFAULT_KLING_RETRY_CFG_SCALE = 0.75;
+
+/** Append evaluator-reported issues to the baseline negative prompt, cap at 500 chars. */
+export function composeKlingRetryNegativePrompt(issues: string[]): string {
+  const base = DEFAULT_KLING_NEGATIVE_PROMPT;
+  const extra = issues.map((s) => s.trim()).filter(Boolean).join(", ");
+  if (!extra) return base;
+  const combined = `${base}, ${extra}`;
+  if (combined.length <= 500) return combined;
+  const trimmed = combined.slice(0, 500);
+  const lastComma = trimmed.lastIndexOf(",");
+  return lastComma > 400 ? trimmed.slice(0, lastComma) : trimmed;
+}
+
+function resolveKlingNegativePrompt(override: string | undefined): string {
+  const env = process.env.ENGINE_KLING_NEG_PROMPT;
+  const chosen = override ?? env ?? DEFAULT_KLING_NEGATIVE_PROMPT;
+  // kie.ai enforces <= 500 chars; trim safely at a comma boundary when we can.
+  if (chosen.length <= 500) return chosen;
+  const trimmed = chosen.slice(0, 500);
+  const lastComma = trimmed.lastIndexOf(",");
+  return lastComma > 400 ? trimmed.slice(0, lastComma) : trimmed;
+}
+
+function resolveKlingCfgScale(override: number | undefined): number {
+  const envRaw = process.env.ENGINE_KLING_CFG_SCALE;
+  const envParsed = envRaw ? Number.parseFloat(envRaw) : Number.NaN;
+  const raw = override ?? (Number.isFinite(envParsed) ? envParsed : DEFAULT_KLING_CFG_SCALE);
+  // Clamp to Kling's documented 0..1 range.
+  return Math.max(0, Math.min(1, raw));
+}
+
 /** Shared headers for all kie.ai requests */
 function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
@@ -558,11 +618,14 @@ export const kieaiProvider: IMediaProvider = {
       const useReferenceMode =
         (options.referenceImageUrls?.length ?? 0) > 0 ||
         (hasMentions && allRefs.length > 0);
-      // Seedance expects rich descriptive prose (we also preserve @imageN
-      // tokens if imageCount > 0). Translate before sending.
+      // Cleanup pass: strip dangling @imageN tokens (any index > available
+      // refs) and normalize whitespace. The historical LLM enrichment step
+      // was removed — all current callers already ship fully-authored
+      // prompts via Claude Sonnet, so the extra enrichment call was pure
+      // cost/latency overhead.
       const seedancePrompt = await translatePromptForSeedance(
         options.prompt,
-        { duration: seedanceDuration, imageCount: allRefs.length },
+        { imageCount: allRefs.length },
         { log: logKie },
       );
       logKie("seedance.inputMode", {
@@ -574,7 +637,7 @@ export const kieaiProvider: IMediaProvider = {
         prompt: seedancePrompt,
         aspect_ratio: aspectRatio,
         duration: seedanceDuration,
-        resolution: "720p",
+        resolution: options.resolution ?? "720p",
         generate_audio: false,
         web_search: false,
         nsfw_checker: false,
@@ -602,13 +665,26 @@ export const kieaiProvider: IMediaProvider = {
       // 5s); this hardcode catches any out-of-tree caller that forgot.
       const duration = "5";
       if (options.imageUrl) {
+        const negativePrompt = resolveKlingNegativePrompt(options.negativePrompt);
+        const cfgScale = resolveKlingCfgScale(options.cfgScale);
         input = {
           prompt:
             options.prompt ??
             "Slow cinematic camera movement, real estate property walkthrough",
           image_url: options.imageUrl,
           duration,
+          negative_prompt: negativePrompt,
+          cfg_scale: cfgScale,
         };
+        logKie("kling.params", {
+          cfgScale,
+          negativePromptLength: negativePrompt.length,
+          // Preview so Trigger.dev logs are still scannable without dumping
+          // the full 400+ char anti-artifact block.
+          negativePromptPreview: negativePrompt.slice(0, 80),
+          usedNegativeOverride: options.negativePrompt !== undefined,
+          usedCfgOverride: options.cfgScale !== undefined,
+        });
       } else {
         // No image provided: kie.ai Kling 2.5 turbo i2v requires image_url.
         // Fail loudly rather than sending a malformed request the API will

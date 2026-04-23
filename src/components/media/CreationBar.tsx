@@ -14,6 +14,7 @@ import {
   Check,
   ChevronDown,
   Wand2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
@@ -30,6 +31,14 @@ import type { VideoModel } from "@/lib/media/types";
  * produce a shorter-than-intended cut.
  */
 const MIN_IMAGES_FOR_VIDEO = 6;
+
+/**
+ * Seedance mode: kie.ai's spec caps `reference_image_urls` at 9. We mirror
+ * the limit in the UI so the user can't attach a 10th image in the first
+ * place — the server also rejects >9 in seedance mode, but gating at the
+ * boundary is friendlier than a toast-on-submit.
+ */
+const MAX_IMAGES_SEEDANCE = 9;
 
 /** The only template surfaced in the UI today. See engine/templates/luxury_30s.json. */
 const ENGINE_TEMPLATE = "luxury_30s" as const;
@@ -106,6 +115,14 @@ interface ExistingAsset {
 
 type CreationMode = "enhance" | "video" | null;
 
+/**
+ * Video sub-mode. "scenes" runs the scene-based engine (planner -> N clips ->
+ * ffmpeg concat). "seedance" runs the single-call Seedance 2 path with all
+ * references attached to ONE 4-15s generation. Different image caps and
+ * minimums — see `MIN_IMAGES_FOR_VIDEO` / `MAX_IMAGES_SEEDANCE`.
+ */
+type VideoMode = "scenes" | "seedance";
+
 // The creation box only accepts images — both the enhance tools and the
 // scene-based video engine ingest photos only. Dropping a video here would
 // silently fail downstream, so we reject it at the boundary with a toast.
@@ -124,6 +141,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
   const [prompt, setPrompt] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const [mode, setMode] = useState<CreationMode>(null);
+  const [videoMode, setVideoMode] = useState<VideoMode>("scenes");
 
   const [generatingScript, setGeneratingScript] = useState(false);
 
@@ -141,6 +159,15 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
   const [musicPrompt, setMusicPrompt] = useState(
     "Soft ambient piano, luxury real estate"
   );
+  /**
+   * Seedance-mode music mood — picks a track from the curated R2 library
+   * (see src/lib/audio/background-music.ts). Null unless the user has
+   * picked one. Different from `musicPrompt` (scene-mode ElevenLabs prompt)
+   * because Seedance mode uses the royalty-free library instead.
+   */
+  const [musicMood, setMusicMood] = useState<
+    "upbeat" | "luxury" | "calm" | null
+  >("luxury");
   // 0..100 in UI; divided by 100 when sent server-side.
   const [musicVolume, setMusicVolume] = useState(20);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
@@ -174,15 +201,26 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
   const isUploading = pendingFiles.some((f) => f.isUploading);
   const hasAssets = uploadedAssetIds.length > 0;
 
-  // Video requires ≥ MIN_IMAGES_FOR_VIDEO; enhance requires ≥ 1. Show the
-  // actual gate ("need N more") as inline copy under the thumbnail strip,
-  // and disable submit until we clear it.
+  // Video requires ≥ MIN_IMAGES_FOR_VIDEO for the scene engine; seedance
+  // mode only needs 1 (but caps at 9, enforced at add-time). Enhance
+  // requires ≥ 1. Show the gate inline under the thumbnail strip and
+  // disable submit until it's met.
+  const videoMinImages =
+    mode === "video" && videoMode === "seedance" ? 1 : MIN_IMAGES_FOR_VIDEO;
   const videoImageShortfall = Math.max(
     0,
-    MIN_IMAGES_FOR_VIDEO - uploadedAssetIds.length,
+    videoMinImages - uploadedAssetIds.length,
   );
   const videoGateMet = mode !== "video" || videoImageShortfall === 0;
-  const canSubmit = hasAssets && !isUploading && mode !== null && videoGateMet;
+  // Seedance-mode ceiling: 9 refs. We gate at add-time below, but belt-and-
+  // braces here guards against paths (re-run preload, legacy state) that
+  // bypass `addFiles`.
+  const seedanceOver =
+    mode === "video" &&
+    videoMode === "seedance" &&
+    uploadedAssetIds.length > MAX_IMAGES_SEEDANCE;
+  const canSubmit =
+    hasAssets && !isUploading && mode !== null && videoGateMet && !seedanceOver;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -271,10 +309,24 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
     setExistingAssets((prev) => {
       const existing = new Set(prev.map((a) => a.id));
       const merged = [...prev];
+      const cap =
+        mode === "video" && videoMode === "seedance"
+          ? MAX_IMAGES_SEEDANCE
+          : Infinity;
+      let hitCap = false;
       for (const a of onlyImages) {
         if (existing.has(a.id)) continue;
+        if (merged.length + pendingFiles.length >= cap) {
+          hitCap = true;
+          break;
+        }
         existing.add(a.id);
         merged.push(a);
+      }
+      if (hitCap) {
+        toast.warning(
+          `Seedance mode caps at ${MAX_IMAGES_SEEDANCE} images — extra selections skipped.`,
+        );
       }
       return merged;
     });
@@ -285,7 +337,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
   const addFiles = useCallback(
     (files: FileList | File[]) => {
       const all = Array.from(files);
-      const accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
+      let accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
       if (accepted.length === 0) {
         if (all.length > 0) {
           toast.error("Only image files can be added — drop photos here.");
@@ -297,6 +349,34 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         toast.warning(
           `${rejected} file${rejected === 1 ? "" : "s"} skipped — only images are accepted.`,
         );
+      }
+
+      // Seedance-mode ceiling: Seedance 2's `reference_image_urls` caps at 9
+      // (kie.ai spec). Trim at the boundary so the user sees a clear "at
+      // limit" toast instead of a server 400 later.
+      if (mode === "video" && videoMode === "seedance") {
+        const currentCount =
+          existingAssets.length +
+          pendingFiles.length;
+        const remainingSlots = Math.max(
+          0,
+          MAX_IMAGES_SEEDANCE - currentCount,
+        );
+        if (remainingSlots === 0) {
+          toast.error(
+            `Seedance mode is capped at ${MAX_IMAGES_SEEDANCE} images. Remove one to add another.`,
+          );
+          return;
+        }
+        if (accepted.length > remainingSlots) {
+          const trimmed = accepted.length - remainingSlots;
+          toast.warning(
+            `Seedance mode caps at ${MAX_IMAGES_SEEDANCE} images — ${trimmed} file${
+              trimmed === 1 ? "" : "s"
+            } skipped.`,
+          );
+          accepted = accepted.slice(0, remainingSlots);
+        }
       }
 
       // Default to "video" mode the moment the first asset lands and no
@@ -333,7 +413,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         );
       });
     },
-    [upload]
+    [upload, mode, videoMode, existingAssets.length, pendingFiles.length]
   );
 
   const removeFile = useCallback((index: number) => {
@@ -357,6 +437,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
     setVoiceoverSubject("");
     setMusicEnabled(false);
     setMusicPrompt("Soft ambient piano, luxury real estate");
+    setMusicMood("luxury");
     setMusicVolume(20);
   }, []);
 
@@ -373,6 +454,18 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
             toast.error("Videos can't be used as source material — drop images.");
             return;
           }
+          // Seedance cap — mirror the addFiles guard for drag-from-library.
+          if (
+            mode === "video" &&
+            videoMode === "seedance" &&
+            existingAssets.length + pendingFiles.length >=
+              MAX_IMAGES_SEEDANCE
+          ) {
+            toast.error(
+              `Seedance mode is capped at ${MAX_IMAGES_SEEDANCE} images. Remove one to add another.`,
+            );
+            return;
+          }
           setExistingAssets((prev) => {
             if (prev.some((a) => a.id === asset.id)) return prev;
             return [...prev, asset];
@@ -385,7 +478,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       }
       addFiles(e.dataTransfer.files);
     },
-    [addFiles]
+    [addFiles, mode, videoMode, existingAssets.length, pendingFiles.length]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -521,19 +614,30 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       );
     } else if (mode === "video") {
       if (uploadedAssetIds.length > 0) {
-        // Dispatch to the scene-based engine. The server picks the model
-        // (ENGINE_DEFAULT_MODEL env, default "kling") and drives the luxury
-        // template. No model / duration / template knobs here anymore.
+        // Two paths:
+        //   - "scenes": the scene-based engine (planner + Kling/Seedance i2v
+        //     per scene + ffmpeg concat). Server picks the model via
+        //     ENGINE_DEFAULT_MODEL.
+        //   - "seedance": single-call Seedance 2 with all refs in one 4-15s
+        //     generation. Aspect ratio flows through; duration defaults to
+        //     15s server-side.
         engine.mutate({
           projectId,
           imageAssetIds: uploadedAssetIds,
           templateName: ENGINE_TEMPLATE,
+          mode: videoMode,
+          ...(videoMode === "seedance" ? { aspectRatio } : {}),
           voiceoverText: voiceoverEnabled
             ? voiceoverText.trim() || undefined
             : undefined,
-          musicPrompt: musicEnabled
-            ? musicPrompt.trim() || undefined
-            : undefined,
+          // Seedance mode: pick from the R2 library by mood.
+          // Scene mode: free-text prompt routed to ElevenLabs music.
+          ...(musicEnabled && videoMode === "seedance" && musicMood
+            ? { musicMood }
+            : {}),
+          ...(musicEnabled && videoMode === "scenes"
+            ? { musicPrompt: musicPrompt.trim() || undefined }
+            : {}),
           musicVolume: musicEnabled ? musicVolume / 100 : undefined,
         });
       }
@@ -543,6 +647,8 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
   }, [
     canSubmit,
     mode,
+    videoMode,
+    aspectRatio,
     uploadedAssetIds,
     process,
     engine,
@@ -551,6 +657,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
     voiceoverText,
     musicEnabled,
     musicPrompt,
+    musicMood,
     musicVolume,
     clearAll,
   ]);
@@ -703,13 +810,15 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               />
               <span>
                 <span className="font-medium tabular-nums">
-                  {uploadedAssetIds.length} / {MIN_IMAGES_FOR_VIDEO}
+                  {uploadedAssetIds.length} / {videoMinImages}
                 </span>
                 <span className="text-[var(--color-muted)]">
                   {" "}
-                  — add {videoImageShortfall} more{" "}
-                  {videoImageShortfall === 1 ? "photo" : "photos"} to generate a
-                  video.
+                  {videoMode === "seedance"
+                    ? `— add at least 1 image (Seedance accepts up to ${MAX_IMAGES_SEEDANCE}).`
+                    : `— add ${videoImageShortfall} more ${
+                        videoImageShortfall === 1 ? "photo" : "photos"
+                      } to generate a video.`}
                 </span>
               </span>
             </div>
@@ -913,18 +1022,42 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               )}
               {musicEnabled && (
                 <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={musicPrompt}
-                    onChange={(e) => setMusicPrompt(e.target.value)}
-                    placeholder="Music style..."
-                    className={cn(
-                      "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
-                      "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-                      "border border-[var(--color-border)] outline-none",
-                      "focus:border-[var(--color-accent)]/50"
-                    )}
-                  />
+                  {videoMode === "seedance" ? (
+                    // Seedance mode: mood picker — picks from our curated
+                    // R2 library of royalty-free tracks.
+                    <div className="flex-1 flex items-center gap-1">
+                      {(["upbeat", "luxury", "calm"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setMusicMood(m)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-md text-[11px] font-medium capitalize",
+                            "transition-colors duration-150 outline-none",
+                            musicMood === m
+                              ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                              : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
+                          )}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    // Scene mode: still text-prompted via ElevenLabs.
+                    <input
+                      type="text"
+                      value={musicPrompt}
+                      onChange={(e) => setMusicPrompt(e.target.value)}
+                      placeholder="Music style..."
+                      className={cn(
+                        "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
+                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+                        "border border-[var(--color-border)] outline-none",
+                        "focus:border-[var(--color-accent)]/50"
+                      )}
+                    />
+                  )}
                   <input
                     type="range"
                     min={0}
@@ -992,6 +1125,33 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               className="inline-flex items-center gap-0.5 overflow-hidden"
             >
               <div className="w-px h-5 bg-[var(--color-border)] mx-1.5" />
+
+              {/* Seedance-mode toggle. When ON, we ship all reference
+                  images to Seedance 2 in a single 15s generation (<=9
+                  refs) instead of running the scene-based engine. */}
+              <button
+                type="button"
+                onClick={() =>
+                  setVideoMode((prev) =>
+                    prev === "seedance" ? "scenes" : "seedance",
+                  )
+                }
+                title={
+                  videoMode === "seedance"
+                    ? `Seedance mode (single 15s video, up to ${MAX_IMAGES_SEEDANCE} images)`
+                    : "Switch to Seedance mode"
+                }
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 h-7 rounded-md transition-colors duration-150",
+                  "text-[11px] font-medium",
+                  videoMode === "seedance"
+                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
+                )}
+              >
+                <Sparkles size={12} />
+                <span>Seedance</span>
+              </button>
 
               <button
                 type="button"

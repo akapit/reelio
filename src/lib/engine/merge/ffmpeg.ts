@@ -160,10 +160,41 @@ export async function mergeScenes(
       // Single scene: no xfade needed — just copy the file.
       await fsp.copyFile(scenePaths[0], concatPath);
     } else {
+      // Probe every clip so we can detect dimension drift between scenes.
+      // Kling 2.5 usually returns 1920x1080 but occasionally emits a nearby
+      // size (e.g. 1928x1072) depending on how it interprets the source AR;
+      // xfade then errors out because its two inputs must match exactly.
+      // Fix: pick the most-common dimensions as the target and have
+      // buildConcatGraph emit a per-input scale+crop normalization filter.
+      const probes = await Promise.all(
+        scenePaths.map((p) => runFfprobe(p)),
+      );
+      const dimCounts = new Map<string, { w: number; h: number; count: number }>();
+      for (const p of probes) {
+        const key = `${p.width}x${p.height}`;
+        const existing = dimCounts.get(key);
+        if (existing) existing.count += 1;
+        else dimCounts.set(key, { w: p.width, h: p.height, count: 1 });
+      }
+      const modal = [...dimCounts.values()].sort((a, b) => b.count - a.count)[0];
+      const target = { width: modal.w, height: modal.h };
+      const mismatchCount = probes.filter(
+        (p) => p.width !== target.width || p.height !== target.height,
+      ).length;
+      log("concat.normalize", {
+        target,
+        inputCount: probes.length,
+        mismatchCount,
+        distinctSizes: [...dimCounts.keys()],
+      });
+
       // buildConcatGraph requires shots that expose `transitionOut` and
       // `durationSec` — Scene satisfies that interface directly.
-      const { args: concatInputArgs, filter: concatFilter } =
-        buildConcatGraph(scenePaths, orderedScenes);
+      const { args: concatInputArgs, filter: concatFilter } = buildConcatGraph(
+        scenePaths,
+        orderedScenes,
+        { target },
+      );
 
       const concatArgs = [
         "-y",

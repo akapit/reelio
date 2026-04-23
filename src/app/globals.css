@@ -1,29 +1,30 @@
 @import "tailwindcss";
 
 /*
- * Reelio brand tokens — premium motion, warm gold on deep black.
+ * Reelio brand tokens — premium motion, warm gold on soft cream (light mode default).
  *
- *   • Deep black      #0B0B0B — primary surface
+ *   • Deep black      #0B0B0B — foreground text
  *   • Warm gold       #D4A84F — accent (CTAs, focus, selection)
  *   • Rich amber      #F2A33B — accent-warm (hover / intensity)
- *   • Soft cream      #F5F1E8 — light-mode surface (documents, premium views)
- *   • Warm white      #F8F6F1 — foreground text
+ *   • Soft cream      #F5F1E8 — primary surface
+ *   • Warm white      #F8F6F1 — cards / elevated surface
  *
  * Surfaces are warmed deliberately (yellow-leaning neutrals) so the gold accent
- * feels native rather than applied. Fonts stay geometric-sans across display
- * and body per brand: Inter for display (calm, modern, premium), Assistant for
- * body (covers Hebrew without shifting metrics between scripts).
+ * feels native rather than applied. Elevation flows cream → warm white → near-white,
+ * each step slightly lighter so shadows carry the depth. Fonts stay geometric-sans
+ * across display and body per brand: Inter for display (calm, modern, premium),
+ * Assistant for body (covers Hebrew without shifting metrics between scripts).
  */
 @theme {
-  --color-background:     #0b0b0b;
-  --color-surface:        #161513;
-  --color-surface-raised: #1f1d1a;
-  --color-border:         #2a2824;
-  --color-foreground:     #f8f6f1;
-  --color-muted:          #8a8380;
+  --color-background:     #f5f1e8;
+  --color-surface:        #f8f6f1;
+  --color-surface-raised: #fdfcf7;
+  --color-border:         #e4dcc7;
+  --color-foreground:     #0b0b0b;
+  --color-muted:          #6b655a;
   --color-accent:         #d4a84f;
   --color-accent-warm:    #f2a33b;
-  --color-accent-dim:     #8a6f2e;
+  --color-accent-dim:     #b58f3e;
   --color-cream:          #f5f1e8;
   --font-display:         "Inter", sans-serif;
   --font-sans:            "Assistant", "Inter", sans-serif;

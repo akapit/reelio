@@ -2,6 +2,21 @@ import type { ShotPlan, TransitionType } from "@/lib/engine/models";
 
 type TransitionShot = Pick<ShotPlan, "transitionOut" | "durationSec">;
 
+export interface BuildConcatGraphOptions {
+  /**
+   * When set, every input clip is pre-normalized to this size (and fps, if
+   * provided) before being fed into the xfade chain. Required whenever the
+   * inputs might differ in dimensions — xfade errors out with "First input
+   * link main parameters (size AxB) do not match the corresponding second
+   * input link xfade parameters (size CxD)" if any pair mismatches.
+   *
+   * Kling 2.5 Turbo usually returns 1920x1080 but occasionally emits a
+   * slightly different size (e.g. 1928x1072) depending on how it interprets
+   * the source aspect ratio — this is the lever that handles it.
+   */
+  target?: { width: number; height: number; fps?: number };
+}
+
 function xfadeParams(t: TransitionType): {
   transition: string;
   duration: number;
@@ -35,6 +50,7 @@ function fmt(n: number): string {
 export function buildConcatGraph(
   clipPaths: string[],
   shots: TransitionShot[],
+  options: BuildConcatGraphOptions = {},
 ): { args: string[]; filter: string } {
   if (clipPaths.length === 0) {
     throw new Error("buildConcatGraph: clipPaths must be non-empty");
@@ -51,16 +67,40 @@ export function buildConcatGraph(
   }
 
   const n = clipPaths.length;
+  const { target } = options;
 
-  if (n === 1) {
-    // Single clip: just relabel to [vout] via a null filter.
-    return { args, filter: "[0:v]null[vout]" };
+  // When a target size is supplied, emit a per-input normalization filter so
+  // every xfade sees two identically-sized streams. `increase` + `crop`
+  // up-scales the input to exceed the target in at least one axis, then
+  // crops centered to fit — avoids letterbox bars that `decrease` + `pad`
+  // would produce on tiny dimension drifts (1928×1072 → 1920×1080 is a
+  // ~0.4% crop, imperceptible).
+  const normalizeSegments: string[] = [];
+  const sourceLabel = (i: number): string =>
+    target ? `[v${i}]` : `[${i}:v]`;
+  if (target) {
+    const { width: W, height: H, fps } = target;
+    const fpsFilter = fps ? `,fps=${fps}` : "";
+    for (let i = 0; i < n; i++) {
+      normalizeSegments.push(
+        `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1${fpsFilter}[v${i}]`,
+      );
+    }
   }
 
-  const segments: string[] = [];
+  if (n === 1) {
+    // Single clip: just relabel to [vout] via a null filter. If we were asked
+    // to normalize, still do it so callers get a uniform output size.
+    const head = sourceLabel(0);
+    const tail = `${head}null[vout]`;
+    const filter = target ? [...normalizeSegments, tail].join(";") : tail;
+    return { args, filter };
+  }
+
+  const segments: string[] = [...normalizeSegments];
   let cumulative = 0;
   let priorOverlap = 0;
-  let prevLabel = "[0:v]";
+  let prevLabel = sourceLabel(0);
 
   for (let i = 0; i < n - 1; i++) {
     const shot = shots[i];
@@ -72,11 +112,14 @@ export function buildConcatGraph(
     const offset = cumulative - priorOverlap - duration;
     priorOverlap += duration;
     const isLast = i === n - 2;
+    // Intermediate labels are suffixed with every merged input's index so
+    // they never collide with the per-input `[v0]`, `[v1]`, ... labels used
+    // when `target` normalization is active (those are all single-digit).
     const outLabel = isLast
       ? "[vout]"
       : `[v${Array.from({ length: i + 2 }, (_, k) => k).join("")}]`;
     segments.push(
-      `${prevLabel}[${i + 1}:v]xfade=transition=${transition}:duration=${fmt(duration)}:offset=${fmt(offset)}${outLabel}`,
+      `${prevLabel}${sourceLabel(i + 1)}xfade=transition=${transition}:duration=${fmt(duration)}:offset=${fmt(offset)}${outLabel}`,
     );
     prevLabel = outLabel;
   }

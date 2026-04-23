@@ -8,6 +8,14 @@ interface MergeOptions {
   voiceoverBuffer?: Buffer;
   musicBuffer?: Buffer;
   musicVolume?: number; // 0-1, default 0.2
+  /**
+   * Hard cap on output duration (seconds). When set, ffmpeg receives
+   * `-t <maxDurationSec>` so a library music track longer than the video
+   * doesn't extend the output past the visual end. Leave unset for the
+   * historical behavior (ElevenLabs music was sized to the video, so no
+   * trim was needed).
+   */
+  maxDurationSec?: number;
 }
 
 export function mergeAudioWithVideo(options: MergeOptions): Buffer {
@@ -58,7 +66,13 @@ export function mergeAudioWithVideo(options: MergeOptions): Buffer {
     // No -shortest: with -c:v copy the video drives the output length. If the
     // audio track is shorter (e.g. voiceover-only with no music bed), the tail
     // of the video just plays silent — preferable to cutting the video off.
-    const cmd = `ffmpeg -y ${inputs.join(" ")} -filter_complex "${filterComplex}" -map 0:v -map "[a]" -c:v copy -c:a aac "${outputPath}"`;
+    // `-t` (optional) caps output so a library music track longer than the
+    // video doesn't produce a file that extends past the visuals.
+    const durationFlag =
+      options.maxDurationSec && options.maxDurationSec > 0
+        ? ` -t ${options.maxDurationSec}`
+        : "";
+    const cmd = `ffmpeg -y ${inputs.join(" ")} -filter_complex "${filterComplex}" -map 0:v -map "[a]" -c:v copy -c:a aac${durationFlag} "${outputPath}"`;
     execSync(cmd, { stdio: "pipe" });
     return readFileSync(outputPath);
   } finally {

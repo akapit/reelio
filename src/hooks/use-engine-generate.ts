@@ -9,16 +9,34 @@ export interface EngineGenerateOptions {
   imageAssetIds: string[];
   /** One of TEMPLATE_NAMES (`fast_15s`, `luxury_30s`, ...). */
   templateName: TemplateName;
+  /**
+   * Generation mode. "scenes" (default) runs the scene-based engine.
+   * "seedance" runs the single-call Seedance 2 path (<=9 images, 4-15s).
+   */
+  mode?: "scenes" | "seedance";
   /** Optional video-generation backend override (server default = kieai). */
   videoProvider?: "piapi" | "kieai";
   /** User-selected video model. When set, every scene is hard-overridden to
    *  this choice after the LLM writes its prompt. Omit to let the LLM pick
    *  per scene. */
   modelChoice?: "kling" | "seedance" | "seedance-fast";
+  /** Seedance mode only: target video duration 4-15s (default 15). */
+  durationSec?: number;
+  /** Seedance mode only: output aspect ratio. */
+  aspectRatio?: "16:9" | "9:16" | "1:1";
   /** Optional ElevenLabs voiceover text. Routed to the trigger task. */
   voiceoverText?: string;
   voiceoverVoiceId?: string;
-  /** Optional ElevenLabs music prompt. Routed to the trigger task. */
+  /**
+   * Seedance mode: which curated R2 library mood to pull a background
+   * track from. One of "upbeat" | "luxury" | "calm". Undefined = no
+   * background music.
+   *
+   * Scene mode still uses the deprecated `musicPrompt` until we migrate
+   * that path too.
+   */
+  musicMood?: "upbeat" | "luxury" | "calm";
+  /** Optional ElevenLabs music prompt. Used by the scene-based engine only. */
   musicPrompt?: string;
   /** 0..1 — music loudness. */
   musicVolume?: number;

@@ -448,6 +448,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
             <AssetCard
               id={asset.id}
               projectId={projectId}
+              isInSelectMode={selectionMode}
               isSelectable={selectableHere}
               isSelected={selectableHere && selectedIds.has(asset.id)}
               onSelectToggle={

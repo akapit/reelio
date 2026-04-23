@@ -47,12 +47,34 @@ export interface VideoGenerationOptions {
   aspectRatio?: "16:9" | "9:16" | "1:1";
   quality?: "fast" | "quality";
   /**
+   * Output resolution for Seedance. kie.ai's Seedance 2 supports "480p" and
+   * "720p". Lower resolution = faster generation + cheaper. Ignored by
+   * Kling (which has its own resolution handling). Defaults to "720p" at
+   * the provider boundary.
+   */
+  resolution?: "480p" | "720p";
+  /**
    * Logical video-model id (provider-agnostic). Each `IMediaProvider`
    * implementation resolves this to its own upstream slug internally — do
    * NOT pass a raw provider slug here. Unknown values will throw at the
    * provider boundary.
    */
   model?: VideoModel;
+  /**
+   * Anti-artifact hint passed straight through to the model's native
+   * `negative_prompt` field when supported (Kling 2.5 Turbo). Intended to
+   * describe things the model should NOT produce ("morphing furniture,
+   * flicker, duplicated people, …"). Providers that don't expose a
+   * negative_prompt field silently ignore this.
+   */
+  negativePrompt?: string;
+  /**
+   * Prompt-adherence guidance scale forwarded to the model's native
+   * `cfg_scale` field when supported (Kling 2.5 Turbo: 0..1, default 0.5).
+   * Higher values make the model follow the prompt more literally at the
+   * cost of creative liberty. Providers that don't expose it ignore this.
+   */
+  cfgScale?: number;
   onTaskId?: OnTaskIdCallback;
 }
 export interface MediaJobResult {

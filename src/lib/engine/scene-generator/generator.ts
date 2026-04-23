@@ -1,7 +1,11 @@
 import pLimit from "p-limit";
 
 import { piapiProvider } from "@/lib/media/providers/piapi";
-import { kieaiProvider } from "@/lib/media/providers/kieai";
+import {
+  kieaiProvider,
+  DEFAULT_KLING_RETRY_CFG_SCALE,
+  composeKlingRetryNegativePrompt,
+} from "@/lib/media/providers/kieai";
 import type { IMediaProvider, VideoGenerationOptions } from "@/lib/media/types";
 import { evaluateSceneVideo } from "@/lib/engine/scene-evaluator/evaluator";
 import { prepareSceneSource } from "@/lib/engine/scene-generator/source-prep";
@@ -195,6 +199,29 @@ function buildRetryPrompt(prompt: ScenePrompt, feedback?: string | null): SceneP
   };
 }
 
+/**
+ * Minimum evaluator score for a scene to pass without retry. Even when the
+ * evaluator flags the scene as `passed: true`, a score below this threshold
+ * triggers a retry with tightened Kling knobs — catches "barely passing but
+ * still weird" outputs that binary pass/fail would miss. Overridable via
+ * ENGINE_SCENE_SCORE_FLOOR.
+ */
+const DEFAULT_SCENE_SCORE_FLOOR = 0.65;
+
+function sceneScoreFloor(): number {
+  const raw = process.env.ENGINE_SCENE_SCORE_FLOOR;
+  const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+  if (!Number.isFinite(parsed)) return DEFAULT_SCENE_SCORE_FLOOR;
+  return Math.max(0, Math.min(1, parsed));
+}
+
+function klingRetryCfgScale(): number {
+  const raw = process.env.ENGINE_KLING_RETRY_CFG_SCALE;
+  const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+  if (!Number.isFinite(parsed)) return DEFAULT_KLING_RETRY_CFG_SCALE;
+  return Math.max(0, Math.min(1, parsed));
+}
+
 // ---------------------------------------------------------------------------
 // Per-scene generation
 // ---------------------------------------------------------------------------
@@ -223,6 +250,12 @@ async function generateOneScene(
   const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
   let prompt = initialPrompt;
   let lastError: Error | null = null;
+  // Kling-specific anti-artifact knobs carried across attempts. First attempt
+  // lets the provider use its defaults (negative_prompt + cfg_scale=0.6).
+  // After a rejection/failure, we tighten cfg and augment the negative prompt
+  // with the evaluator's specific issues (when available).
+  let klingCfgOverride: number | undefined;
+  let klingNegativeOverride: string | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const wallStart = Date.now();
@@ -241,6 +274,8 @@ async function generateOneScene(
       imagePath: scene.imagePath,
       preparedImageUrl: preparedSource.providerImageUrl,
       attempt,
+      klingCfgOverride,
+      klingNegativeOverrideLen: klingNegativeOverride?.length,
     });
     await input.onSceneStart?.(scene, attemptContext);
 
@@ -261,8 +296,14 @@ async function generateOneScene(
       },
     };
 
-    if (prompt.modelChoice === "kling" && prompt.modelParams?.mode) {
-      (opts as Record<string, unknown>)["mode"] = prompt.modelParams.mode;
+    if (prompt.modelChoice === "kling") {
+      if (prompt.modelParams?.mode) {
+        (opts as Record<string, unknown>)["mode"] = prompt.modelParams.mode;
+      }
+      if (klingCfgOverride !== undefined) opts.cfgScale = klingCfgOverride;
+      if (klingNegativeOverride !== undefined) {
+        opts.negativePrompt = klingNegativeOverride;
+      }
     }
 
     try {
@@ -311,14 +352,37 @@ async function generateOneScene(
         video.evaluation = evaluation;
         attemptContext.evaluation = evaluation;
 
-        if (!evaluation.passed && attempt < maxAttempts) {
+        // Phase B1: retry not only on explicit fail but also when the score
+        // is below a configurable floor. This catches "barely passed but
+        // still weird" outputs that binary pass/fail would wave through.
+        const floor = sceneScoreFloor();
+        const scoreBelowFloor =
+          typeof evaluation.score === "number" && evaluation.score < floor;
+        const shouldRetry =
+          (!evaluation.passed || scoreBelowFloor) && attempt < maxAttempts;
+
+        if (shouldRetry) {
           const retryPrompt = buildRetryPrompt(prompt, evaluation.retryPrompt);
           const retryError = new Error(
-            `scene quality rejected: ${evaluation.summary}`,
+            evaluation.passed
+              ? `scene quality below floor (${evaluation.score}<${floor}): ${evaluation.summary}`
+              : `scene quality rejected: ${evaluation.summary}`,
           );
+          // Tighten Kling knobs for the next attempt — only relevant when the
+          // NEXT prompt's model is still Kling. buildRetryPrompt can
+          // downgrade seedance-fast→seedance but never touches Kling.
+          if (retryPrompt.modelChoice === "kling") {
+            klingCfgOverride = klingRetryCfgScale();
+            klingNegativeOverride = composeKlingRetryNegativePrompt(
+              evaluation.issues ?? [],
+            );
+          }
           attemptContext.willRetry = true;
           attemptContext.retryReason =
-            evaluation.retryReason ?? evaluation.summary;
+            evaluation.retryReason ??
+            (evaluation.passed
+              ? `score_below_floor_${floor}`
+              : evaluation.summary);
           await input.onSceneFailed?.(scene, retryError, attemptContext);
           prompt = retryPrompt;
           lastError = retryError;
@@ -348,6 +412,14 @@ async function generateOneScene(
         throw err;
       }
       prompt = buildRetryPrompt(prompt, null);
+      // Provider failure gives us no evaluator issues to feed back; fall back
+      // to the baseline negative prompt (undefined → provider default) plus
+      // the tighter retry cfg_scale. Keep this in sync with the evaluator
+      // branch above so retry behaviour is consistent across failure modes.
+      if (prompt.modelChoice === "kling") {
+        klingCfgOverride = klingRetryCfgScale();
+        klingNegativeOverride = composeKlingRetryNegativePrompt([]);
+      }
     }
   }
 

@@ -458,6 +458,31 @@ export interface FinishSceneAttemptInput {
   error?: Record<string, unknown> | null;
 }
 
+/**
+ * If `output.evaluation` is present (shape: `SceneQualityEvaluation`), lift
+ * its `score` and `issues` onto the promoted `evaluation_score` /
+ * `evaluation_issues` columns added in migration 005. Keeps the jsonb blob
+ * in sync with the first-class columns — dashboards can query either.
+ */
+function extractEvaluationMetrics(
+  output: Record<string, unknown> | undefined,
+): { evaluation_score?: number | null; evaluation_issues?: string[] | null } {
+  const evalField = output?.evaluation;
+  if (!evalField || typeof evalField !== "object") return {};
+  const rec = evalField as Record<string, unknown>;
+  const score =
+    typeof rec.score === "number" && Number.isFinite(rec.score) ? rec.score : null;
+  const issues = Array.isArray(rec.issues)
+    ? rec.issues.filter((i): i is string => typeof i === "string")
+    : null;
+  // Only return keys we actually want to write — otherwise a null here would
+  // clobber a valid value from a prior attempt's partial update.
+  const result: { evaluation_score?: number | null; evaluation_issues?: string[] | null } = {};
+  if (score !== null) result.evaluation_score = score;
+  if (issues !== null) result.evaluation_issues = issues;
+  return result;
+}
+
 export async function finishSceneAttempt(args: FinishSceneAttemptInput): Promise<void> {
   const db = getClient();
   const patch: Record<string, unknown> = {
@@ -468,7 +493,10 @@ export async function finishSceneAttempt(args: FinishSceneAttemptInput): Promise
   }
   if (args.externalIds) patch.external_ids = args.externalIds;
   if (args.metrics) patch.metrics = args.metrics;
-  if (args.output) patch.output = args.output;
+  if (args.output) {
+    patch.output = args.output;
+    Object.assign(patch, extractEvaluationMetrics(args.output));
+  }
   if (args.error !== undefined) patch.error = args.error;
   const { error } = await db
     .from("engine_scene_attempts")

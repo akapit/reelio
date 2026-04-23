@@ -318,6 +318,14 @@ export const engineGenerateTask = task({
           prompt: ScenePrompt;
           video: SceneVideo;
         }> = [];
+        // Task-level (pre-onSceneStart) failures collected in this round.
+        // Held separately so we can apply them to `retryableScenes` AFTER the
+        // `retryableScenes.clear()` call below — otherwise the clear would
+        // wipe them and round 2 would silently drop the scene again.
+        const taskFailedForRetry: Array<{
+          sceneId: string;
+          error: string;
+        }> = [];
         for (const r of roundResults) {
           if (r.ok) {
             successfulCandidates.push({
@@ -326,14 +334,62 @@ export const engineGenerateTask = task({
               video: r.video,
             });
           } else {
-            sceneFailures.push({
-              sceneId: r.scene.sceneId,
-              error: r.error,
+            // Per-scene trigger task failed BEFORE it could emit its own
+            // scene.failed event — typically source-prep throws (download,
+            // smart-crop, R2 upload) which run prior to onSceneStart. Without
+            // this branch the failure was silent: no engine_event, no
+            // engine_scene_attempts row, and the scene stayed at `pending`
+            // while the assembler dropped it. Always emit a task.failed
+            // event; on non-final rounds also schedule a retry so transient
+            // failures (network blips) get a second chance.
+            const isFinalRound = round >= maxRounds;
+            await appendEngineEvent({
+              runId: trackedRunId!,
+              eventType: "scene.task.failed",
+              level: isFinalRound ? "error" : "warn",
+              payload: {
+                sceneId: r.scene.sceneId,
+                sceneOrder: r.scene.order,
+                round,
+                willRetry: !isFinalRound,
+                message: r.error,
+              },
             });
+            if (isFinalRound) {
+              sceneFailures.push({
+                sceneId: r.scene.sceneId,
+                error: r.error,
+              });
+              // Promote from `pending` → `failed` so the dashboard & tracking
+              // queries can distinguish "never ran" from "tried and failed".
+              await updateSceneStatus({
+                runId: trackedRunId!,
+                sceneId: r.scene.sceneId,
+                status: "failed",
+                output: { taskError: r.error, round },
+                error: { message: r.error, retryReason: "task_failed" },
+              });
+            } else {
+              taskFailedForRetry.push({
+                sceneId: r.scene.sceneId,
+                error: r.error,
+              });
+            }
           }
         }
 
         if (successfulCandidates.length === 0) {
+          // Still need to register task-level retries for the next round,
+          // otherwise an all-failure round leaves `retryableScenes` empty
+          // and round 2's filter (`round === 1 || retryableScenes.has`)
+          // produces zero scenes → break → silent drop.
+          retryableScenes.clear();
+          for (const f of taskFailedForRetry) {
+            retryableScenes.set(f.sceneId, {
+              retryPrompt: null,
+              retryReason: `task_failed:${f.error}`,
+            });
+          }
           continue;
         }
 
@@ -352,6 +408,16 @@ export const engineGenerateTask = task({
         const bypassEvaluator = process.env.ENGINE_EVALUATOR_BYPASS === "1";
 
         retryableScenes.clear();
+        // Re-register task-level failures AFTER the clear so they survive
+        // into the next round alongside any evaluator-driven retries added
+        // below. Without this, a mixed success/failure round would drop
+        // task-failed scenes silently.
+        for (const f of taskFailedForRetry) {
+          retryableScenes.set(f.sceneId, {
+            retryPrompt: null,
+            retryReason: `task_failed:${f.error}`,
+          });
+        }
 
         if (bypassEvaluator) {
           for (const candidate of successfulCandidates) {

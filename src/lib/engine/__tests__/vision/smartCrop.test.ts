@@ -66,6 +66,21 @@ describe("computeCropRect", () => {
     expect(rect.y).toBe(Math.round((1920 - rect.h) / 2));
   });
 
+  it("rounds crop dims to even numbers (yuv420p/yuvj420p chroma grid)", () => {
+    // Production failure: 5712x4284 → 16:9 produced crop=5712:3213:0:1071,
+    // ffmpeg auto-aligned chroma grid pushed y+h past H → "too big" error.
+    // Every value must be even to keep ffmpeg from shifting coordinates.
+    const rect = computeCropRect({ width: 5712, height: 4284 }, [], 16 / 9);
+    expect(rect.noop).toBe(false);
+    expect(rect.w % 2).toBe(0);
+    expect(rect.h % 2).toBe(0);
+    expect(rect.x % 2).toBe(0);
+    expect(rect.y % 2).toBe(0);
+    // And the rect must still fit inside the source.
+    expect(rect.x + rect.w).toBeLessThanOrEqual(5712);
+    expect(rect.y + rect.h).toBeLessThanOrEqual(4284);
+  });
+
   it("degenerate: zero dims returns safe fallback", () => {
     const rect = computeCropRect({ width: 0, height: 0 }, [], 9 / 16);
     expect(rect.reason).toBe("degenerate");

@@ -559,7 +559,7 @@ export const piapiProvider: IMediaProvider = {
 
     const seedancePrompt = await translatePromptForSeedance(
       options.prompt,
-      { duration: seedanceDuration, imageCount: allRefs.length },
+      { imageCount: allRefs.length },
       { log: logPiApi },
     );
     logPiApi("seedance.inputMode", {

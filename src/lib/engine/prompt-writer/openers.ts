@@ -28,40 +28,49 @@ export interface WhipPanOpener {
   cameraMovement: string;
 }
 
+// Kling 2.5 image-to-video reliably interprets named standard-cinematography
+// verbs ("lateral track", "dolly-in", "push-in", "snap-zoom") and honours
+// explicit direction tokens ("right-to-left", "left-to-right"). It does NOT
+// reliably interpret "whip-pan" from a still image — without a lateral anchor
+// it defaults to a forward push-in (often reading as a zoom in/out). Every
+// Kling variant below uses doc-recommended vocabulary, single-move shots,
+// and an explicit motion endpoint ("settles to a stop"). The Seedance side
+// is untouched — its translator handles the richer language well.
+// See docs/market reference: Kling 2.5 Turbo prompt guide, single-move rule.
 export const WHIP_PAN_OPENERS: readonly WhipPanOpener[] = [
   {
     seedance:
       "Fast whip-pan reveal into the space — motion blur streaks across the frame as the camera bursts in, rapidly decelerating to a near-stop by the end of the first beat. Aggressive speed ramp: fast-to-slow.",
     kling:
-      "Fast whip-pan reveal, motion blur streaking, decelerating to a near-stop.",
+      "Fast lateral camera track right-to-left across the scene, motion blur streaking, decelerating to a decisive stop.",
     cameraMovement: "whip-pan",
   },
   {
     seedance:
       "Explosive snap-zoom into the scene, motion blur streaking inward as the camera rushes forward then slams to a near-halt. Pronounced fast-to-slow speed ramp on the first beat.",
     kling:
-      "Explosive snap-zoom forward, motion blur ramping hard to a near-stop.",
+      "Explosive snap-zoom forward into the scene, streaking motion blur, settling hard to a near-stop.",
     cameraMovement: "snap-zoom",
   },
   {
     seedance:
       "Kinetic slam-dolly toward the interior — the image jitters briefly with streaking motion blur, then settles into a cinematic hold. Aggressive fast-to-slow speed ramp.",
     kling:
-      "Kinetic slam-dolly inward, streaking blur easing into a cinematic hold.",
+      "Quick dolly-in toward the scene, streaking motion blur, easing into a steady hold.",
     cameraMovement: "slam-dolly",
   },
   {
     seedance:
       "Rapid swoop-in on the scene, the camera hurtling forward with streaking motion blur before easing to a graceful near-stop. Pronounced fast-to-slow deceleration.",
     kling:
-      "Rapid swoop-in with streaking blur, decelerating to a confident stop.",
+      "Rapid push-in toward the scene, streaking motion blur, easing to a confident stop.",
     cameraMovement: "swoop-in",
   },
   {
     seedance:
       "Hard whip-pan into the frame — the camera slices across the scene with streaking blur before decelerating to a confident near-stop. Pronounced speed ramp, fast-to-slow.",
     kling:
-      "Hard whip-pan across the frame, streaking blur settling into a near-halt.",
+      "Sharp lateral tracking shot left-to-right, motion blur streaking the frame, settling into a confident halt.",
     cameraMovement: "whip-pan",
   },
 ];

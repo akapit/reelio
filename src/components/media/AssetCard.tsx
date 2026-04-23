@@ -32,10 +32,19 @@ interface AssetCardProps {
   onCancel?: () => void;
   onPreview?: () => void;
   /**
-   * Multi-select support. When `isSelectable`, clicking anywhere on the card
-   * toggles selection instead of opening preview, and a checkbox overlay
-   * appears top-left. Consumer (AssetGrid) manages the set of selected ids.
+   * Multi-select support. Two coordinates:
+   *   • `isInSelectMode` — the grid-wide mode is active. When true we
+   *     suppress ALL preview/modal opens on this card (even if the card
+   *     itself isn't eligible to be picked, e.g. videos), hide hover
+   *     action buttons, and disable drag. This prevents confusing
+   *     dual-behavior while the user is choosing items.
+   *   • `isSelectable` — this specific card can actually be toggled on/off
+   *     (images are selectable, videos are not — the creator only accepts
+   *     images). Drives the checkbox overlay and the click→toggle path.
+   * Non-selectable cards in select mode render dimmed and do nothing on
+   * click. Consumer (AssetGrid) manages both flags.
    */
+  isInSelectMode?: boolean;
   isSelectable?: boolean;
   isSelected?: boolean;
   onSelectToggle?: () => void;
@@ -94,6 +103,7 @@ export function AssetCard({
   onDelete,
   onCancel,
   onPreview,
+  isInSelectMode = false,
   isSelectable = false,
   isSelected = false,
   onSelectToggle,
@@ -102,15 +112,20 @@ export function AssetCard({
   const displayUrl = status === "done" && processedUrl ? processedUrl : originalUrl;
   // For card thumbnail: use thumbnailUrl if available (e.g. source image for videos)
   const thumbUrl = thumbnailUrl || displayUrl;
+  // Hide hover action buttons and disable drag whenever select mode is on —
+  // clicking must only toggle selection; any other interaction (preview,
+  // enhance, generate-video, delete) would fight the user's intent.
   const showActionButtons =
-    !isSelectable && (status === "uploaded" || status === "done");
+    !isInSelectMode && (status === "uploaded" || status === "done");
   const showCompare = status === "done" && !!processedUrl && toolUsed === "enhance";
   const draggable =
-    !isSelectable && (status === "uploaded" || status === "done");
+    !isInSelectMode && (status === "uploaded" || status === "done");
 
   const handleCardClick = () => {
-    if (isSelectable) {
-      onSelectToggle?.();
+    if (isInSelectMode) {
+      // Only selectable cards respond; non-selectable ones (videos) are a
+      // no-op in select mode so the preview modal never opens.
+      if (isSelectable) onSelectToggle?.();
       return;
     }
     onPreview?.();
@@ -128,35 +143,40 @@ export function AssetCard({
       }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl",
-        "bg-[var(--color-surface)] border transition-[border-color,box-shadow] duration-200",
+        "bg-[var(--color-surface)] border transition-[border-color,box-shadow,opacity] duration-200",
         isSelected
           ? "border-[var(--color-accent)] shadow-[0_0_0_2px_rgba(212,168,79,0.45),0_8px_32px_#d4a84f1a]"
           : "border-[var(--color-border)] hover:border-[var(--color-accent)]/30 hover:shadow-[0_0_0_1px_#d4a84f22,0_8px_32px_#d4a84f0a]",
         draggable && "cursor-grab active:cursor-grabbing",
-        isSelectable && "cursor-pointer"
+        isSelectable && "cursor-pointer",
+        // Dim cards that can't be picked while in select mode so the user
+        // sees at a glance which cards the grid-wide action applies to.
+        isInSelectMode && !isSelectable && "opacity-50",
       )}
     >
       {/* Thumbnail */}
       <div className="relative aspect-[4/3] bg-[var(--color-surface-raised)] overflow-hidden">
         {status === "processing" ? (
           <>
-            {/* Shimmer processing state */}
+            {/* Shimmer processing state — route click through handleCardClick
+                so select mode suppresses the "Inspect run" preview too. */}
             <div
-              onClick={() => onPreview?.()}
+              onClick={handleCardClick}
               className="w-full h-full flex flex-col items-center justify-center gap-3"
               style={{
                 background:
                   "linear-gradient(110deg, var(--color-surface) 30%, rgba(212,168,79,0.08) 50%, var(--color-surface) 70%)",
                 backgroundSize: "200% 100%",
                 animation: "shimmer 2s ease-in-out infinite",
-                cursor: onPreview ? "pointer" : "default",
+                cursor:
+                  isInSelectMode || onPreview ? "pointer" : "default",
               }}
             >
               <Loader2 size={24} className="animate-spin text-[var(--color-muted)]" />
               <span className="text-xs text-[var(--color-muted)]">
                 {toolUsed ? processingLabels[toolUsed] : "Processing..."}
               </span>
-              {onPreview && (
+              {onPreview && !isInSelectMode && (
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-muted)]/80">
                   Inspect run
                 </span>

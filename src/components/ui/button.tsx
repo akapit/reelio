@@ -19,7 +19,7 @@ const variantClasses: Record<ButtonVariant, string> = {
 
   secondary: [
     "bg-[var(--color-surface)] text-[var(--color-foreground)] border border-[var(--color-border)]",
-    "hover:bg-[var(--color-surface-raised)] hover:border-[#3a3a3e]",
+    "hover:bg-[var(--color-surface-raised)] hover:border-[var(--color-muted)]",
     "active:bg-[var(--color-surface)]",
     "focus-visible:ring-2 focus-visible:ring-[var(--color-border)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
     "disabled:opacity-40 disabled:cursor-not-allowed",

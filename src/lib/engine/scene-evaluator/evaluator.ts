@@ -191,8 +191,16 @@ export async function evaluateSceneVideo(
 
   try {
     const probe = await runFfprobe(input.video.videoUrl);
+    // Three sample points across the clip. Late-clip artifacts (morphing at
+    // the end of a Kling motion beat, end-of-tween flicker) are a known
+    // failure mode that two-frame sampling missed — the third frame catches
+    // them. Each time is clamped so we never seek past the end.
     const earlyTime = Math.min(0.4, Math.max(probe.durationSec * 0.15, 0.1));
     const midTime = Math.max(earlyTime + 0.2, probe.durationSec * 0.6);
+    const lateTime = Math.max(
+      midTime + 0.1,
+      Math.min(probe.durationSec - 0.1, probe.durationSec * 0.85),
+    );
     const earlyFrame = await extractFrame(
       input.video.videoUrl,
       earlyTime,
@@ -203,6 +211,12 @@ export async function evaluateSceneVideo(
       input.video.videoUrl,
       Math.min(midTime, Math.max(probe.durationSec - 0.1, earlyTime + 0.1)),
       "mid",
+      scratchDir,
+    );
+    const lateFrame = await extractFrame(
+      input.video.videoUrl,
+      Math.min(lateTime, Math.max(probe.durationSec - 0.05, midTime + 0.1)),
+      "late",
       scratchDir,
     );
 
@@ -232,6 +246,11 @@ export async function evaluateSceneVideo(
         text: `Generated frame near ${Math.min(midTime, probe.durationSec).toFixed(2)}s:`,
       },
       await buildAnthropicImageContent(midFrame),
+      {
+        type: "text",
+        text: `Generated frame near ${Math.min(lateTime, probe.durationSec).toFixed(2)}s (end-of-clip — watch for morphing/flicker):`,
+      },
+      await buildAnthropicImageContent(lateFrame),
     ];
 
     const response = await client.messages.create({

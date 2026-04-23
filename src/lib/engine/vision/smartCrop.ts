@@ -118,6 +118,18 @@ export function computeCropRect(
   x = Math.max(0, Math.min(x, W - cropW));
   y = Math.max(0, Math.min(y, H - cropH));
 
+  // Force all four values even so yuv420p/yuvj420p ffmpeg pipelines don't
+  // auto-align the chroma grid and push y+h past the source height (which
+  // throws "Invalid too big or non positive size for ... height 'N'").
+  // Floor w/h first to guarantee we never exceed the source.
+  cropW = cropW - (cropW % 2);
+  cropH = cropH - (cropH % 2);
+  x = x - (x % 2);
+  y = y - (y % 2);
+  // Re-clamp after rounding x/y down (safe: w/h already even, x/y only shrank).
+  x = Math.max(0, Math.min(x, W - cropW));
+  y = Math.max(0, Math.min(y, H - cropH));
+
   return { x, y, w: cropW, h: cropH, noop: false, reason };
 }
 

@@ -212,7 +212,7 @@ export function VideoOptionsModal({
                         "focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
                         voiceoverEnabled
                           ? "bg-[var(--color-accent)]"
-                          : "bg-[var(--color-surface-raised)]"
+                          : "bg-[var(--color-muted)]"
                       )}
                     >
                       <span
@@ -243,7 +243,7 @@ export function VideoOptionsModal({
                           "bg-[var(--color-surface)] border border-[var(--color-border)]",
                           "text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
                           "transition-colors duration-150 outline-none",
-                          "hover:border-[#3a3a3e]",
+                          "hover:border-[var(--color-muted)]",
                           "focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/15",
                           "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
