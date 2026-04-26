@@ -1,21 +1,7 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { Menu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const pageTitles: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/dashboard/projects": "Projects",
-  "/dashboard/upload": "Upload",
-  "/dashboard/settings": "Settings",
-};
-
-function getPageTitle(pathname: string): string {
-  if (pageTitles[pathname]) return pageTitles[pathname];
-  if (pathname.startsWith("/dashboard/projects/")) return "Project Workspace";
-  return "Dashboard";
-}
 
 interface HeaderProps {
   onNewProject: () => void;
@@ -23,34 +9,38 @@ interface HeaderProps {
 }
 
 export function Header({ onNewProject, onMenuToggle }: HeaderProps) {
-  const pathname = usePathname();
-  const title = getPageTitle(pathname);
-
   return (
-    <header className="h-16 shrink-0 flex items-center justify-between px-4 sm:px-6 lg:px-8 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
-      <div className="flex items-center gap-3">
-        {/* Hamburger menu -- toggles drawer on mobile, collapses sidebar on desktop */}
-        <button
-          type="button"
-          onClick={onMenuToggle}
-          className="flex items-center justify-center w-10 h-10 -ml-2 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-          aria-label="Toggle navigation menu"
-        >
-          <Menu size={20} />
-        </button>
+    <header className="shrink-0 px-4 sm:px-6 lg:px-8 py-4 lg:py-5 bg-gradient-to-r from-slate-800 to-stone-800 border-b border-amber-200/20 shadow-lg">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+        {/* Right side in RTL (start of flex): mobile menu + new property button */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onMenuToggle}
+            className="flex items-center justify-center w-10 h-10 rounded-lg text-amber-100 hover:text-white hover:bg-white/10 transition-colors duration-150"
+            aria-label="הצג/הסתר תפריט ניווט"
+          >
+            <Menu size={20} />
+          </button>
+          <Button variant="primary" size="sm" onClick={onNewProject}>
+            <Plus size={15} />
+            <span className="hidden sm:inline">נכס חדש</span>
+          </Button>
+        </div>
 
-        <h1
-          className="text-xl font-semibold text-[var(--color-foreground)]"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          {title}
-        </h1>
+        {/* Left side in RTL (end of flex): REELIO wordmark + tagline (LTR text reads naturally) */}
+        <div className="text-left" dir="ltr">
+          <h1
+            className="text-2xl lg:text-3xl font-bold text-white tracking-tight leading-none"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            REELIO
+          </h1>
+          <p className="hidden sm:block mt-1 text-xs lg:text-sm text-amber-100/80 font-light tracking-wide">
+            Professional video creation &amp; marketing
+          </p>
+        </div>
       </div>
-
-      <Button variant="primary" size="sm" onClick={onNewProject}>
-        <Plus size={15} />
-        <span className="hidden sm:inline">New Project</span>
-      </Button>
     </header>
   );
 }

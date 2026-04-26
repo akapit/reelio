@@ -21,10 +21,10 @@ export default function LoginPage() {
 
   function validate() {
     const next: typeof errors = {};
-    if (!email.trim()) next.email = "Email is required.";
+    if (!email.trim()) next.email = "שדה חובה";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = "Enter a valid email address.";
-    if (!password) next.password = "Password is required.";
+      next.email = "אימייל לא תקין";
+    if (!password) next.password = "שדה חובה";
     return next;
   }
 
@@ -50,17 +50,20 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/dashboard/properties");
       router.refresh();
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error("משהו השתבש. נסה שוב.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]"
+      dir="rtl"
+    >
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -76,7 +79,7 @@ export default function LoginPage() {
             reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Welcome back
+            ברוך שובך
           </p>
         </div>
 
@@ -84,7 +87,7 @@ export default function LoginPage() {
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
-              label="Email"
+              label="אימייל"
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
@@ -95,7 +98,7 @@ export default function LoginPage() {
             />
 
             <Input
-              label="Password"
+              label="סיסמה"
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
@@ -115,10 +118,10 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  Signing in…
+                  טוען...
                 </>
               ) : (
-                "Sign in"
+                "התחבר"
               )}
             </Button>
           </form>
@@ -126,12 +129,12 @@ export default function LoginPage() {
 
         {/* Footer link */}
         <p className="text-center text-sm text-[var(--color-muted)] mt-6">
-          Don&apos;t have an account?{" "}
+          אין לך חשבון?{" "}
           <Link
             href="/signup"
             className="text-[var(--color-foreground)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
           >
-            Create one
+            צור חשבון
           </Link>
         </p>
       </motion.div>

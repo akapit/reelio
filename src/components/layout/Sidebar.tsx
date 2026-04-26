@@ -4,42 +4,23 @@ import { useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  LayoutDashboard,
-  FolderOpen,
-  ImagePlus,
-  Settings,
-  User,
-  X,
-} from "lucide-react";
+import { LayoutDashboard, Home, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 const navItems = [
   {
-    label: "Dashboard",
+    label: "לוח בקרה",
     href: "/dashboard",
     icon: LayoutDashboard,
     exact: true,
   },
   {
-    label: "Projects",
-    href: "/dashboard/projects",
-    icon: FolderOpen,
+    label: "נכסים",
+    href: "/dashboard/properties",
+    icon: Home,
     exact: false,
-  },
-  {
-    label: "Upload",
-    href: "/dashboard/upload",
-    icon: ImagePlus,
-    exact: true,
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-    exact: true,
   },
 ];
 
@@ -74,28 +55,27 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
 
   const sidebarContent = (
     <>
-      {/* Wordmark — lowercase, slightly-open tracking per the Reelio brand
-          spec (premium, calm, modern; never overpowers the symbol). */}
-      <div className="flex items-center justify-between h-16 px-6 border-b border-[var(--color-border)] shrink-0">
+      {/* Wordmark — matches Header height + dark gradient palette */}
+      <div className="flex items-center justify-between h-[68px] lg:h-[76px] px-5 border-b border-amber-200/20 shrink-0">
         <span
-          className="text-2xl font-medium text-[var(--color-accent)] tracking-[0.06em]"
+          className="text-xl font-bold text-white tracking-tight"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          reelio
+          REELIO
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="lg:hidden flex items-center justify-center w-8 h-8 rounded-md text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-          aria-label="Close sidebar"
+          className="lg:hidden flex items-center justify-center w-8 h-8 rounded-md text-amber-100 hover:text-white hover:bg-white/10 transition-colors duration-150"
+          aria-label="סגור תפריט"
         >
           <X size={18} />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3" aria-label="Main navigation">
-        <ul className="space-y-0.5">
+      <nav className="flex-1 overflow-y-auto py-4 px-3" aria-label="ניווט ראשי">
+        <ul className="space-y-1">
           {navItems.map(({ label, href, icon: Icon, exact }) => {
             const active = isActive(href, exact);
             return (
@@ -107,21 +87,21 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 relative group",
                     active
-                      ? "text-[var(--color-accent)] bg-[var(--color-accent)]/8"
-                      : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
+                      ? "text-white bg-white/10"
+                      : "text-amber-100/70 hover:text-white hover:bg-white/5",
                   )}
                 >
-                  {/* Active left border indicator */}
+                  {/* Active right border indicator (RTL) */}
                   {active && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-[var(--color-accent)]" />
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-amber-400" />
                   )}
                   <Icon
                     size={16}
                     className={cn(
                       "shrink-0 transition-colors duration-150",
                       active
-                        ? "text-[var(--color-accent)]"
-                        : "text-[var(--color-muted)] group-hover:text-[var(--color-foreground)]",
+                        ? "text-amber-300"
+                        : "text-amber-100/60 group-hover:text-amber-200",
                     )}
                   />
                   {label}
@@ -133,17 +113,17 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
       </nav>
 
       {/* User section */}
-      <div className="shrink-0 border-t border-[var(--color-border)] p-3">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--color-surface-raised)] transition-colors duration-150 cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-[var(--color-accent)]/20 border border-[var(--color-accent)]/30 flex items-center justify-center shrink-0">
-            <User size={14} className="text-[var(--color-accent)]" />
+      <div className="shrink-0 border-t border-amber-200/20 p-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors duration-150 cursor-pointer">
+          <div className="w-8 h-8 rounded-full bg-amber-400/15 border border-amber-300/30 flex items-center justify-center shrink-0">
+            <User size={14} className="text-amber-300" />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-medium text-[var(--color-foreground)] truncate leading-none">
-              My Account
+            <span className="text-xs font-medium text-white truncate leading-none">
+              החשבון שלי
             </span>
-            <span className="text-xs text-[var(--color-muted)] truncate mt-0.5 leading-none">
-              Manage profile
+            <span className="text-xs text-amber-100/60 truncate mt-0.5 leading-none">
+              ניהול פרופיל
             </span>
           </div>
         </div>
@@ -151,25 +131,28 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
     </>
   );
 
+  const panelClasses =
+    "h-screen w-52 flex flex-col bg-gradient-to-b from-slate-800 to-stone-800 border-l border-amber-200/20 shadow-xl";
+
   return (
     <>
-      {/* Desktop sidebar -- collapsible at lg+ */}
+      {/* Desktop sidebar — fixed to the RIGHT in RTL layout */}
       <aside
         className={cn(
-          "hidden lg:flex fixed left-0 top-0 h-screen w-64 flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] z-40",
+          "hidden lg:flex fixed right-0 top-0 z-40",
+          panelClasses,
           "transition-transform duration-300 ease-out",
-          desktopCollapsed && "lg:-translate-x-full",
+          desktopCollapsed && "lg:translate-x-full",
         )}
         aria-hidden={desktopCollapsed}
       >
         {sidebarContent}
       </aside>
 
-      {/* Mobile sidebar -- slide-over drawer */}
+      {/* Mobile sidebar -- slide-over drawer from the right */}
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               key="sidebar-backdrop"
               initial={{ opacity: 0 }}
@@ -181,17 +164,16 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
               aria-hidden="true"
             />
 
-            {/* Drawer panel */}
             <motion.aside
               key="sidebar-drawer"
-              initial={{ x: "-100%" }}
+              initial={{ x: "100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              exit={{ x: "100%" }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
-              className="fixed left-0 top-0 h-screen w-64 flex flex-col bg-[var(--color-surface)] border-r border-[var(--color-border)] z-50 lg:hidden"
+              className={cn("fixed right-0 top-0 z-50 lg:hidden", panelClasses)}
               role="dialog"
               aria-modal="true"
-              aria-label="Navigation menu"
+              aria-label="תפריט ניווט"
             >
               {sidebarContent}
             </motion.aside>

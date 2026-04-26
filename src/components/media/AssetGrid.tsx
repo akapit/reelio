@@ -61,10 +61,10 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["assets", projectId] });
-      toast.success("Asset removed");
+      toast.success("הנכס הוסר");
     },
     onError: () => {
-      toast.error("Failed to remove asset");
+      toast.error("שגיאה בהסרת הנכס");
     },
   });
 
@@ -78,10 +78,10 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["assets", projectId] });
-      toast.success("Processing cancelled");
+      toast.success("העיבוד בוטל");
     },
     onError: () => {
-      toast.error("Failed to cancel processing");
+      toast.error("שגיאה בביטול העיבוד");
     },
   });
 
@@ -150,12 +150,12 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
       });
     }
     if (picked.length === 0) {
-      toast.error("Select at least one image to add.");
+      toast.error("בחר לפחות תמונה אחת להוספה.");
       return;
     }
     onAddToCreator(picked);
     toast.success(
-      `${picked.length} ${picked.length === 1 ? "image" : "images"} added to creator`,
+      `${picked.length} ${picked.length === 1 ? "תמונה נוספה" : "תמונות נוספו"} ליוצר`,
     );
     exitSelectionMode();
   };
@@ -204,7 +204,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
   if (isError) {
     return (
       <div className="flex items-center justify-center h-40 rounded-xl border border-red-500/20 bg-red-500/5">
-        <p className="text-sm text-red-400">Failed to load assets. Please refresh.</p>
+        <p className="text-sm text-red-400">שגיאה בטעינת הנכסים. אנא רענן.</p>
       </div>
     );
   }
@@ -222,10 +222,10 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
         </div>
         <div className="text-center">
           <p className="text-sm font-medium text-[var(--color-foreground)]">
-            No assets yet
+            אין נכסים עדיין
           </p>
           <p className="text-xs text-[var(--color-muted)] mt-0.5">
-            Upload your first photo to get started.
+            העלה את התמונה הראשונה כדי להתחיל.
           </p>
         </div>
       </motion.div>
@@ -238,9 +238,9 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
     count: number;
     icon?: React.ReactNode;
   }> = [
-    { id: "all", label: "All", count: counts.all },
-    { id: "image", label: "Images", count: counts.image, icon: <ImageIcon size={12} /> },
-    { id: "video", label: "Videos", count: counts.video, icon: <VideoIcon size={12} /> },
+    { id: "all", label: "הכל", count: counts.all },
+    { id: "image", label: "תמונות", count: counts.image, icon: <ImageIcon size={12} /> },
+    { id: "video", label: "סרטונים", count: counts.video, icon: <VideoIcon size={12} /> },
   ];
 
   return (
@@ -254,7 +254,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
         <div
           className="inline-flex items-center gap-1 rounded-lg p-0.5 bg-[var(--color-surface)] border border-[var(--color-border)]"
           role="tablist"
-          aria-label="Filter assets by type"
+          aria-label="סנן נכסים לפי סוג"
         >
           {filterTabs.map((tab) => {
             const active = typeFilter === tab.id;
@@ -299,8 +299,8 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
               }}
               title={
                 selectionMode
-                  ? "Cancel multi-select"
-                  : "Multi-select to add images to the creator"
+                  ? "בטל בחירה מרובה"
+                  : "בחירה מרובה להוספת תמונות ליוצר"
               }
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md",
@@ -312,7 +312,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
               )}
             >
               {selectionMode ? <X size={12} /> : <CheckSquare size={12} />}
-              <span>{selectionMode ? "Cancel" : "Select"}</span>
+              <span>{selectionMode ? "ביטול" : "בחר"}</span>
             </button>
           )}
           <button
@@ -322,8 +322,8 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
             }
             title={
               sortOrder === "newest"
-                ? "Sorted by newest first — click for oldest first"
-                : "Sorted by oldest first — click for newest first"
+                ? "ממוין מהחדש לישן — לחץ לסיווג מהישן לחדש"
+                : "ממוין מהישן לחדש — לחץ לסיווג מהחדש לישן"
             }
             className={cn(
               "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md",
@@ -338,7 +338,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
             ) : (
               <ArrowUpWideNarrow size={12} />
             )}
-            <span>{sortOrder === "newest" ? "Newest" : "Oldest"}</span>
+            <span>{sortOrder === "newest" ? "חדש" : "ישן"}</span>
           </button>
         </div>
       </div>
@@ -356,7 +356,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
             "bg-[var(--color-accent)]/8 border border-[var(--color-accent)]/25",
           )}
           role="toolbar"
-          aria-label="Selection actions"
+          aria-label="פעולות בחירה"
         >
           <div className="inline-flex items-center gap-2 text-xs">
             <CheckCircle2
@@ -365,7 +365,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
             />
             <span className="font-medium text-[var(--color-foreground)] tabular-nums">
               {selectedIds.size}
-              {selectedIds.size === 1 ? " image" : " images"} selected
+              {selectedIds.size === 1 ? " תמונה נבחרה" : " תמונות נבחרו"}
             </span>
             <button
               type="button"
@@ -381,7 +381,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
               }}
               className="text-[var(--color-muted)] hover:text-[var(--color-foreground)] underline-offset-2 hover:underline"
             >
-              Select all
+              בחר הכל
             </button>
             {selectedIds.size > 0 && (
               <button
@@ -389,7 +389,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
                 onClick={() => setSelectedIds(new Set())}
                 className="text-[var(--color-muted)] hover:text-[var(--color-foreground)] underline-offset-2 hover:underline"
               >
-                Clear
+                נקה
               </button>
             )}
           </div>
@@ -407,7 +407,7 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
           >
             <Plus size={13} />
             <span>
-              Add {selectedIds.size > 0 ? selectedIds.size : ""} to creator
+              הוסף {selectedIds.size > 0 ? selectedIds.size : ""} ליוצר
             </span>
           </button>
         </motion.div>
@@ -419,8 +419,8 @@ export function AssetGrid({ projectId, onRerun, onAddToCreator }: AssetGridProps
           role="status"
         >
           <p className="text-sm text-[var(--color-muted)]">
-            No {typeFilter === "video" ? "videos" : typeFilter === "image" ? "images" : "assets"}{" "}
-            match this filter.
+            אין {typeFilter === "video" ? "סרטונים" : typeFilter === "image" ? "תמונות" : "נכסים"}{" "}
+            התואמים לסינון זה.
           </p>
         </div>
       ) : null}

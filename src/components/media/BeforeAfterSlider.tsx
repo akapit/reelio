@@ -83,7 +83,7 @@ export function BeforeAfterSlider({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={processedUrl}
-        alt="After"
+        alt="אחרי"
         className="block w-full h-auto pointer-events-none"
         draggable={false}
       />
@@ -92,7 +92,7 @@ export function BeforeAfterSlider({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={originalUrl}
-        alt="Before"
+        alt="לפני"
         className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         style={{
           clipPath: `inset(0 ${100 - position}% 0 0)`,
@@ -128,12 +128,12 @@ export function BeforeAfterSlider({
       {/* Labels */}
       <div className="absolute top-3 left-3 pointer-events-none">
         <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-foreground)] backdrop-blur-sm">
-          Before
+          לפני
         </span>
       </div>
       <div className="absolute top-3 right-3 pointer-events-none">
         <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm">
-          After
+          אחרי
         </span>
       </div>
     </div>

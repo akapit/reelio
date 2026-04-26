@@ -130,9 +130,9 @@ const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic)$/i;
 
 type AspectRatioOption = "16:9" | "9:16" | "1:1";
 const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = [
-  { id: "16:9", label: "Landscape", icon: "▬" },
-  { id: "9:16", label: "Portrait", icon: "▮" },
-  { id: "1:1", label: "Square", icon: "◼" },
+  { id: "16:9", label: "רוחבי", icon: "▬" },
+  { id: "9:16", label: "אנכי", icon: "▮" },
+  { id: "1:1", label: "ריבוע", icon: "◼" },
 ];
 
 export function CreationBar({ projectId, preload, addAssets }: CreationBarProps) {
@@ -303,7 +303,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       (a) => a.assetType !== "video",
     );
     if (onlyImages.length === 0) {
-      toast.error("Videos can't be used as source material.");
+      toast.error("לא ניתן להשתמש בסרטונים כחומר מקור.");
       return;
     }
     setExistingAssets((prev) => {
@@ -325,7 +325,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       }
       if (hitCap) {
         toast.warning(
-          `Seedance mode caps at ${MAX_IMAGES_SEEDANCE} images — extra selections skipped.`,
+          `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות — בחירות נוספות דולגו.`,
         );
       }
       return merged;
@@ -340,14 +340,14 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       let accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
       if (accepted.length === 0) {
         if (all.length > 0) {
-          toast.error("Only image files can be added — drop photos here.");
+          toast.error("ניתן להוסיף קבצי תמונה בלבד — שחרר תמונות כאן.");
         }
         return;
       }
       if (accepted.length < all.length) {
         const rejected = all.length - accepted.length;
         toast.warning(
-          `${rejected} file${rejected === 1 ? "" : "s"} skipped — only images are accepted.`,
+          `${rejected} ${rejected === 1 ? "קובץ דולג" : "קבצים דולגו"} — מקובלות תמונות בלבד.`,
         );
       }
 
@@ -364,16 +364,16 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         );
         if (remainingSlots === 0) {
           toast.error(
-            `Seedance mode is capped at ${MAX_IMAGES_SEEDANCE} images. Remove one to add another.`,
+            `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות. הסר אחת כדי להוסיף אחרת.`,
           );
           return;
         }
         if (accepted.length > remainingSlots) {
           const trimmed = accepted.length - remainingSlots;
           toast.warning(
-            `Seedance mode caps at ${MAX_IMAGES_SEEDANCE} images — ${trimmed} file${
-              trimmed === 1 ? "" : "s"
-            } skipped.`,
+            `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות — ${trimmed} ${
+              trimmed === 1 ? "קובץ דולג" : "קבצים דולגו"
+            }.`,
           );
           accepted = accepted.slice(0, remainingSlots);
         }
@@ -451,7 +451,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         try {
           const asset: ExistingAsset = JSON.parse(assetData);
           if (asset.assetType === "video") {
-            toast.error("Videos can't be used as source material — drop images.");
+            toast.error("לא ניתן להשתמש בסרטונים כחומר מקור — שחרר תמונות.");
             return;
           }
           // Seedance cap — mirror the addFiles guard for drag-from-library.
@@ -462,7 +462,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               MAX_IMAGES_SEEDANCE
           ) {
             toast.error(
-              `Seedance mode is capped at ${MAX_IMAGES_SEEDANCE} images. Remove one to add another.`,
+              `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות. הסר אחת כדי להוסיף אחרת.`,
             );
             return;
           }
@@ -610,7 +610,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         process.mutate({ assetId, projectId, tool: "enhance" });
       });
       toast.success(
-        `Enhancing ${uploadedAssetIds.length} photo${uploadedAssetIds.length > 1 ? "s" : ""}`
+        `משדרג ${uploadedAssetIds.length} תמונ${uploadedAssetIds.length > 1 ? "ות" : "ה"}`
       );
     } else if (mode === "video") {
       if (uploadedAssetIds.length > 0) {
@@ -728,7 +728,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
                       "focus:opacity-100 outline-none"
                     )}
-                    aria-label={`Remove image ${imageNumber}`}
+                    aria-label={`הסר תמונה ${imageNumber}`}
                   >
                     <X size={10} />
                   </button>
@@ -770,7 +770,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
                       "focus:opacity-100 outline-none"
                     )}
-                    aria-label={`Remove image ${imageNumber}`}
+                    aria-label={`הסר תמונה ${imageNumber}`}
                   >
                     <X size={10} />
                   </button>
@@ -815,10 +815,10 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                 <span className="text-[var(--color-muted)]">
                   {" "}
                   {videoMode === "seedance"
-                    ? `— add at least 1 image (Seedance accepts up to ${MAX_IMAGES_SEEDANCE}).`
-                    : `— add ${videoImageShortfall} more ${
-                        videoImageShortfall === 1 ? "photo" : "photos"
-                      } to generate a video.`}
+                    ? `— הוסף לפחות תמונה אחת (Seedance מקבל עד ${MAX_IMAGES_SEEDANCE}).`
+                    : `— הוסף עוד ${videoImageShortfall} ${
+                        videoImageShortfall === 1 ? "תמונה" : "תמונות"
+                      } כדי ליצור סרטון.`}
                 </span>
               </span>
             </div>
@@ -843,8 +843,8 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
             }}
             placeholder={
               mode === "enhance"
-                ? "Describe the enhancement (or leave empty for auto)..."
-                : "Drop photos and select what to create..."
+                ? "תאר את השדרוג (או השאר ריק לאוטומטי)..."
+                : "שחרר תמונות ובחר מה ליצור..."
             }
             rows={1}
             className={cn(
@@ -869,7 +869,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                   "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
                 )}
                 role="listbox"
-                aria-label="Image mentions"
+                aria-label="אזכורי תמונות"
               >
                 {mentionSuggestions.map((name, i) => {
                   const active = i === mention.activeIndex;
@@ -922,7 +922,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     type="text"
                     value={voiceoverSubject}
                     onChange={(e) => setVoiceoverSubject(e.target.value)}
-                    placeholder="What to mention (optional) — e.g. 4 beds, ocean view, rooftop deck"
+                    placeholder="מה לציין (אופציונלי) — למשל: 4 חדרים, נוף לים, גג"
                     maxLength={240}
                     className={cn(
                       "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
@@ -935,7 +935,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     <textarea
                       value={voiceoverText}
                       onChange={(e) => setVoiceoverText(e.target.value)}
-                      placeholder="Write the narration script..."
+                      placeholder="כתוב את תסריט הקריינות..."
                       rows={2}
                       maxLength={500}
                       className={cn(
@@ -949,8 +949,8 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     type="button"
                     title={
                       voiceoverSubject.trim()
-                        ? "Generate script with AI"
-                        : "Add a short subject above to generate a script"
+                        ? "צור תסריט עם AI"
+                        : "הוסף נושא קצר למעלה כדי ליצור תסריט"
                     }
                     disabled={generatingScript || !voiceoverSubject.trim()}
                     onClick={async () => {
@@ -977,11 +977,11 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                             body.code === "auth_fetch_failed"
                           ) {
                             toast.error(
-                              "Couldn't verify session — please try again.",
+                              "לא ניתן לאמת את הסשן — אנא נסה שוב.",
                             );
                           } else {
                             toast.error(
-                              body.error ?? "Failed to generate script",
+                              body.error ?? "שגיאה ביצירת התסריט",
                             );
                           }
                           return;
@@ -991,14 +991,14 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                         };
                         if (typeof script === "string" && script.trim().length > 0) {
                           setVoiceoverText(script);
-                          toast.success("Script generated");
+                          toast.success("התסריט נוצר");
                         } else {
                           toast.error(
-                            "Empty script returned — please try again",
+                            "התסריט שהוחזר ריק — אנא נסה שוב",
                           );
                         }
                       } catch {
-                        toast.error("Failed to generate script");
+                        toast.error("שגיאה ביצירת התסריט");
                       } finally {
                         setGeneratingScript(false);
                       }
@@ -1049,7 +1049,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       type="text"
                       value={musicPrompt}
                       onChange={(e) => setMusicPrompt(e.target.value)}
-                      placeholder="Music style..."
+                      placeholder="סגנון מוזיקה..."
                       className={cn(
                         "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
                         "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
@@ -1065,9 +1065,9 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     value={musicVolume}
                     onChange={(e) => setMusicVolume(Number(e.target.value))}
                     className="w-14 accent-[var(--color-accent)]"
-                    title={`Volume: ${musicVolume}%`}
+                    title={`עוצמת שמע: ${musicVolume}%`}
                   />
-                  <span className="text-xs text-[var(--color-muted)] w-7 text-right tabular-nums">
+                  <span className="text-xs text-[var(--color-muted)] w-7 text-left tabular-nums">
                     {musicVolume}%
                   </span>
                 </div>
@@ -1083,7 +1083,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         <button
           type="button"
           onClick={() => toggleMode("enhance")}
-          title="Enhance photos"
+          title="שדרג תמונות"
           className={cn(
             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
             "text-xs font-medium transition-colors duration-150 outline-none",
@@ -1093,14 +1093,14 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           )}
         >
           <ImageIcon size={14} />
-          <span className="hidden sm:inline">Photo</span>
+          <span className="hidden sm:inline">תמונה</span>
         </button>
 
         {/* Video toggle */}
         <button
           type="button"
           onClick={() => toggleMode("video")}
-          title="Generate video"
+          title="צור סרטון"
           className={cn(
             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
             "text-xs font-medium transition-colors duration-150 outline-none",
@@ -1110,7 +1110,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           )}
         >
           <Video size={14} />
-          <span className="hidden sm:inline">Video</span>
+          <span className="hidden sm:inline">סרטון</span>
         </button>
 
         {/* Video options — voiceover + music only now. Model / duration /
@@ -1138,8 +1138,8 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                 }
                 title={
                   videoMode === "seedance"
-                    ? `Seedance mode (single 15s video, up to ${MAX_IMAGES_SEEDANCE} images)`
-                    : "Switch to Seedance mode"
+                    ? `מצב Seedance (סרטון 15 שנ' בודד, עד ${MAX_IMAGES_SEEDANCE} תמונות)`
+                    : "עבור למצב Seedance"
                 }
                 className={cn(
                   "inline-flex items-center gap-1 px-2 h-7 rounded-md transition-colors duration-150",
@@ -1156,7 +1156,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               <button
                 type="button"
                 onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
-                title={voiceoverEnabled ? "Voiceover enabled" : "Add voiceover"}
+                title={voiceoverEnabled ? "קריינות מופעלת" : "הוסף קריינות"}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   voiceoverEnabled
@@ -1170,7 +1170,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               <button
                 type="button"
                 onClick={() => setMusicEnabled(!musicEnabled)}
-                title={musicEnabled ? "Music enabled" : "Add background music"}
+                title={musicEnabled ? "מוזיקה מופעלת" : "הוסף מוזיקת רקע"}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   musicEnabled
@@ -1191,7 +1191,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
             <button
               type="button"
               onClick={() => setAspectRatioOpen((prev) => !prev)}
-              title="Aspect ratio"
+              title="יחס תמונה"
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 rounded-md",
                 "text-xs font-medium transition-colors duration-150 outline-none",
@@ -1282,7 +1282,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          title="Browse files"
+          title="עיין בקבצים"
           className={cn(
             "w-8 h-8 rounded-lg flex items-center justify-center",
             "text-[var(--color-muted)] transition-colors duration-150 outline-none",
@@ -1299,16 +1299,16 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           disabled={!canSubmit}
           title={
             !hasAssets
-              ? "Add photos first"
+              ? "הוסף תמונות תחילה"
               : !mode
-                ? "Select a mode"
+                ? "בחר מצב"
                 : mode === "video" && videoImageShortfall > 0
-                  ? `Add ${videoImageShortfall} more photo${
-                      videoImageShortfall === 1 ? "" : "s"
-                    } to generate`
+                  ? `הוסף עוד ${videoImageShortfall} ${
+                      videoImageShortfall === 1 ? "תמונה" : "תמונות"
+                    } כדי ליצור`
                   : mode === "enhance"
-                    ? "Enhance photos"
-                    : "Generate video"
+                    ? "שדרג תמונות"
+                    : "צור סרטון"
           }
           className={cn(
             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg",
@@ -1321,10 +1321,10 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           <Send size={13} />
           <span className="hidden sm:inline">
             {mode === "enhance"
-              ? "Enhance"
+              ? "שדרג"
               : mode === "video"
-                ? "Generate"
-                : "Create"}
+                ? "צור"
+                : "צור"}
           </span>
         </button>
       </div>

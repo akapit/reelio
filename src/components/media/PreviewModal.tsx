@@ -73,24 +73,24 @@ const MODEL_LABELS: Record<string, string> = {
 
 const RUN_STATUS_META = {
   pending: {
-    label: "Pending",
+    label: "ממתין",
     icon: Clock3,
     className:
       "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)]",
   },
   running: {
-    label: "Running",
+    label: "רץ",
     icon: Loader2,
     className:
       "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 text-[var(--color-accent)]",
   },
   done: {
-    label: "Done",
+    label: "הושלם",
     icon: CheckCircle2,
     className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
   },
   failed: {
-    label: "Failed",
+    label: "נכשל",
     icon: XCircle,
     className: "border-red-500/30 bg-red-500/10 text-red-400",
   },
@@ -281,7 +281,7 @@ export function PreviewModal({
   const openerSnippet =
     generationConfig?.effectPhrases?.opener ?? effectFromLibrary?.openerPhrase;
   const effectTitle = openerSnippet
-    ? `Opener: ${openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}…` : openerSnippet}`
+    ? `פתיחה: ${openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}…` : openerSnippet}`
     : undefined;
   const RunStatusIcon = runStatusMeta?.icon;
 
@@ -338,7 +338,7 @@ export function PreviewModal({
                             : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                         )}
                       >
-                        {tab === "original" ? "Original" : "Enhanced"}
+                        {tab === "original" ? "מקורי" : "משודרג"}
                       </button>
                     ))}
                   </div>
@@ -351,7 +351,7 @@ export function PreviewModal({
                   type="button"
                   onClick={onClose}
                   className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex-shrink-0"
-                  aria-label="Close preview"
+                  aria-label="סגור תצוגה מקדימה"
                 >
                   <X size={16} />
                 </button>
@@ -384,10 +384,10 @@ export function PreviewModal({
                       </div>
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-[var(--color-foreground)]">
-                          Video is still processing
+                          הסרטון עדיין בעיבוד
                         </p>
                         <p className="text-xs text-[var(--color-muted)] max-w-md">
-                          The run timeline below shows the current stage, scene prompts, and any upstream task ids.
+                          ציר הזמן של הריצה למטה מציג את השלב הנוכחי, פרומפטים לסצנות ומזהי משימות.
                         </p>
                       </div>
                       {sources[0] && (
@@ -395,7 +395,7 @@ export function PreviewModal({
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={sources[0].thumbnailUrl ?? sources[0].originalUrl}
-                            alt="Primary source"
+                            alt="מקור ראשי"
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -406,7 +406,7 @@ export function PreviewModal({
                     <img
                       key={currentUrl ?? originalUrl}
                       src={currentUrl ?? originalUrl}
-                      alt="Asset preview"
+                      alt="תצוגה מקדימה"
                       className="max-w-full max-h-full object-contain rounded-xl"
                     />
                   )}
@@ -421,7 +421,7 @@ export function PreviewModal({
                   {generationConfig?.prompt && (
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
-                        Prompt
+                        פרומפט
                       </p>
                       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap break-words leading-relaxed">
                         {generationConfig.prompt}
@@ -478,7 +478,7 @@ export function PreviewModal({
                       >
                         <Sparkles size={12} />
                         <span className="text-[var(--color-foreground)] font-medium">
-                          Effect: {effectName}
+                          אפקט: {effectName}
                         </span>
                       </div>
                     )}
@@ -502,16 +502,16 @@ export function PreviewModal({
                           {runStatusMeta.label}
                         </span>
                         <span className="text-[11px] text-[var(--color-muted)]">
-                          Run {engineRun.id.slice(0, 8)}
+                          ריצה {engineRun.id.slice(0, 8)}
                         </span>
                         {typeof engineRun.input?.templateName === "string" && (
                           <span className="text-[11px] text-[var(--color-muted)]">
-                            Template: {engineRun.input.templateName}
+                            תבנית: {engineRun.input.templateName}
                           </span>
                         )}
                         {totalRunDuration && (
                           <span className="text-[11px] text-[var(--color-muted)]">
-                            Total: {totalRunDuration}
+                            סה״כ: {totalRunDuration}
                           </span>
                         )}
                       </div>
@@ -525,7 +525,7 @@ export function PreviewModal({
                       {engineScenes.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                            Scenes
+                            סצנות
                           </p>
                           <div className="grid gap-2">
                             {engineScenes.map((scene) => {
@@ -565,7 +565,7 @@ export function PreviewModal({
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="text-xs font-medium text-[var(--color-foreground)]">
-                                        Scene {scene.scene_order}
+                                        סצנה {scene.scene_order}
                                       </span>
                                       <span className="text-[10px] text-[var(--color-muted)] uppercase tracking-[0.12em]">
                                         {scene.scene_role}
@@ -599,7 +599,7 @@ export function PreviewModal({
                                     {scene.motion_intent && <span>{scene.motion_intent}</span>}
                                     {typeof scene.prompt?.modelChoice === "string" && (
                                       <span>
-                                        Model:{" "}
+                                        מודל:{" "}
                                         {MODEL_LABELS[scene.prompt.modelChoice] ??
                                           scene.prompt.modelChoice}
                                       </span>
@@ -607,12 +607,12 @@ export function PreviewModal({
                                     {typeof scene.output?.videoUrl === "string" && (
                                       <span className="inline-flex items-center gap-1">
                                         <Upload size={10} />
-                                        Clip ready
+                                        קליפ מוכן
                                       </span>
                                     )}
                                     {typeof crop?.reason === "string" && (
                                       <span>
-                                        Crop: {crop.reason}
+                                        חיתוך: {crop.reason}
                                       </span>
                                     )}
                                     {typeof evaluation?.score === "number" && (
@@ -632,13 +632,13 @@ export function PreviewModal({
                                       {Array.isArray(evaluation.issues) &&
                                         evaluation.issues.length > 0 && (
                                           <p>
-                                            Issues:{" "}
+                                            בעיות:{" "}
                                             {evaluation.issues.join(", ")}
                                           </p>
                                         )}
                                       {typeof sceneOutput.retryReason === "string" &&
                                         sceneOutput.retryReason && (
-                                          <p>Retry reason: {sceneOutput.retryReason}</p>
+                                          <p>סיבת ניסיון חוזר: {sceneOutput.retryReason}</p>
                                         )}
                                     </div>
                                   )}
@@ -661,7 +661,7 @@ export function PreviewModal({
                                             className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]"
                                           >
                                             <span className="text-[var(--color-foreground)] font-medium">
-                                              Attempt {attempt.attempt_order}
+                                              ניסיון {attempt.attempt_order}
                                             </span>
                                             <span
                                               className={cn(
@@ -685,7 +685,7 @@ export function PreviewModal({
                                             {typeof attempt.external_ids?.piapiTaskId ===
                                               "string" && (
                                               <span>
-                                                Task {attempt.external_ids.piapiTaskId}
+                                                משימה {attempt.external_ids.piapiTaskId}
                                               </span>
                                             )}
                                             {typeof attempt.metrics?.generationMs ===
@@ -726,7 +726,7 @@ export function PreviewModal({
 
                       <div className="space-y-2">
                         <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                          Pipeline
+                          צינור עיבוד
                         </p>
                         <div className="grid gap-2">
                         {engineSteps.map((step) => {
@@ -774,11 +774,11 @@ export function PreviewModal({
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
                                   {typeof step.input?.sceneOrder === "number" && (
-                                    <span>Scene {step.input.sceneOrder}</span>
+                                    <span>סצנה {step.input.sceneOrder}</span>
                                   )}
                                   {stepDuration && <span>{stepDuration}</span>}
                                   {typeof step.external_ids?.piapiTaskId === "string" && (
-                                    <span>Task {step.external_ids.piapiTaskId}</span>
+                                    <span>משימה {step.external_ids.piapiTaskId}</span>
                                   )}
                                   {typeof step.external_ids?.anthropicRequestId === "string" && (
                                     <span>Anthropic {step.external_ids.anthropicRequestId}</span>
@@ -795,18 +795,18 @@ export function PreviewModal({
                               <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
                                 {typeof step.input?.modelChoice === "string" && (
                                   <span>
-                                    Model: {MODEL_LABELS[step.input.modelChoice] ?? step.input.modelChoice}
+                                    מודל: {MODEL_LABELS[step.input.modelChoice] ?? step.input.modelChoice}
                                   </span>
                                 )}
                                 {typeof step.output?.videoUrl === "string" && (
                                   <span className="inline-flex items-center gap-1">
                                     <Upload size={10} />
-                                    Clip ready
+                                    קליפ מוכן
                                   </span>
                                 )}
                                 {typeof step.metrics?.generationMs === "number" && (
                                   <span>
-                                    Generate: {formatDurationMs(step.metrics.generationMs)}
+                                    יצירה: {formatDurationMs(step.metrics.generationMs)}
                                   </span>
                                 )}
                               </div>
@@ -822,7 +822,7 @@ export function PreviewModal({
 
                         {!isEngineLoading && engineSteps.length === 0 && (
                           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-muted)]">
-                            No engine step records yet.
+                            אין רשומות שלבים עדיין.
                           </div>
                         )}
                       </div>
@@ -831,7 +831,7 @@ export function PreviewModal({
                       {engineEvents.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                            Events
+                            אירועים
                           </p>
                           <div className="grid gap-2">
                             {engineEvents.slice(-12).map((event) => (
@@ -866,7 +866,7 @@ export function PreviewModal({
                                 )}
                                 {typeof event.payload?.retryReason === "string" &&
                                   event.payload.retryReason && (
-                                    <p>Retry: {event.payload.retryReason}</p>
+                                    <p>ניסיון חוזר: {event.payload.retryReason}</p>
                                   )}
                               </div>
                             ))}
@@ -880,15 +880,15 @@ export function PreviewModal({
                     <div className="pt-3 border-t border-[var(--color-border)]">
                       <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
                         {sources.length > 1
-                          ? `Sources (${sources.length})`
-                          : "Source"}
+                          ? `מקורות (${sources.length})`
+                          : "מקור"}
                       </p>
                       <div className="flex gap-2 flex-wrap">
                         {sources.map((src) => (
                           <div
                             key={src.id}
                             className="relative w-16 h-12 rounded-md overflow-hidden bg-[var(--color-surface)] ring-1 ring-[var(--color-border)] shrink-0"
-                            title={`Original ${src.assetType}`}
+                            title={`${src.assetType === "video" ? "סרטון" : "תמונה"} מקורי`}
                           >
                             {src.assetType === "video" ? (
                               <video
@@ -901,7 +901,7 @@ export function PreviewModal({
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={src.thumbnailUrl ?? src.originalUrl}
-                                alt="Source"
+                                alt="מקור"
                                 className="w-full h-full object-cover"
                               />
                             )}
@@ -927,7 +927,7 @@ export function PreviewModal({
                   )}
                 >
                   <Download size={13} />
-                  {downloading ? "Downloading…" : "Download"}
+                  {downloading ? "מוריד..." : "הורד"}
                 </button>
                 {onRerun && (
                   <button
@@ -940,7 +940,7 @@ export function PreviewModal({
                     )}
                   >
                     <RotateCcw size={13} />
-                    Re-run
+                    הרץ מחדש
                   </button>
                 )}
               </div>

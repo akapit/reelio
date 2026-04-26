@@ -55,38 +55,38 @@ const statusConfig: Record<
   { label: string; className: string; pulse?: boolean }
 > = {
   uploaded: {
-    label: "Uploaded",
+    label: "הועלה",
     className:
       "bg-[var(--color-surface-raised)] text-[var(--color-muted)] border-[var(--color-border)]",
   },
   processing: {
-    label: "Processing",
+    label: "בעיבוד",
     className:
       "bg-[var(--color-accent)]/10 text-[var(--color-accent)] border-[var(--color-accent)]/30",
     pulse: true,
   },
   done: {
-    label: "Done",
+    label: "הושלם",
     className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
   },
   failed: {
-    label: "Failed",
+    label: "נכשל",
     className: "bg-red-500/10 text-red-400 border-red-500/30",
   },
 };
 
 const toolLabels: Record<AssetTool, string> = {
-  enhance: "Enhance",
-  staging: "Staging",
-  sky: "Sky Swap",
-  video: "Video",
+  enhance: "שדרוג",
+  staging: "סטיילינג",
+  sky: "החלפת שמיים",
+  video: "סרטון",
 };
 
 const processingLabels: Record<AssetTool, string> = {
-  enhance: "Enhancing...",
-  staging: "Staging...",
-  sky: "Replacing sky...",
-  video: "Generating video...",
+  enhance: "משדרג...",
+  staging: "מבצע סטיילינג...",
+  sky: "מחליף שמיים...",
+  video: "יוצר סרטון...",
 };
 
 export function AssetCard({
@@ -174,11 +174,11 @@ export function AssetCard({
             >
               <Loader2 size={24} className="animate-spin text-[var(--color-muted)]" />
               <span className="text-xs text-[var(--color-muted)]">
-                {toolUsed ? processingLabels[toolUsed] : "Processing..."}
+                {toolUsed ? processingLabels[toolUsed] : "בעיבוד..."}
               </span>
               {onPreview && !isInSelectMode && (
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-muted)]/80">
-                  Inspect run
+                  בדוק ריצה
                 </span>
               )}
             </div>
@@ -190,7 +190,7 @@ export function AssetCard({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <button
                 type="button"
-                title="Cancel processing"
+                title="בטל עיבוד"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCancel?.();
@@ -206,7 +206,7 @@ export function AssetCard({
                 )}
               >
                 <Square size={10} className="fill-current" />
-                Stop
+                עצור
               </button>
             </div>
           </>
@@ -232,7 +232,7 @@ export function AssetCard({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={thumbUrl}
-                  alt="Asset"
+                  alt="נכס"
                   className="w-full h-full object-cover"
                   loading="lazy"
                 />
@@ -269,7 +269,7 @@ export function AssetCard({
               >
                 <button
                   type="button"
-                  title="Remove asset"
+                  title="הסר נכס"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete?.();
@@ -297,7 +297,7 @@ export function AssetCard({
               >
                 <button
                   type="button"
-                  title="Enhance Photo"
+                  title="שדרג תמונה"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEnhance?.();
@@ -314,7 +314,7 @@ export function AssetCard({
                 </button>
                 <button
                   type="button"
-                  title="Generate Video"
+                  title="צור סרטון"
                   onClick={(e) => {
                     e.stopPropagation();
                     onGenerateVideo?.();
@@ -331,7 +331,7 @@ export function AssetCard({
                 </button>
                 <button
                   type="button"
-                  title="Download"
+                  title="הורד"
                   onClick={(e) => {
                     e.stopPropagation();
                     window.open(displayUrl, "_blank");
@@ -360,7 +360,7 @@ export function AssetCard({
                 className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm hover:bg-black/80 transition-colors duration-150"
               >
                 <SlidersHorizontal size={10} />
-                Compare
+                השווה
               </button>
             )}
 
@@ -374,8 +374,8 @@ export function AssetCard({
                 "bg-black/55 text-white backdrop-blur-sm",
                 "pointer-events-none select-none",
               )}
-              aria-label={assetType === "video" ? "Video asset" : "Image asset"}
-              title={assetType === "video" ? "Video" : "Image"}
+              aria-label={assetType === "video" ? "נכס סרטון" : "נכס תמונה"}
+              title={assetType === "video" ? "סרטון" : "תמונה"}
             >
               {assetType === "video" ? (
                 <Video size={11} />

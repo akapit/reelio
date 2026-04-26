@@ -1,15 +1,19 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 
 export function useAssets(projectId: string) {
   const supabase = createClient();
   const qc = useQueryClient();
+  // Unique per hook instance — multiple components subscribing to the same
+  // project would otherwise share a Supabase channel object and trip
+  // "cannot add postgres_changes callbacks after subscribe()".
+  const instanceId = useId();
 
   useEffect(() => {
     const channel = supabase
-      .channel(`assets-${projectId}`)
+      .channel(`assets-${projectId}-${instanceId}`)
       .on(
         "postgres_changes",
         {
@@ -26,7 +30,7 @@ export function useAssets(projectId: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [projectId, supabase, qc]);
+  }, [projectId, supabase, qc, instanceId]);
 
   return useQuery({
     queryKey: ["assets", projectId],

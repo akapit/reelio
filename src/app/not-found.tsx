@@ -29,10 +29,10 @@ export default function NotFound() {
             className="text-3xl font-semibold text-[var(--color-foreground)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Page not found
+            הדף לא נמצא
           </h1>
           <p className="text-sm text-[var(--color-muted)] leading-relaxed">
-            The page you are looking for does not exist or may have been moved.
+            הדף שחיפשת אינו קיים או שהועבר.
           </p>
         </div>
 
@@ -41,7 +41,7 @@ export default function NotFound() {
           href="/dashboard"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 hover:border-[var(--color-accent)]/40 transition-colors duration-200"
         >
-          Back to Dashboard
+          חזרה לדף הבית
         </Link>
       </div>
     </div>

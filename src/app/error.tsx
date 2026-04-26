@@ -53,15 +53,14 @@ export default function GlobalError({ error, reset }: ErrorProps) {
             className="text-3xl font-semibold text-[var(--color-foreground)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            Something went wrong
+            משהו השתבש
           </h1>
           <p className="text-sm text-[var(--color-muted)] leading-relaxed">
-            An unexpected error occurred. You can try again or return to the
-            dashboard.
+            אירעה שגיאה לא צפויה. ניתן לנסות שוב או לחזור ללוח הבקרה.
           </p>
           {error.digest && (
             <p className="text-xs text-[var(--color-muted)]/60 font-mono mt-1">
-              Error ID: {error.digest}
+              מזהה שגיאה: {error.digest}
             </p>
           )}
         </div>
@@ -72,13 +71,13 @@ export default function GlobalError({ error, reset }: ErrorProps) {
             onClick={reset}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 hover:border-[var(--color-accent)]/40 transition-colors duration-200"
           >
-            Try again
+            נסה שוב
           </button>
           <a
             href="/dashboard"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:border-[var(--color-border)]/80 transition-colors duration-200"
           >
-            Go to Dashboard
+            חזרה לדף הבית
           </a>
         </div>
       </div>

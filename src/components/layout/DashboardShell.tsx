@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
-import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
+import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
 import { cn } from "@/lib/utils";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -24,18 +24,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-screen bg-[var(--color-background)]">
-      <Sidebar
-        isOpen={sidebarOpen}
-        onClose={handleSidebarClose}
-        desktopCollapsed={desktopCollapsed}
-      />
-
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 to-stone-100">
+      {/* Main content — margin on the RIGHT to make room for the RTL sidebar */}
       <div
         className={cn(
-          "flex flex-col flex-1 min-w-0 ml-0",
+          "flex flex-col flex-1 min-w-0 mr-0",
           "transition-[margin] duration-300 ease-out",
-          desktopCollapsed ? "lg:ml-0" : "lg:ml-64",
+          desktopCollapsed ? "lg:mr-0" : "lg:mr-52",
         )}
       >
         <Header
@@ -48,7 +43,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      <CreateProjectModal
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={handleSidebarClose}
+        desktopCollapsed={desktopCollapsed}
+      />
+
+      <CreatePropertyModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
       />

@@ -110,10 +110,10 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
                 className="text-[var(--color-accent)] animate-spin"
               />
               <p className="text-sm font-medium text-[var(--color-foreground)]">
-                Uploading…
+                מעלה...
               </p>
               <p className="text-xs text-[var(--color-muted)]">
-                Please wait while your files are uploaded.
+                אנא המתן בזמן העלאת הקבצים.
               </p>
             </motion.div>
           ) : (
@@ -145,10 +145,10 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-[var(--color-foreground)]">
-                  Drop your photos or videos here
+                  גרור תמונות או סרטונים לכאן
                 </p>
                 <p className="text-xs text-[var(--color-muted)] mt-0.5">
-                  JPEG, PNG, WebP, HEIC, MP4, MOV — up to multiple files
+                  JPEG, PNG, WebP, HEIC, MP4, MOV — מספר קבצים במקביל
                 </p>
               </div>
               <button
@@ -159,7 +159,7 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
                   inputRef.current?.click();
                 }}
               >
-                or browse files
+                או עיין בקבצים
               </button>
             </motion.div>
           )}

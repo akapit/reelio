@@ -2,10 +2,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 
-export function useProjects() {
+export function useProperties() {
   const supabase = createClient();
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: ["properties"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
@@ -17,7 +17,7 @@ export function useProjects() {
   });
 }
 
-export function useCreateProject() {
+export function useCreateProperty() {
   const supabase = createClient();
   const qc = useQueryClient();
   return useMutation({
@@ -37,6 +37,6 @@ export function useCreateProject() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["properties"] }),
   });
 }

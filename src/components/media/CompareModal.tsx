@@ -62,13 +62,13 @@ export function CompareModal({
                   className="text-2xl font-semibold text-[var(--color-foreground)]"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  Before &amp; After
+                  לפני ואחרי
                 </h2>
 
                 <button
                   onClick={onClose}
                   className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                  aria-label="Close modal"
+                  aria-label="סגור חלון"
                 >
                   <X size={16} />
                 </button>

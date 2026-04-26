@@ -101,8 +101,8 @@ export function VideoOptionsModal({
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                aria-label="Close modal"
+                className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
+                aria-label="סגור חלון"
               >
                 <X size={16} />
               </button>
@@ -112,17 +112,17 @@ export function VideoOptionsModal({
                 className="text-2xl font-semibold text-[var(--color-foreground)] mb-1"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                Generate Video
+                צור סרטון
               </h2>
               <p className="text-sm text-[var(--color-muted)] mb-6">
-                Create a cinematic walkthrough from this photo.
+                צור סיור קולנועי מתמונה זו.
               </p>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                 {/* Duration selector */}
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                    Duration
+                    משך
                   </span>
                   <div className="flex gap-2">
                     {([5, 10] as Duration[]).map((d) => (
@@ -139,7 +139,7 @@ export function VideoOptionsModal({
                             : "bg-[var(--color-surface-raised)] text-[var(--color-foreground)] hover:bg-[#28282c]"
                         )}
                       >
-                        {d} seconds
+                        {d} שניות
                       </button>
                     ))}
                   </div>
@@ -148,7 +148,7 @@ export function VideoOptionsModal({
                 {/* Quality selector */}
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                    Quality
+                    איכות
                   </span>
                   <div className="flex gap-2">
                     {(["fast", "quality"] as Quality[]).map((q) => (
@@ -164,7 +164,7 @@ export function VideoOptionsModal({
                             : "bg-[var(--color-surface-raised)] text-[var(--color-foreground)] hover:bg-[#28282c]"
                         )}
                       >
-                        {q === "fast" ? "Fast" : "Quality"}
+                        {q === "fast" ? "מהיר" : "איכות"}
                       </button>
                     ))}
                   </div>
@@ -176,9 +176,9 @@ export function VideoOptionsModal({
                     htmlFor={promptId}
                     className="text-sm font-medium text-[var(--color-foreground)] leading-none"
                   >
-                    Prompt{" "}
+                    פרומפט{" "}
                     <span className="text-[var(--color-muted)] font-normal">
-                      (optional)
+                      (אופציונלי)
                     </span>
                   </label>
                   <textarea
@@ -186,7 +186,7 @@ export function VideoOptionsModal({
                     rows={3}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe the camera motion... (optional)"
+                    placeholder="תאר את תנועת המצלמה... (אופציונלי)"
                     className={cn(
                       "w-full px-3 py-2.5 rounded-lg text-sm resize-none",
                       "bg-[var(--color-surface)] border border-[var(--color-border)]",
@@ -223,21 +223,21 @@ export function VideoOptionsModal({
                       />
                     </button>
                     <span className="text-sm font-medium text-[var(--color-foreground)]">
-                      Add voiceover narration
+                      הוסף קריינות
                     </span>
                   </label>
 
                   {voiceoverEnabled && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                        Voiceover script
+                        תסריט קריינות
                       </label>
                       <textarea
                         rows={3}
                         maxLength={500}
                         value={voiceoverText}
                         onChange={(e) => setVoiceoverText(e.target.value)}
-                        placeholder="Welcome to this stunning three-bedroom home nestled in a quiet cul-de-sac..."
+                        placeholder="ברוכים הבאים לבית התלת-חדרי המדהים הזה..."
                         className={cn(
                           "w-full px-3 py-2.5 rounded-lg text-sm resize-none",
                           "bg-[var(--color-surface)] border border-[var(--color-border)]",
@@ -248,7 +248,7 @@ export function VideoOptionsModal({
                           "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
                       />
-                      <span className="text-xs text-[var(--color-muted)] text-right">
+                      <span className="text-xs text-[var(--color-muted)] text-left">
                         {voiceoverText.length}/500
                       </span>
                     </div>
@@ -265,7 +265,7 @@ export function VideoOptionsModal({
                     onClick={onClose}
                     disabled={process.isPending}
                   >
-                    Cancel
+                    ביטול
                   </Button>
                   <Button
                     type="submit"
@@ -274,7 +274,7 @@ export function VideoOptionsModal({
                     className="flex-1"
                     disabled={process.isPending}
                   >
-                    {process.isPending ? "Generating..." : "Generate"}
+                    {process.isPending ? "יוצר..." : "צור"}
                   </Button>
                 </div>
               </form>

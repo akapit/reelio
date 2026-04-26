@@ -24,13 +24,13 @@ export default function SignupPage() {
 
   function validate() {
     const next: typeof errors = {};
-    if (!fullName.trim()) next.fullName = "Full name is required.";
-    if (!email.trim()) next.email = "Email is required.";
+    if (!fullName.trim()) next.fullName = "שדה חובה";
+    if (!email.trim()) next.email = "שדה חובה";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = "Enter a valid email address.";
-    if (!password) next.password = "Password is required.";
+      next.email = "אימייל לא תקין";
+    if (!password) next.password = "שדה חובה";
     else if (password.length < 8)
-      next.password = "Password must be at least 8 characters.";
+      next.password = "סיסמה קצרה מדי";
     return next;
   }
 
@@ -59,17 +59,20 @@ export default function SignupPage() {
         return;
       }
 
-      toast.success("Account created — check your email to confirm.");
+      toast.success("החשבון נוצר — בדוק את האימייל שלך לאישור.");
       router.push("/login?message=check-email");
     } catch {
-      toast.error("Something went wrong. Please try again.");
+      toast.error("משהו השתבש. נסה שוב.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]"
+      dir="rtl"
+    >
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -85,7 +88,7 @@ export default function SignupPage() {
             reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Create your account
+            בואו נתחיל
           </p>
         </div>
 
@@ -93,10 +96,10 @@ export default function SignupPage() {
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
-              label="Full name"
+              label="שם מלא"
               type="text"
               autoComplete="name"
-              placeholder="Jane Smith"
+              placeholder="ישראל ישראלי"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               error={errors.fullName}
@@ -104,7 +107,7 @@ export default function SignupPage() {
             />
 
             <Input
-              label="Email"
+              label="אימייל"
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
@@ -115,10 +118,10 @@ export default function SignupPage() {
             />
 
             <Input
-              label="Password"
+              label="סיסמה"
               type="password"
               autoComplete="new-password"
-              placeholder="At least 8 characters"
+              placeholder="לפחות 8 תווים"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={errors.password}
@@ -135,10 +138,10 @@ export default function SignupPage() {
               {loading ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  Creating account…
+                  טוען...
                 </>
               ) : (
-                "Create account"
+                "הרשם"
               )}
             </Button>
           </form>
@@ -146,12 +149,12 @@ export default function SignupPage() {
 
         {/* Footer link */}
         <p className="text-center text-sm text-[var(--color-muted)] mt-6">
-          Already have an account?{" "}
+          כבר יש לך חשבון?{" "}
           <Link
             href="/login"
             className="text-[var(--color-foreground)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
           >
-            Sign in
+            התחבר
           </Link>
         </p>
       </motion.div>

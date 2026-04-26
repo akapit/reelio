@@ -5,18 +5,18 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { useCreateProject } from "@/hooks/use-projects";
+import { useCreateProperty } from "@/hooks/use-properties";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-interface CreateProjectModalProps {
+interface CreatePropertyModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps) {
+export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProps) {
   const router = useRouter();
-  const mutation = useCreateProject();
+  const mutation = useCreateProperty();
   const nameRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLInputElement>(null);
 
@@ -50,12 +50,12 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
     }
 
     try {
-      const project = await mutation.mutateAsync({ name, property_address });
-      toast.success(`"${project.name}" created`);
+      const property = await mutation.mutateAsync({ name, property_address });
+      toast.success(`"${property.name}" נוצר`);
       onClose();
-      router.push(`/dashboard/projects/${project.id}`);
+      router.push(`/dashboard/properties/${property.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create project");
+      toast.error(err instanceof Error ? err.message : "שגיאה ביצירת הנכס");
     }
   }
 
@@ -85,13 +85,14 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
           >
             <div
               className="relative w-[calc(100%-2rem)] sm:w-full max-w-md mx-auto pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-6 sm:p-8"
+              dir="rtl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                aria-label="Close modal"
+                className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
+                aria-label="סגור"
               >
                 <X size={16} />
               </button>
@@ -101,25 +102,25 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                 className="text-2xl font-semibold text-[var(--color-foreground)] mb-1"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                New Project
+                נכס חדש
               </h2>
               <p className="text-sm text-[var(--color-muted)] mb-6">
-                Create a workspace for your property listing.
+                צור סביבת עבודה עבור נכס חדש.
               </p>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <Input
                   ref={nameRef}
-                  label="Project name"
-                  placeholder="e.g. 123 Maple Street"
+                  label="שם הנכס"
+                  placeholder="לדוגמה: רחוב הדקל 12"
                   required
                   autoComplete="off"
                 />
 
                 <Input
                   ref={addressRef}
-                  label="Property address"
-                  placeholder="Full street address (optional)"
+                  label="כתובת"
+                  placeholder="כתובת מלאה (אופציונלי)"
                   autoComplete="street-address"
                 />
 
@@ -132,7 +133,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                     onClick={onClose}
                     disabled={mutation.isPending}
                   >
-                    Cancel
+                    ביטול
                   </Button>
                   <Button
                     type="submit"
@@ -141,7 +142,7 @@ export function CreateProjectModal({ isOpen, onClose }: CreateProjectModalProps)
                     className="flex-1"
                     disabled={mutation.isPending}
                   >
-                    {mutation.isPending ? "Creating…" : "Create Project"}
+                    {mutation.isPending ? "יוצר..." : "צור נכס"}
                   </Button>
                 </div>
               </form>
