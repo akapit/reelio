@@ -311,7 +311,7 @@ export function PreviewModal({
           >
             <div
               className={cn(
-                "relative w-[calc(100%-2rem)] sm:w-full max-w-5xl mx-auto pointer-events-auto",
+                "relative w-[calc(100%-2rem)] sm:w-full max-w-[570px] mx-auto pointer-events-auto",
                 "rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)]",
                 "shadow-[0_32px_80px_rgba(0,0,0,0.7)] p-3 sm:p-4 flex flex-col gap-3",
                 // Flex layout: modal itself never scrolls. Header/details/
@@ -364,7 +364,7 @@ export function PreviewModal({
                   shrinking container instead of overflowing it — which is
                   what kept the control rail off-screen before. */}
               {assetType === "video" && currentUrl ? (
-                <div className="w-full bg-black rounded-xl overflow-hidden flex-1 min-h-0 max-h-[55vh]">
+                <div className="w-[490px] max-w-full mx-auto bg-black rounded-xl overflow-hidden flex-shrink-0">
                   <video
                     key={currentUrl}
                     src={currentUrl}
@@ -372,7 +372,7 @@ export function PreviewModal({
                     playsInline
                     preload="metadata"
                     controlsList="nodownload"
-                    className="block w-full h-full object-contain"
+                    className="block w-full max-h-[70vh] object-contain"
                   />
                 </div>
               ) : (
