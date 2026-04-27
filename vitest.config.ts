@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   test: {
-    include: ["src/lib/engine/**/*.test.ts"],
+    include: ["src/lib/**/*.test.ts"],
     exclude: ["node_modules", ".next", "dist"],
     environment: "node",
     globals: false,

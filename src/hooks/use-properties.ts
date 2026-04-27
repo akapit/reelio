@@ -1,6 +1,21 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { pickPropertyThumbnailUrl } from "@/lib/properties/thumbnail";
+
+interface PropertyAssetForThumbnail {
+  id: string;
+  project_id: string;
+  asset_type: string | null;
+  status: string | null;
+  tool_used: string | null;
+  original_url: string | null;
+  processed_url: string | null;
+  thumbnail_url: string | null;
+  source_asset_id: string | null;
+  metadata: unknown;
+  created_at: string | null;
+}
 
 export function useProperties() {
   const supabase = createClient();
@@ -9,10 +24,36 @@ export function useProperties() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("projects")
-        .select("*, assets(count)")
+        .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      const projectIds = (data ?? []).map((row) => row.id).filter(Boolean);
+      if (projectIds.length === 0) return data ?? [];
+
+      const { data: assets, error: assetsError } = await supabase
+        .from("assets")
+        .select(
+          "id, project_id, asset_type, status, tool_used, original_url, processed_url, thumbnail_url, source_asset_id, metadata, created_at",
+        )
+        .in("project_id", projectIds);
+      if (assetsError) throw assetsError;
+
+      const assetsByProject = new Map<string, PropertyAssetForThumbnail[]>();
+      for (const asset of (assets ?? []) as PropertyAssetForThumbnail[]) {
+        const list = assetsByProject.get(asset.project_id) ?? [];
+        list.push(asset);
+        assetsByProject.set(asset.project_id, list);
+      }
+
+      return (data ?? []).map((row) => {
+        const projectAssets = assetsByProject.get(row.id) ?? [];
+        return {
+          ...row,
+          assets: projectAssets,
+          assetCount: projectAssets.length,
+          thumbnailUrl: pickPropertyThumbnailUrl(projectAssets),
+        };
+      });
     },
   });
 }

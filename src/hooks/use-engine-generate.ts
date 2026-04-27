@@ -71,6 +71,7 @@ export function useEngineGenerate() {
     },
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["assets", variables.projectId] });
+      qc.invalidateQueries({ queryKey: ["properties"] });
       toast.success(t.hooks.videoGenerationStarted);
     },
     onError: (err) => {

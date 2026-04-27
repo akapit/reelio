@@ -94,11 +94,10 @@ export default function DashboardPage() {
           property_address?: string;
           created_at?: string;
           updated_at?: string;
-          assets?: { count: number }[];
+          assetCount?: number;
+          thumbnailUrl?: string | null;
         };
-        const photoCount = Array.isArray(r.assets)
-          ? (r.assets[0]?.count ?? 0)
-          : 0;
+        const photoCount = r.assetCount ?? 0;
         const status = deriveStatus(r.id, photoCount > 0);
         let h = 0;
         for (let i = 0; i < r.id.length; i++)
@@ -110,6 +109,7 @@ export default function DashboardPage() {
           status,
           duration: dur,
           updated: relativeTime(r.updated_at ?? r.created_at, locale),
+          thumbnailUrl: r.thumbnailUrl ?? undefined,
           views:
             status === "published"
               ? `${(((Math.abs(h) % 90) + 5) / 10).toFixed(1)}k`

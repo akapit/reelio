@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
 
 const SIDEBAR_COLLAPSED_KEY = "reelio:sidebarCollapsed";
-const SIDEBAR_WIDTH_OPEN = 232;
+const SIDEBAR_WIDTH_OPEN = 260;
 const SIDEBAR_WIDTH_COLLAPSED = 64;
 
 /**

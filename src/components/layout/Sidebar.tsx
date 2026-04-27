@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -14,7 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ReelioWordmark } from "@/components/brand/ReelioMark";
+import { reelioDesignSystem } from "@/lib/design-system.config";
 import { useProperties } from "@/hooks/use-properties";
 import { useI18n } from "@/lib/i18n/client";
 import { createClient } from "@/lib/supabase/client";
@@ -147,30 +148,37 @@ export function Sidebar({
       <div
         className={cn(
           "flex items-center shrink-0",
-          collapsed ? "flex-col gap-2 px-3 pt-4 pb-3" : "justify-between px-5 pt-5 pb-3",
+          collapsed ? "flex-col gap-2 px-3 pt-4 pb-3" : "justify-between px-4 pt-5 pb-3",
         )}
       >
-        {!collapsed && <ReelioWordmark size={13} />}
-        {collapsed && (
-          <div
+        {!collapsed && (
+          <Image
+            src={reelioDesignSystem.assets.logo.forDark}
+            alt="Reelio"
+            width={196}
+            height={56}
+            priority
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background:
-                "linear-gradient(135deg, oklch(0.86 0.14 82), oklch(0.55 0.10 72))",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: "var(--font-display)",
-              fontSize: 15,
-              fontWeight: 600,
-              color: "oklch(0.16 0.02 70)",
+              width: 196,
+              height: "auto",
+              display: "block",
             }}
-            aria-hidden="true"
-          >
-            r
-          </div>
+          />
+        )}
+        {collapsed && (
+          <Image
+            src={reelioDesignSystem.assets.mark.gold}
+            alt="Reelio"
+            width={36}
+            height={46}
+            priority
+            style={{
+              width: 36,
+              height: "auto",
+              display: "block",
+              filter: "drop-shadow(0 8px 18px oklch(0.72 0.15 80 / 0.24))",
+            }}
+          />
         )}
         <button
           type="button"
@@ -225,14 +233,6 @@ export function Sidebar({
         )}
         aria-label={t.shell.primary}
       >
-        {!collapsed && (
-          <div
-            className="kicker"
-            style={{ padding: "6px 8px", marginBottom: 4, color: "var(--fg-3)" }}
-          >
-            {t.shell.workspace}
-          </div>
-        )}
         <ul className="space-y-0.5">
           {navItems.map(({ labelKey, href, icon: Icon, exact, disabled }) => {
             const label = t.shell.routes[labelKey];
@@ -351,14 +351,13 @@ export function Sidebar({
         {!collapsed && recent.length > 0 && (
           <>
             <div
-              className="kicker"
+              aria-hidden="true"
               style={{
-                padding: "20px 8px 6px",
-                color: "var(--fg-3)",
+                height: 1,
+                margin: "18px 8px 10px",
+                background: "var(--line-soft)",
               }}
-            >
-              {t.shell.recent}
-            </div>
+            />
             <ul className="space-y-0.5">
               {recent.map((p) => (
                 <li key={p.id}>
@@ -545,7 +544,7 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar — width animates between 232 (open) and 64 (collapsed) */}
+      {/* Desktop sidebar — width animates between 260 (open) and 64 (collapsed) */}
       <aside
         className={cn(
           "hidden lg:flex fixed top-0 z-40 h-screen flex-col shadow-xl overflow-hidden",
@@ -554,7 +553,7 @@ export function Sidebar({
         style={{
           ...sidebarStyle,
           insetInlineStart: 0,
-          width: desktopCollapsed ? 64 : 232,
+          width: desktopCollapsed ? 64 : 260,
           contain: "layout paint style",
           willChange: "width",
         }}
@@ -584,7 +583,7 @@ export function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
-              className="fixed top-0 z-50 lg:hidden h-screen w-[232px] flex flex-col shadow-xl"
+              className="fixed top-0 z-50 lg:hidden h-screen w-[260px] flex flex-col shadow-xl"
               style={{ ...sidebarStyle, insetInlineStart: 0 }}
               role="dialog"
               aria-modal="true"

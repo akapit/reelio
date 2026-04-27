@@ -50,6 +50,7 @@ export function useProcess() {
     },
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["assets", variables.projectId] });
+      qc.invalidateQueries({ queryKey: ["properties"] });
       toast.success(
         variables.tool === "enhance"
           ? t.hooks.enhancementStarted

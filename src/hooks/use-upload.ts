@@ -95,6 +95,7 @@ export function useUpload(projectId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["assets", projectId] });
+      qc.invalidateQueries({ queryKey: ["properties"] });
       toast.success(t.hooks.fileUploaded);
     },
     onError: (err) => {
