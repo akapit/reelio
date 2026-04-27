@@ -39,12 +39,16 @@ function logKieError(event: string, data: Record<string, unknown>): void {
  */
 /**
  * kie.ai Market endpoint model slugs (see https://docs.kie.ai/market).
- * The "kling" logical id maps to Kling 2.5 Turbo Pro by default. Std is also
- * published at `kling/v2-5-turbo-image-to-video` (no "-pro" suffix) — swap if
- * cost/quality tradeoff demands it. Seedance slugs unchanged.
+ * The "kling" logical id maps to Kling 2.6 i2v. Kling 3.0 has a docs page
+ * (https://docs.kie.ai/market/kling/kling-3-0) but the 3.0 i2v slug is not
+ * yet accepted by the API — kie.ai 422s `kling-3.0` and
+ * `kling-3.0/image-to-video`. Only motion-control-v3 is live so far. Flip
+ * this to `kling-3.0/image-to-video` once kie.ai enables it. The 2.x i2v
+ * schema (image_urls array, mode, aspect_ratio) matches 3.0's, so the
+ * branch in `generateVideo` won't need to change.
  */
 const VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
-  kling: "kling/v2-5-turbo-image-to-video-pro",
+  kling: "kling-2.6/image-to-video",
   seedance: "bytedance/seedance-2",
   "seedance-fast": "bytedance/seedance-2-fast",
 };
@@ -89,24 +93,6 @@ export function composeKlingRetryNegativePrompt(issues: string[]): string {
   const trimmed = combined.slice(0, 500);
   const lastComma = trimmed.lastIndexOf(",");
   return lastComma > 400 ? trimmed.slice(0, lastComma) : trimmed;
-}
-
-function resolveKlingNegativePrompt(override: string | undefined): string {
-  const env = process.env.ENGINE_KLING_NEG_PROMPT;
-  const chosen = override ?? env ?? DEFAULT_KLING_NEGATIVE_PROMPT;
-  // kie.ai enforces <= 500 chars; trim safely at a comma boundary when we can.
-  if (chosen.length <= 500) return chosen;
-  const trimmed = chosen.slice(0, 500);
-  const lastComma = trimmed.lastIndexOf(",");
-  return lastComma > 400 ? trimmed.slice(0, lastComma) : trimmed;
-}
-
-function resolveKlingCfgScale(override: number | undefined): number {
-  const envRaw = process.env.ENGINE_KLING_CFG_SCALE;
-  const envParsed = envRaw ? Number.parseFloat(envRaw) : Number.NaN;
-  const raw = override ?? (Number.isFinite(envParsed) ? envParsed : DEFAULT_KLING_CFG_SCALE);
-  // Clamp to Kling's documented 0..1 range.
-  return Math.max(0, Math.min(1, raw));
 }
 
 /** Shared headers for all kie.ai requests */
@@ -648,51 +634,57 @@ export const kieaiProvider: IMediaProvider = {
             : {}),
       };
     } else {
-      // Kling 2.5 Turbo image-to-video single-shot. Multi-shot videos fan out
-      // at the orchestrator layer — each scene is its own generateVideo call
-      // and the results are concatenated by ffmpeg.
+      // Kling 2.x image-to-video, single-shot. Multi-shot videos fan out at
+      // the orchestrator layer — each scene is its own generateVideo call and
+      // the results are concatenated by ffmpeg.
       //
-      // kie.ai Kling 2.5 turbo input schema (see docs/market/kling):
-      //   prompt         (required, <= 2500 chars)
-      //   image_url      (required for i2v — SINGULAR string, NOT an array)
-      //   duration       ("5" | "10") — DISCRETE, not a range
-      //   negative_prompt (optional, <= 500 chars)
-      //   cfg_scale      (optional 0-1, default 0.5)
-      // No `aspect_ratio`, no `sound` fields. Omitting them.
+      // kie.ai Kling 2.6 i2v input schema (see
+      // https://docs.kie.ai/market/kling/image-to-video). The 3.0 schema
+      // listed at https://docs.kie.ai/market/kling/kling-3-0 is identical
+      // for the fields we use, so this branch will keep working when the
+      // 3.0 slug is enabled in `VIDEO_MODEL_SLUGS`:
+      //   prompt        (required, single-shot)
+      //   image_urls    (array — [first_frame] for i2v, or [first, end] for transitions)
+      //   duration      (string, "5" or "10" on 2.6; 3.0 supports "3"-"15")
+      //   aspect_ratio  ("16:9" | "9:16" | "1:1")
+      //   mode          ("std" → 720p | "pro" → 1080p)
+      //   sound         (optional bool)
+      // `negative_prompt` and `cfg_scale` aren't documented for 2.6/3.0 i2v
+      // and have been dropped. The scene generator still computes those
+      // override values for the retry path but they go nowhere on this
+      // branch — cleanup is a follow-up.
       //
-      // Provider-layer safety net for the discrete-duration constraint. The
-      // scene generator's clampDuration() is the primary gate (pins Kling to
-      // 5s); this hardcode catches any out-of-tree caller that forgot.
-      const duration = "5";
-      if (options.imageUrl) {
-        const negativePrompt = resolveKlingNegativePrompt(options.negativePrompt);
-        const cfgScale = resolveKlingCfgScale(options.cfgScale);
-        input = {
-          prompt:
-            options.prompt ??
-            "Slow cinematic camera movement, real estate property walkthrough",
-          image_url: options.imageUrl,
-          duration,
-          negative_prompt: negativePrompt,
-          cfg_scale: cfgScale,
-        };
-        logKie("kling.params", {
-          cfgScale,
-          negativePromptLength: negativePrompt.length,
-          // Preview so Trigger.dev logs are still scannable without dumping
-          // the full 400+ char anti-artifact block.
-          negativePromptPreview: negativePrompt.slice(0, 80),
-          usedNegativeOverride: options.negativePrompt !== undefined,
-          usedCfgOverride: options.cfgScale !== undefined,
-        });
-      } else {
-        // No image provided: kie.ai Kling 2.5 turbo i2v requires image_url.
-        // Fail loudly rather than sending a malformed request the API will
-        // 422 anyway.
+      // Resolution: forced to "std" (= 720p) per current product decision.
+      // To enable 1080p later, replace the hardcode with `options.mode`
+      // (the scene generator already injects modelParams.mode into opts).
+      if (!options.imageUrl) {
         throw new Error(
-          "kieai.generateVideo: Kling 2.5 turbo i2v requires imageUrl",
+          "kieai.generateVideo: Kling i2v requires imageUrl",
         );
       }
+      // Provider-layer safety net for the historical 5s pin. Kling 3.0
+      // accepts 3-15s; the scene generator's clampDuration() still pins to
+      // 5 to keep cost predictable. Reading options.duration so a future
+      // relaxation doesn't need a provider-side change.
+      const duration = String(options.duration ?? 5);
+      const mode = "std";
+      input = {
+        prompt:
+          options.prompt ??
+          "Slow cinematic camera movement, real estate property walkthrough",
+        image_urls: [options.imageUrl],
+        duration,
+        aspect_ratio: aspectRatio,
+        mode,
+        // Audio is always off at the generation step; music/voiceover are
+        // muxed in a later phase by the engine merge step.
+        sound: false,
+      };
+      logKie("kling.params", {
+        mode,
+        duration,
+        aspectRatio,
+      });
     }
 
     const taskId = await createTask({ model, input });

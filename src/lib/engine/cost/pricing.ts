@@ -83,8 +83,10 @@ export function anthropicCost(usage: AnthropicUsage): number {
 
 /** Cost for one kie.ai video generation clip, keyed by the kie.ai slug. */
 export function kieaiClipCost(modelSlug: string): number {
-  if (modelSlug.startsWith("kling/v2-5-turbo")) {
-    return envNum("PRICE_KLING_25_TURBO_PER_CLIP", 0.35);
+  // Kling 2.6 i2v std (720p) ~ Kling 2.5 turbo: ~$0.35 for a 5s clip.
+  // Same env var covers 3.0 once the slug ships — pricing tiers track.
+  if (modelSlug === "kling-2.6/image-to-video" || modelSlug === "kling-3.0") {
+    return envNum("PRICE_KLING_PER_CLIP", 0.35);
   }
   if (modelSlug === "bytedance/seedance-2-fast") {
     return envNum("PRICE_SEEDANCE_2_FAST_PER_CLIP", 0.25);
@@ -110,7 +112,7 @@ export function sceneClipCost(
   if (providerName === "kieai") {
     const slug =
       logicalModel === "kling"
-        ? "kling/v2-5-turbo-image-to-video-pro"
+        ? "kling-2.6/image-to-video"
         : logicalModel === "seedance"
           ? "bytedance/seedance-2"
           : "bytedance/seedance-2-fast";

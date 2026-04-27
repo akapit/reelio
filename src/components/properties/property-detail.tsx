@@ -9,6 +9,7 @@ import {
   Calendar,
   Pencil,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useAssets } from "@/hooks/use-assets";
@@ -141,6 +142,29 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   });
 
   const { data: assets } = useAssets(projectId);
+  const queryClient = useQueryClient();
+
+  const deleteAsset = useMutation({
+    mutationFn: async (assetId: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("assets")
+        .delete()
+        .eq("project_id", projectId)
+        .eq("id", assetId);
+      if (error) throw error;
+    },
+    onSuccess: (_data, assetId) => {
+      if (selectedAssetId === assetId) {
+        setSelectedAssetId(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ["assets", projectId] });
+      toast.success("Media item deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete media item");
+    },
+  });
 
   useEffect(() => {
     if (isEditingName) {
@@ -595,6 +619,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                   selectedAssetId={selectedAssetId}
                   onSelect={handleSelectAsset}
                   onAddToCreator={handleAddToCreator}
+                  onDelete={(assetId) => deleteAsset.mutate(assetId)}
                 />
               )}
               {activeTab === "videos" && (
@@ -602,6 +627,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                   assets={projectAssets}
                   selectedAssetId={selectedAssetId}
                   onSelect={handleSelectAsset}
+                  onDelete={(assetId) => deleteAsset.mutate(assetId)}
                 />
               )}
               {activeTab === "copy" && (

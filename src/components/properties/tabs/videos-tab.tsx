@@ -1,6 +1,6 @@
 "use client";
 
-import { Video, Image as ImageIcon, Share2 } from "lucide-react";
+import { Video, Image as ImageIcon, Share2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
 
@@ -20,6 +20,8 @@ interface VideosTabProps {
   selectedAssetId?: string | null;
   /** Click handler — parent swaps the preview to this video and autoplays. */
   onSelect?: (asset: SelectableAsset) => void;
+  /** Deletes this asset row from the project. */
+  onDelete?: (assetId: string) => void;
 }
 
 const STATUS_MAP = {
@@ -32,6 +34,7 @@ export function VideosTab({
   assets = [],
   selectedAssetId,
   onSelect,
+  onDelete,
 }: VideosTabProps) {
   const videos = assets.filter((a) => a.asset_type === "video");
 
@@ -125,7 +128,7 @@ export function VideosTab({
         return (
           <div
             key={video.id}
-            className={cn("prop-img relative")}
+            className={cn("prop-img group relative")}
             data-tone="warm"
             style={{
               aspectRatio: "3 / 4",
@@ -255,6 +258,33 @@ export function VideosTab({
                 />
                 {statusInfo.label}
               </span>
+            )}
+
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(video.id);
+                }}
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  insetInlineEnd: 8,
+                  zIndex: 3,
+                }}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full",
+                  "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
+                  "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                  "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                )}
+                aria-label="Delete video"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
             )}
 
             {/* Bottom action row — sits above the click overlay */}

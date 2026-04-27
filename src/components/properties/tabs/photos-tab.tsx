@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   MousePointer2,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,8 @@ interface PhotosTabProps {
   onSelect?: (asset: SelectableAsset) => void;
   /** Adds one or more done photos into the persistent creator rail. */
   onAddToCreator?: (assets: CreatorPhotoAsset[]) => void;
+  /** Deletes this asset row from the project. */
+  onDelete?: (assetId: string) => void;
 }
 
 export function PhotosTab({
@@ -43,6 +46,7 @@ export function PhotosTab({
   selectedAssetId,
   onSelect,
   onAddToCreator,
+  onDelete,
 }: PhotosTabProps) {
   // Silently fire a server-side thumbnail backfill the first time we mount
   // and detect images missing thumbnails. The endpoint is idempotent (it
@@ -373,6 +377,27 @@ export function PhotosTab({
               >
                 {isPicked && <Check size={15} strokeWidth={3} />}
               </div>
+            )}
+
+            {!selectionMode && onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(photo.id);
+                }}
+                className={cn(
+                  "absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-md",
+                  "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
+                  "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                  "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                )}
+                aria-label="Delete photo"
+                title="Delete"
+              >
+                <Trash2 size={14} />
+              </button>
             )}
 
             {canAdd && (
