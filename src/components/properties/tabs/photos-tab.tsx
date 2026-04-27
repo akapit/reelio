@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
-  CheckSquare,
   Image as ImageIcon,
-  MousePointer2,
   Plus,
+  Share2,
+  Sparkles,
   Trash2,
-  X,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
@@ -39,6 +39,41 @@ interface PhotosTabProps {
   onAddToCreator?: (assets: CreatorPhotoAsset[]) => void;
   /** Deletes this asset row from the project. */
   onDelete?: (assetId: string) => void;
+  /** Opens AI enhancement modal for the selected photo ids. */
+  onAiEnhance?: (assetIds: string[]) => void;
+  /** Opens share modal for the selected photo ids. */
+  onShare?: (assetIds: string[]) => void;
+  /** Adds selected photos to the creator rail in video mode. */
+  onCreateVideo?: (assets: CreatorPhotoAsset[]) => void;
+}
+
+type ActionVariant = "video" | "ai" | "share";
+
+function ActionPill({
+  onClick,
+  variant,
+  icon,
+  label,
+  disabled,
+}: {
+  onClick: () => void;
+  variant: ActionVariant;
+  icon: React.ReactNode;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-variant={variant}
+      className="btn-action"
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
 }
 
 export function PhotosTab({
@@ -48,6 +83,9 @@ export function PhotosTab({
   onSelect,
   onAddToCreator,
   onDelete,
+  onAiEnhance,
+  onShare,
+  onCreateVideo,
 }: PhotosTabProps) {
   const { t } = useI18n();
   // Silently fire a server-side thumbnail backfill the first time we mount
@@ -74,7 +112,6 @@ export function PhotosTab({
   // drag-to-creation-bar). Cleared on `dragend` regardless of where the drop
   // landed.
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // A photo is "ready" once it has a usable original_url and isn't actively
@@ -87,7 +124,6 @@ export function PhotosTab({
     photo.status !== "failed";
 
   const photos = assets.filter((a) => a.asset_type === "image");
-  const readyPhotos = photos.filter(isReady);
 
   const toCreatorPhoto = (photo: (typeof photos)[number]): CreatorPhotoAsset | null => {
     const originalUrl = photo.original_url ?? "";
@@ -109,18 +145,6 @@ export function PhotosTab({
     onSelect?.({ id: photo.id, asset_type: "image" });
   };
 
-  const addSelected = () => {
-    if (selectedIds.size === 0) return;
-    const picked = photos
-      .filter((photo) => selectedIds.has(photo.id))
-      .map(toCreatorPhoto)
-      .filter((photo): photo is CreatorPhotoAsset => photo !== null);
-    if (picked.length === 0) return;
-    onAddToCreator?.(picked);
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-  };
-
   const toggleSelected = (photoId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -128,6 +152,30 @@ export function PhotosTab({
       else next.add(photoId);
       return next;
     });
+  };
+
+  const pickedCreatorPhotos = (): CreatorPhotoAsset[] =>
+    photos
+      .filter((photo) => selectedIds.has(photo.id))
+      .map(toCreatorPhoto)
+      .filter((photo): photo is CreatorPhotoAsset => photo !== null);
+
+  const handleCreateVideo = () => {
+    const picked = pickedCreatorPhotos();
+    if (picked.length === 0) return;
+    if (onCreateVideo) onCreateVideo(picked);
+    else onAddToCreator?.(picked);
+    setSelectedIds(new Set());
+  };
+
+  const handleAiEnhance = () => {
+    if (selectedIds.size === 0) return;
+    onAiEnhance?.(Array.from(selectedIds));
+  };
+
+  const handleShare = () => {
+    if (selectedIds.size === 0) return;
+    onShare?.(Array.from(selectedIds));
   };
 
   if (photos.length === 0) {
@@ -177,64 +225,40 @@ export function PhotosTab({
     );
   }
 
+  const hasSelection = selectedIds.size > 0;
+
   return (
     <div className="space-y-3">
       <div
-        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2"
+        className="flex flex-wrap items-center justify-between gap-3 px-1 py-1"
         role="toolbar"
         aria-label={t.photos.sourceActions}
       >
-        <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--fg-2)]">
-          <MousePointer2 size={14} className="shrink-0 text-[var(--gold)]" />
-          <span className="truncate">
-            {t.photos.addInstruction}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {selectionMode && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedIds(new Set(readyPhotos.map((photo) => photo.id)));
-                }}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-2)] transition-colors duration-150 hover:bg-[var(--bg-1)] hover:text-[var(--fg-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-              >
-                {t.common.selectAll}
-              </button>
-              <button
-                type="button"
-                onClick={addSelected}
-                disabled={selectedIds.size === 0}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
-                  selectedIds.size === 0
-                    ? "cursor-not-allowed bg-[var(--bg-3)] text-[var(--fg-4)]"
-                    : "bg-[var(--gold)] text-[var(--on-gold)] hover:bg-[var(--gold-hi)]",
-                )}
-              >
-                <Plus size={13} />
-                {t.photos.addCount} {selectedIds.size || ""}
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setSelectionMode((prev) => !prev);
-              setSelectedIds(new Set());
-            }}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
-              selectionMode
-                ? "bg-[var(--gold-tint)] text-[var(--gold-lo)]"
-                : "border border-[var(--line-soft)] bg-[var(--bg-1)] text-[var(--fg-2)] hover:text-[var(--fg-0)]",
-            )}
-          >
-            {selectionMode ? <X size={13} /> : <CheckSquare size={13} />}
-            {selectionMode ? t.common.cancel : t.common.select}
-          </button>
-        </div>
+        <h3 className="text-sm font-semibold text-[var(--fg-0)]">
+          {t.photos.uploadedHeading}
+        </h3>
+        {hasSelection && (
+          <div className="flex items-center gap-2">
+            <ActionPill
+              onClick={handleCreateVideo}
+              variant="video"
+              icon={<Video size={14} strokeWidth={2.25} />}
+              label={t.photos.actionVideo}
+            />
+            <ActionPill
+              onClick={handleAiEnhance}
+              variant="ai"
+              icon={<Sparkles size={14} strokeWidth={2.25} />}
+              label={t.photos.actionAi}
+            />
+            <ActionPill
+              onClick={handleShare}
+              variant="share"
+              icon={<Share2 size={14} strokeWidth={2.25} />}
+              label={t.photos.actionShare}
+            />
+          </div>
+        )}
       </div>
 
       <div
@@ -259,223 +283,225 @@ export function PhotosTab({
             }
           }
         `}</style>
-        {photos.map((photo) => {
+        {photos.map((photo, index) => {
           const thumbnailUrl =
             (photo as { thumbnail_url?: string | null }).thumbnail_url ??
             photo.original_url ??
             undefined;
           const originalUrl = photo.original_url ?? "";
-          const isSelected = selectedAssetId === photo.id;
+          const isPreview = selectedAssetId === photo.id;
           const isDragging = draggingId === photo.id;
           const canAdd = isReady(photo);
           const isPicked = selectedIds.has(photo.id);
+          const showRing = isPicked || isPreview;
+
+          const handleTap = () => {
+            if (!canAdd) return;
+            const willSelect = !isPicked;
+            toggleSelected(photo.id);
+            if (willSelect) {
+              onSelect?.({ id: photo.id, asset_type: "image" });
+            }
+          };
 
           return (
-            <div
-              key={photo.id}
-              className={cn(
-                "prop-img group relative",
-                "focus-within:ring-2 focus-within:ring-[var(--gold)]",
-              )}
-              data-tone="warm"
-              draggable={canAdd}
-              onDragStart={(e) => {
-                if (!canAdd) {
-                  e.preventDefault();
-                  return;
-                }
-                const payload = {
-                  id: photo.id,
-                  originalUrl,
-                  thumbnailUrl: thumbnailUrl ?? originalUrl,
-                  assetType: "image" as const,
-                };
-                e.dataTransfer.effectAllowed = "copy";
-                e.dataTransfer.setData(
-                  "application/reelio-asset",
-                  JSON.stringify(payload),
-                );
-                setDraggingId(photo.id);
-              }}
-              onDragEnd={() => setDraggingId(null)}
-              role="button"
-              tabIndex={canAdd ? 0 : -1}
-              aria-label={isSelected ? "Selected photo" : "Select this photo"}
-              aria-pressed={isSelected}
-              onClick={() => {
-                if (!canAdd) return;
-                if (selectionMode) {
-                  toggleSelected(photo.id);
-                } else {
-                  onSelect?.({ id: photo.id, asset_type: "image" });
-                }
-              }}
-              onKeyDown={(e) => {
-                if (!canAdd) return;
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  if (selectionMode) {
-                    toggleSelected(photo.id);
-                  } else {
-                    onSelect?.({ id: photo.id, asset_type: "image" });
+            <div key={photo.id} className="flex flex-col items-stretch gap-1.5">
+              <div
+                className={cn(
+                  "prop-img group relative",
+                  "focus-within:ring-2 focus-within:ring-[var(--gold)]",
+                )}
+                data-tone="warm"
+                draggable={canAdd}
+                onDragStart={(e) => {
+                  if (!canAdd) {
+                    e.preventDefault();
+                    return;
                   }
-                }
-              }}
-              style={{
-                aspectRatio: "1 / 1",
-                borderRadius: 8,
-                border: isPicked || isSelected
-                  ? "1.5px solid var(--gold)"
-                  : "1px solid var(--line-soft)",
-                boxShadow: isPicked || isSelected
-                  ? "0 0 0 3px oklch(0.66 0.12 75 / 0.18)"
-                  : undefined,
-                padding: 0,
-                cursor:
-                  selectionMode && canAdd
-                    ? "pointer"
-                    : canAdd
-                      ? "grab"
-                      : "default",
-                opacity: isDragging ? 0.4 : 1,
-                transition:
-                  "opacity .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease)",
-                overflow: "hidden",
-                background: "transparent",
-                textAlign: "left",
-              }}
-            >
-            {thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={thumbnailUrl}
-                alt="Property source photo"
-                draggable={false}
+                  const payload = {
+                    id: photo.id,
+                    originalUrl,
+                    thumbnailUrl: thumbnailUrl ?? originalUrl,
+                    assetType: "image" as const,
+                  };
+                  e.dataTransfer.effectAllowed = "copy";
+                  e.dataTransfer.setData(
+                    "application/reelio-asset",
+                    JSON.stringify(payload),
+                  );
+                  setDraggingId(photo.id);
+                }}
+                onDragEnd={() => setDraggingId(null)}
+                role="button"
+                tabIndex={canAdd ? 0 : -1}
+                aria-label={isPicked ? "Selected photo" : "Select this photo"}
+                aria-pressed={isPicked}
+                onClick={handleTap}
+                onKeyDown={(e) => {
+                  if (!canAdd) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleTap();
+                  }
+                }}
                 style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  transition: "transform 0.2s var(--ease)",
-                  pointerEvents: "none",
-                }}
-                className="group-hover:scale-105"
-              />
-            ) : (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "oklch(0.95 0.02 80 / 0.55)",
+                  aspectRatio: "1 / 1",
+                  borderRadius: 10,
+                  border: showRing
+                    ? "2px solid var(--gold)"
+                    : "1px solid var(--line-soft)",
+                  boxShadow: showRing
+                    ? "0 0 0 3px oklch(0.66 0.12 75 / 0.18)"
+                    : undefined,
+                  padding: 0,
+                  cursor: canAdd ? "pointer" : "default",
+                  opacity: isDragging ? 0.4 : 1,
+                  transition:
+                    "opacity .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease)",
+                  overflow: "hidden",
+                  background: "transparent",
+                  textAlign: "left",
                 }}
               >
-                <ImageIcon size={28} />
-              </div>
-            )}
-
-            {selectionMode && canAdd && (
-              <div
-                className={cn(
-                  "absolute left-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border backdrop-blur",
-                  isPicked
-                    ? "border-[var(--gold)] bg-[var(--gold)] text-[var(--on-gold)]"
-                    : "border-white/50 bg-black/35 text-white",
+                {thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumbnailUrl}
+                    alt="Property source photo"
+                    draggable={false}
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transition: "transform 0.2s var(--ease)",
+                      pointerEvents: "none",
+                    }}
+                    className="group-hover:scale-105"
+                  />
+                ) : (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "oklch(0.95 0.02 80 / 0.55)",
+                    }}
+                  >
+                    <ImageIcon size={28} />
+                  </div>
                 )}
-                aria-hidden="true"
-              >
-                {isPicked && <Check size={15} strokeWidth={3} />}
-              </div>
-            )}
 
-            {!selectionMode && onDelete && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(photo.id);
-                }}
-                className={cn(
-                  "absolute end-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
-                  "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
-                  "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
-                  "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
-                )}
-                aria-label={t.photos.deletePhoto}
-                title={t.common.delete}
-              >
-                <Trash2 size={14} />
-              </button>
-            )}
-
-            {canAdd && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  addOne(photo);
-                }}
-                className={cn(
-                  "absolute bottom-2 end-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
-                  "bg-[var(--gold)] text-[var(--on-gold)] shadow-[var(--shadow-gold)]",
-                  "opacity-100 transition-[background-color,opacity,transform] duration-150 hover:bg-[var(--gold-hi)] hover:scale-110",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-                  "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
-                )}
-                aria-label={t.photos.addThis}
-                title={t.photos.addToCreator}
-              >
-                <Plus size={15} strokeWidth={2.5} />
-              </button>
-            )}
-
-            {photo.status === "processing" && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background: "rgba(0,0,0,0.45)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+                {/* Index badge — always visible, top-leading */}
                 <div
-                  style={{
-                    width: 22,
-                    height: 22,
-                    border: "2px solid white",
-                    borderTopColor: "transparent",
-                    borderRadius: "50%",
-                    animation: "spin 0.8s linear infinite",
-                  }}
-                />
+                  className="pointer-events-none absolute start-2 top-2 z-20 inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-slate-900/80 px-1.5 text-[11px] font-semibold text-white shadow-sm backdrop-blur"
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </div>
+
+                {onDelete && !isPicked && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(photo.id);
+                    }}
+                    className={cn(
+                      "absolute end-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
+                      "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
+                      "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                      "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                    )}
+                    aria-label={t.photos.deletePhoto}
+                    title={t.common.delete}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+
+                {canAdd && !isPicked && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addOne(photo);
+                    }}
+                    className={cn(
+                      "absolute bottom-2 end-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
+                      "bg-[var(--gold)] text-[var(--on-gold)] shadow-[var(--shadow-gold)]",
+                      "opacity-100 transition-[background-color,opacity,transform] duration-150 hover:bg-[var(--gold-hi)] hover:scale-110",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+                      "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                    )}
+                    aria-label={t.photos.addThis}
+                    title={t.photos.addToCreator}
+                  >
+                    <Plus size={15} strokeWidth={2.5} />
+                  </button>
+                )}
+
+                {isPicked && (
+                  <div
+                    className="pointer-events-none absolute bottom-2 end-2 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--gold)] text-[var(--on-gold)] shadow-md ring-2 ring-white/80"
+                    aria-hidden="true"
+                  >
+                    <Check size={14} strokeWidth={3} />
+                  </div>
+                )}
+
+                {photo.status === "processing" && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "rgba(0,0,0,0.45)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 22,
+                        height: 22,
+                        border: "2px solid white",
+                        borderTopColor: "transparent",
+                        borderRadius: "50%",
+                        animation: "spin 0.8s linear infinite",
+                      }}
+                    />
+                  </div>
+                )}
+                {photo.status === "failed" && (
+                  <span
+                    className="mono"
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      insetInlineStart: 6,
+                      fontSize: 11,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      color: "white",
+                      background: "oklch(0.55 0.18 25)",
+                      padding: "2px 7px",
+                      borderRadius: 4,
+                    }}
+                  >
+                    Failed
+                  </span>
+                )}
               </div>
-            )}
-            {photo.status === "failed" && (
-              <span
-                className="mono"
-                style={{
-                  position: "absolute",
-                  top: 6,
-                  insetInlineStart: 6,
-                  fontSize: 11,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  color: "white",
-                  background: "oklch(0.55 0.18 25)",
-                  padding: "2px 7px",
-                  borderRadius: 4,
-                }}
-              >
-                Failed
+
+              <span className="mx-auto inline-block rounded-full border border-[var(--line-soft)] bg-[var(--bg-1)] px-3 py-0.5 text-[11px] text-[var(--fg-2)]">
+                {t.photos.roomTag}
               </span>
-            )}
-          </div>
+            </div>
           );
         })}
       </div>

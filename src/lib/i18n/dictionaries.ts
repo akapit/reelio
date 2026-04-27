@@ -101,6 +101,7 @@ export const dictionaries = {
       selectedPlatforms: "platforms selected",
       socialShare: "Social sharing",
       share: "Share",
+      choosePlatforms: "Choose platforms",
       aiOptions: {
         quality: {
           label: "Quality enhancement",
@@ -329,6 +330,11 @@ export const dictionaries = {
       empty: "No photos yet",
       emptyHint: "Upload images from the creation surface above",
       sourceActions: "Photo source actions",
+      uploadedHeading: "Uploaded photos",
+      actionVideo: "Video",
+      actionAi: "AI",
+      actionShare: "Share",
+      roomTag: "Room",
     },
     videos: {
       deleteVideo: "Delete video",
@@ -616,6 +622,7 @@ export const dictionaries = {
       selectedPlatforms: "פלטפורמות נבחרו",
       socialShare: "שיתוף ברשתות חברתיות",
       share: "שתף",
+      choosePlatforms: "בחר פלטפורמות",
       aiOptions: {
         quality: {
           label: "שיפור איכות",
@@ -844,6 +851,11 @@ export const dictionaries = {
       empty: "אין תמונות עדיין",
       emptyHint: "העלה תמונות מאזור היצירה למעלה",
       sourceActions: "פעולות מקור תמונות",
+      uploadedHeading: "תמונות שהועלו",
+      actionVideo: "סרטון",
+      actionAi: "AI",
+      actionShare: "שתף",
+      roomTag: "חדר",
     },
     videos: {
       deleteVideo: "מחק סרטון",

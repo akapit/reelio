@@ -66,6 +66,20 @@
 
   --positive: oklch(0.55 0.12 145);
 
+  /* Action accent gradients — used by photo-tab "Video / AI / Share" pills.
+     Each variant ships a hi/lo pair so the gradient direction can flip in
+     hover/active states without redefining the whole stack. */
+  --action-video-hi:  oklch(0.74 0.17 55);
+  --action-video-lo:  oklch(0.62 0.20 45);
+  --action-video-glow: oklch(0.62 0.20 45 / 0.30);
+  --action-ai-hi:     oklch(0.66 0.20 300);
+  --action-ai-lo:     oklch(0.52 0.22 295);
+  --action-ai-glow:   oklch(0.52 0.22 295 / 0.30);
+  --action-share-hi:  oklch(0.65 0.18 245);
+  --action-share-lo:  oklch(0.50 0.20 245);
+  --action-share-glow: oklch(0.50 0.20 245 / 0.30);
+  --on-action:        oklch(0.99 0.005 80);
+
   /* Shell-specific (dark sidebar even in light theme) */
   --sidebar-bg: oklch(0.18 0.008 72);
   --topbar-bg: oklch(0.975 0.008 80 / 0.82);
@@ -302,6 +316,40 @@ body {
 .btn-generate:hover { filter: brightness(1.05); }
 .btn-generate:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
 .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─── Action accent pills (Video / AI / Share) ─────────────── */
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--on-action);
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
+  white-space: nowrap;
+}
+.btn-action:hover { transform: scale(1.05); filter: brightness(1.05); }
+.btn-action:active { transform: scale(0.97); }
+.btn-action:focus-visible { outline: 2px solid var(--on-action); outline-offset: 2px; }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
+
+.btn-action[data-variant="video"] {
+  background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
+  box-shadow: 0 4px 12px -2px var(--action-video-glow);
+}
+.btn-action[data-variant="ai"] {
+  background: linear-gradient(135deg, var(--action-ai-hi), var(--action-ai-lo));
+  box-shadow: 0 4px 12px -2px var(--action-ai-glow);
+}
+.btn-action[data-variant="share"] {
+  background: linear-gradient(135deg, var(--action-share-hi), var(--action-share-lo));
+  box-shadow: 0 4px 12px -2px var(--action-share-glow);
+}
 
 /* ─── Status dot pulse helper ──────────────────────────────── */
 .pulse-dot {

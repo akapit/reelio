@@ -11,26 +11,11 @@ interface AIEnhancementOption {
 }
 
 const options: AIEnhancementOption[] = [
-  {
-    type: "quality",
-    Icon: Sparkles,
-  },
-  {
-    type: "expand",
-    Icon: ImageIcon,
-  },
-  {
-    type: "rearrange",
-    Icon: Wand2,
-  },
-  {
-    type: "clean",
-    Icon: Sparkles,
-  },
-  {
-    type: "refurnish",
-    Icon: Wand2,
-  },
+  { type: "quality", Icon: Sparkles },
+  { type: "expand", Icon: ImageIcon },
+  { type: "rearrange", Icon: Wand2 },
+  { type: "clean", Icon: Sparkles },
+  { type: "refurnish", Icon: Wand2 },
 ];
 
 interface AIEnhancementModalProps {
@@ -49,31 +34,34 @@ export function AIEnhancementModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl p-6 md:p-8 max-w-md w-full shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl md:p-7">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-slate-900">{t.modals.aiEnhancement}</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500">
-              {selectedCount} {t.modals.selectedPhotos}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 transition-colors rounded-lg hover:bg-stone-100"
-            >
-              <XIcon className="w-5 h-5" />
-            </button>
-          </div>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-[var(--fg-0)]">
+            {t.modals.aiEnhancement}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-[var(--fg-3)] transition-colors hover:bg-[var(--bg-2)] hover:text-[var(--fg-0)]"
+            aria-label={t.common.cancel}
+          >
+            <XIcon className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Options */}
-        <div className="space-y-3">
+        {/* Selected-count subline */}
+        <p className="mb-5 text-sm text-[var(--fg-2)]">
+          {selectedCount} {t.modals.selectedPhotos}
+        </p>
+
+        {/* Options list */}
+        <div className="space-y-2.5">
           {options.map(({ type, Icon }) => (
             <button
               key={type}
@@ -82,31 +70,22 @@ export function AIEnhancementModal({
                 console.log("TODO: wire to /api/process", type);
                 onClose();
               }}
-              className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-slate-50 to-stone-50 rounded-xl border border-stone-200 hover:border-amber-400 hover:from-amber-50 hover:to-stone-50 transition-all text-start group"
+              className="group flex w-full items-center gap-4 rounded-xl border border-[var(--gold-tint-2)] bg-[var(--gold-tint)]/40 p-4 text-start transition-colors hover:bg-[var(--gold-tint)]/70"
             >
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-200 transition-colors">
-                <Icon className="w-5 h-5 text-amber-700" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-[var(--gold-lo)] ring-1 ring-[var(--gold-tint-2)]">
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-bold leading-tight text-[var(--fg-0)]">
                   {t.modals.aiOptions[type].label}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
+                </span>
+                <span className="mt-0.5 block text-[12.5px] leading-snug text-[var(--fg-2)]">
                   {t.modals.aiOptions[type].description}
-                </p>
-              </div>
+                </span>
+              </span>
             </button>
           ))}
         </div>
-
-        {/* Cancel */}
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full mt-4 px-4 py-2.5 bg-stone-100 text-slate-700 rounded-xl text-sm font-medium hover:bg-stone-200 transition-colors"
-        >
-          {t.common.cancel}
-        </button>
       </div>
     </div>
   );

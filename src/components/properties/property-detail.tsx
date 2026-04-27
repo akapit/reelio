@@ -20,6 +20,8 @@ import { InfoTab } from "./tabs/info-tab";
 import { PhotosTab, type CreatorPhotoAsset } from "./tabs/photos-tab";
 import { VideosTab } from "./tabs/videos-tab";
 import { CopyTab } from "./tabs/copy-tab";
+import { AIEnhancementModal } from "./modals/ai-enhancement-modal";
+import { ShareModal } from "./modals/share-modal";
 import { useI18n } from "@/lib/i18n/client";
 
 /**
@@ -104,6 +106,9 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   const [creatorAssets, setCreatorAssets] = useState<AddAssetsPayload | null>(
     null,
   );
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [actionAssetIds, setActionAssetIds] = useState<string[]>([]);
   const { t } = useI18n();
   // Mirror of the IDs currently attached to the creator bar (driven by
   // CreationBar's onExistingAssetsChange). Lets us skip the "added" toast
@@ -555,6 +560,15 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                   onSelect={handleSelectAsset}
                   onAddToCreator={handleAddToCreator}
                   onDelete={(assetId) => deleteAsset.mutate(assetId)}
+                  onAiEnhance={(ids) => {
+                    setActionAssetIds(ids);
+                    setAiModalOpen(true);
+                  }}
+                  onShare={(ids) => {
+                    setActionAssetIds(ids);
+                    setShareModalOpen(true);
+                  }}
+                  onCreateVideo={(picked) => handleAddToCreator(picked)}
                 />
               )}
               {activeTab === "videos" && (
@@ -572,6 +586,16 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
           </div>
         </main>
       </section>
+
+      <AIEnhancementModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        selectedCount={actionAssetIds.length}
+      />
+      <ShareModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+      />
     </div>
   );
 }
