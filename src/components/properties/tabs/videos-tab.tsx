@@ -93,7 +93,7 @@ export function VideosTab({
         .videos-tab-grid {
           --videos-grid-gap: 12px;
           --videos-grid-cap: 5;
-          --videos-grid-max: 1080px;
+          --videos-grid-max: 1024px;
           display: grid;
           grid-template-columns: repeat(
             auto-fill,

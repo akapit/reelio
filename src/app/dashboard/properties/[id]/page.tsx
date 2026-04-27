@@ -56,7 +56,7 @@ export default function PropertyDetailPage() {
     return (
       <div
         className="mx-auto flex flex-col"
-        style={{ maxWidth: 1280, gap: 22 }}
+        style={{ maxWidth: 1024, gap: 22 }}
       >
         {/* Header skeleton */}
         <div style={{ paddingBlock: 4 }}>

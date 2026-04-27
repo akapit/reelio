@@ -270,7 +270,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   return (
     <div
       className="property-detail mx-auto flex flex-col"
-      style={{ maxWidth: 1280, gap: 22, color: "var(--fg-0)" }}
+      style={{ maxWidth: 1024, gap: 22, color: "var(--fg-0)" }}
     >
       <style>{`
         .property-header { padding-block: 4px; }

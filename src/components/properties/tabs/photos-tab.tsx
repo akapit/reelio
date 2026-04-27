@@ -139,11 +139,7 @@ function RoomTypePill({
       {open && (
         <ul
           role="listbox"
-          className="absolute z-40 mt-1 max-h-64 w-44 overflow-y-auto rounded-lg border border-[var(--line-soft)] bg-[var(--bg-1)] py-1 shadow-lg"
-          style={{
-            insetInlineStart: "50%",
-            transform: "translateX(-50%)",
-          }}
+          className="absolute left-1/2 z-40 mt-1 max-h-64 w-44 -translate-x-1/2 overflow-y-auto rounded-lg border border-[var(--line-soft)] bg-[var(--bg-1)] py-1 shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           {ROOM_TYPES.map((type) => (
@@ -402,7 +398,7 @@ export function PhotosTab({
           .photos-tab-grid {
             --photos-grid-gap: 12px;
             --photos-grid-cap: 5;
-            --photos-grid-max: 1080px;
+            --photos-grid-max: 1024px;
             display: grid;
             /* min-cell width = max(120px, share-of-row-for-cap-cols), so on
                wide screens we get exactly 'cap' columns and on narrow screens

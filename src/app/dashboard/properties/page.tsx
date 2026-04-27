@@ -96,7 +96,7 @@ export default function PropertiesPage() {
 
   return (
     <>
-      <div className="mx-auto" style={{ maxWidth: 1280, color: "var(--fg-0)" }}>
+      <div className="mx-auto" style={{ maxWidth: 1024, color: "var(--fg-0)" }}>
         <section
           className="flex flex-wrap items-end justify-between gap-4"
           style={{ marginBottom: 22 }}

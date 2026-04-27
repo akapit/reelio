@@ -8,6 +8,7 @@ export const ROOM_TYPES = [
   "living_room",
   "kitchen",
   "bathroom",
+  "toilet",
   "dining_room",
   "office",
   "balcony",

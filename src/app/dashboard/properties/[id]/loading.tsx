@@ -3,7 +3,7 @@ export default function PropertyDetailLoading() {
     <div
       className="property-loading mx-auto flex flex-col"
       style={{
-        maxWidth: 1280,
+        maxWidth: 1024,
         gap: 22,
         padding: "28px 24px 40px",
         color: "var(--fg-0)",
