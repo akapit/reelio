@@ -1,16 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Info, Image as ImageIcon, Video, PenLine, MapPin, Calendar, Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Info,
+  Image as ImageIcon,
+  Video,
+  PenLine,
+  Calendar,
+  Pencil,
+} from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useAssets } from "@/hooks/use-assets";
-import { CreationBar } from "@/components/media/CreationBar";
+import {
+  CreationBar,
+  type AddAssetsPayload,
+} from "@/components/media/CreationBar";
 import { InfoTab } from "./tabs/info-tab";
-import { PhotosTab } from "./tabs/photos-tab";
+import { PhotosTab, type CreatorPhotoAsset } from "./tabs/photos-tab";
 import { VideosTab } from "./tabs/videos-tab";
 import { CopyTab } from "./tabs/copy-tab";
-import { cn } from "@/lib/utils";
+
+/**
+ * Minimal asset shape used by the preview-selection callback. We deliberately
+ * keep this loose to avoid coupling to the full Supabase row type — only the
+ * id is consumed by the parent here. Photos/Videos tabs have richer shapes,
+ * but the parent only needs to know which row to swap into the preview.
+ */
+export interface SelectableAsset {
+  id: string;
+  asset_type: "image" | "video";
+}
 
 export interface PropertyData {
   street: string;
@@ -36,7 +56,7 @@ const defaultPropertyData: PropertyData = {
   streetNumber: "",
   neighborhood: "",
   city: "",
-  propertyType: "דירה",
+  propertyType: "Apartment",
   rooms: "",
   floor: "",
   totalFloors: "",
@@ -55,19 +75,19 @@ type TabId = "info" | "photos" | "videos" | "copy";
 interface Tab {
   id: TabId;
   label: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: React.ComponentType<{ size?: number }>;
 }
 
 const TABS: Tab[] = [
-  { id: "info", label: "מידע", Icon: Info },
-  { id: "photos", label: "תמונות", Icon: ImageIcon },
-  { id: "videos", label: "סרטונים", Icon: Video },
-  { id: "copy", label: "קופי", Icon: PenLine },
+  { id: "info", label: "Info", Icon: Info },
+  { id: "photos", label: "Photos", Icon: ImageIcon },
+  { id: "videos", label: "Videos", Icon: Video },
+  { id: "copy", label: "Copy", Icon: PenLine },
 ];
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("he-IL", {
-    month: "long",
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
     day: "numeric",
     year: "numeric",
   });
@@ -88,11 +108,18 @@ interface PropertyDetailProps {
 
 export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>("photos");
-  const [selectedPreview, setSelectedPreview] = useState<{
-    type: "photo" | "video";
-    id: string;
-    url: string;
-  } | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [creatorAssets, setCreatorAssets] = useState<AddAssetsPayload | null>(
+    null,
+  );
+  // Mirror of the IDs currently attached to the creator bar (driven by
+  // CreationBar's onExistingAssetsChange). Lets us skip the "added" toast
+  // when the user re-adds a photo that's already in the rail.
+  const creatorIdsRef = useRef<Set<string>>(new Set());
+
+  const handleCreatorAssetsChange = useCallback((ids: string[]) => {
+    creatorIdsRef.current = new Set(ids);
+  }, []);
 
   // Inline rename state
   const [isEditingName, setIsEditingName] = useState(false);
@@ -141,24 +168,156 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
       .eq("id", projectId);
     setIsSavingName(false);
     if (error) {
-      toast.error("שגיאה בשמירת השם");
+      toast.error("Failed to save name");
       setNameDraft(propertyName);
     } else {
       setPropertyName(trimmed);
-      toast.success("השם עודכן");
+      toast.success("Name updated");
     }
     setIsEditingName(false);
   }
 
-  const previewAssets = assets ?? [];
-  const previewAsset = selectedPreview
-    ? previewAssets.find((a) => a.id === selectedPreview.id)
-    : previewAssets[0];
+  const projectAssets = useMemo(() => assets ?? [], [assets]);
+
+  const photoCount = projectAssets.filter(
+    (a) => a.asset_type === "image",
+  ).length;
+  const videoCount = projectAssets.filter(
+    (a) => a.asset_type === "video",
+  ).length;
+
+  const selectedVideoAsset = useMemo(() => {
+    if (!selectedAssetId) return null;
+    const hit = projectAssets.find((a) => a.id === selectedAssetId);
+    return hit?.asset_type === "video" ? hit : null;
+  }, [projectAssets, selectedAssetId]);
+
+  const selectedVideoUrl =
+    selectedVideoAsset?.processed_url ?? selectedVideoAsset?.original_url ?? null;
+
+  const handleSelectAsset = (asset: SelectableAsset) => {
+    if (asset.id === selectedAssetId) {
+      setSelectedAssetId(null);
+      requestAnimationFrame(() => setSelectedAssetId(asset.id));
+    } else {
+      setSelectedAssetId(asset.id);
+    }
+  };
+
+  const handleAddToCreator = (photos: CreatorPhotoAsset[]) => {
+    if (photos.length === 0) return;
+    const fresh = photos.filter((p) => !creatorIdsRef.current.has(p.id));
+    if (fresh.length === 0) {
+      // Everything in this batch is already in the creator rail — skip the
+      // dispatch and the toast so re-adding a photo is a silent no-op.
+      setSelectedAssetId(photos[0]?.id ?? null);
+      return;
+    }
+    setCreatorAssets({
+      nonce: Date.now(),
+      assets: fresh.map((photo) => ({
+        id: photo.id,
+        originalUrl: photo.originalUrl,
+        thumbnailUrl: photo.thumbnailUrl,
+        assetType: "image",
+      })),
+    });
+    setSelectedAssetId(fresh[0]?.id ?? photos[0]?.id ?? null);
+    toast.success(
+      fresh.length === 1
+        ? "Photo added to creator"
+        : `${fresh.length} photos added to creator`,
+    );
+  };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Property header */}
-      <div className="mb-6 space-y-1.5">
+    <div
+      className="property-detail mx-auto flex flex-col"
+      style={{ maxWidth: 1280, gap: 22, color: "var(--fg-0)" }}
+    >
+      <style>{`
+        .property-header {
+          padding-block: 4px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: end;
+          gap: 16px;
+        }
+        .property-header-meta {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+        .property-meta-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          height: 28px;
+          padding: 0 10px;
+          border-radius: 999px;
+          border: 1px solid var(--line-soft);
+          background: var(--bg-1);
+          color: var(--fg-2);
+          font-size: 12px;
+          font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+          letter-spacing: 0.04em;
+          white-space: nowrap;
+        }
+        .property-meta-chip svg { color: var(--gold); }
+        @media (max-width: 640px) {
+          .property-header {
+            grid-template-columns: 1fr;
+            align-items: start;
+            gap: 10px;
+          }
+          .property-header-meta { justify-content: flex-start; }
+          .property-meta-chip { height: 26px; font-size: 11px; }
+        }
+        .property-title {
+          font-size: clamp(28px, 5vw, 36px);
+          line-height: 1.08;
+          letter-spacing: -0.022em;
+          font-weight: 400;
+        }
+        .property-tab-btn {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 14px 16px;
+          font-size: 12px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          border: 0;
+          cursor: pointer;
+          transition:
+            background-color .15s var(--ease),
+            color .15s var(--ease),
+            border-color .15s var(--ease);
+        }
+        .property-tab-content { padding: 20px 22px; }
+        @media (max-width: 640px) {
+          .property-detail { gap: 16px; }
+          .property-tab-btn {
+            padding: 12px 6px;
+            gap: 5px;
+            letter-spacing: 0.08em;
+            font-size: 11px;
+          }
+          .property-tab-btn-label { display: none; }
+          .property-tab-content { padding: 14px; }
+        }
+      `}</style>
+      {/* ─── Header — title-block on the left, meta chips on the right ─── */}
+      <section className="property-header">
+        <div className="property-header-title min-w-0">
+          <div className="kicker" style={{ marginBottom: 6 }}>
+            Listing
+          </div>
+
           {isEditingName ? (
             <input
               ref={nameInputRef}
@@ -177,15 +336,14 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
               }}
               disabled={isSavingName}
               maxLength={120}
-              className={cn(
-                "w-full bg-transparent outline-none",
-                "text-2xl lg:text-3xl font-semibold text-slate-900 leading-tight",
-                "border-b border-amber-500/60 focus:border-amber-600",
-                "pb-0.5 -mb-0.5",
-              )}
-              style={{ fontFamily: "var(--font-display)" }}
-              aria-label="שם הנכס"
-              dir="rtl"
+              className="serif property-title w-full bg-transparent border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+              style={{
+                color: "var(--fg-0)",
+                padding: 0,
+                margin: 0,
+                borderBottom: "1px solid oklch(0.66 0.12 75 / 0.6)",
+              }}
+              aria-label="Property name"
             />
           ) : (
             <button
@@ -194,168 +352,265 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                 setNameDraft(propertyName);
                 setIsEditingName(true);
               }}
-              className={cn(
-                "group inline-flex items-center gap-2 text-right",
-                "text-2xl lg:text-3xl font-semibold text-slate-900 leading-tight",
-                "rounded-md -mx-1 px-1 transition-colors duration-150",
-                "hover:bg-stone-100/70 cursor-text",
-              )}
-              style={{ fontFamily: "var(--font-display)" }}
-              title="לחץ לשינוי שם"
+              className="serif property-title group inline-flex min-w-0 items-center gap-2 cursor-text text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+              style={{
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                color: "var(--fg-0)",
+              }}
+              title="Click to rename"
             >
-              <span>{propertyName}</span>
+              <span className="min-w-0 break-words">{propertyName}</span>
               <Pencil
-                size={14}
-                className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                size={16}
+                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                style={{ color: "var(--fg-3)" }}
               />
             </button>
           )}
 
-          <div className="flex flex-wrap items-center gap-4">
-            {property.property_address && (
-              <div className="flex items-center gap-1.5 text-sm text-slate-500">
-                <MapPin size={13} />
-                <span>{property.property_address}</span>
+          {property.property_address && (
+            <p
+              className="property-header-address"
+              style={{
+                margin: "8px 0 0",
+                fontSize: 13,
+                color: "var(--fg-2)",
+              }}
+            >
+              {property.property_address}
+            </p>
+          )}
+        </div>
+
+        {/* Meta chips — right column on desktop, wraps under title on narrow */}
+        <div className="property-header-meta">
+          <span className="property-meta-chip" title="Created">
+            <Calendar size={12} /> {formatDate(property.created_at)}
+          </span>
+          <span
+            className="property-meta-chip"
+            title={`${photoCount} photos`}
+          >
+            <ImageIcon size={12} /> {photoCount}
+          </span>
+          <span
+            className="property-meta-chip"
+            title={`${videoCount} reels`}
+          >
+            <Video size={12} /> {videoCount}
+          </span>
+        </div>
+      </section>
+
+      {/* ─── Two-column stage: persistent creator rail + workspace ────────── */}
+      <section className="property-stage">
+        <style>{`
+          .property-stage {
+            display: grid;
+            grid-template-columns: minmax(360px, 400px) minmax(0, 1fr);
+            gap: 20px;
+            align-items: start;
+          }
+          .property-rail {
+            position: sticky;
+            inset-block-start: 16px;
+            align-self: start;
+            max-height: calc(100vh - 32px);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow-y: auto;
+          }
+          .property-rail::-webkit-scrollbar { width: 6px; }
+          .property-rail::-webkit-scrollbar-thumb {
+            background: var(--line);
+            border-radius: 3px;
+          }
+          .property-rail::-webkit-scrollbar-track { background: transparent; }
+          .property-workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            min-width: 0;
+          }
+          @media (max-width: 1180px) and (min-width: 1024px) {
+            .property-stage {
+              grid-template-columns: minmax(320px, 340px) minmax(0, 1fr);
+              gap: 14px;
+            }
+          }
+          /* Below the lg breakpoint the dashboard sidebar disappears too — at
+             that point we don't have room for a 360-400px rail next to the
+             workspace, so collapse to a single column. */
+          @media (max-width: 1023px) {
+            .property-stage {
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+            }
+            .property-rail {
+              position: static;
+              max-height: none;
+              overflow: visible;
+              order: 1;
+              width: 100%;
+            }
+            .property-workspace {
+              order: 2;
+              width: 100%;
+            }
+          }
+        `}</style>
+
+        <aside className="property-rail">
+          <CreationBar
+            projectId={projectId}
+            addAssets={creatorAssets}
+            onExistingAssetsChange={handleCreatorAssetsChange}
+            variant="vertical"
+          />
+        </aside>
+
+        <main className="property-workspace">
+          {selectedVideoAsset && selectedVideoUrl && (
+            <div className="card" style={{ padding: 14 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 10,
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="kicker" style={{ marginBottom: 4 }}>
+                    Selected reel
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13,
+                      color: "var(--fg-2)",
+                    }}
+                  >
+                    Playing only after selection from the video library.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssetId(null)}
+                  className="mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                  style={{
+                    height: 30,
+                    padding: "0 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--line-soft)",
+                    background: "var(--bg-2)",
+                    color: "var(--fg-2)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    transition:
+                      "background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease)",
+                  }}
+                >
+                  Close
+                </button>
               </div>
-            )}
-            <div className="flex items-center gap-1.5 text-sm text-slate-500">
-              <Calendar size={13} />
-              <span>נוצר {formatDate(property.created_at)}</span>
+              <div
+                className="prop-img"
+                data-tone="warm"
+                style={{
+                  aspectRatio: "16 / 10",
+                  borderRadius: 10,
+                  position: "relative",
+                  overflow: "hidden",
+                  background: "oklch(0.18 0.008 72)",
+                }}
+              >
+                <video
+                  key={`vid-${selectedVideoAsset.id}`}
+                  src={selectedVideoUrl}
+                  controls
+                  playsInline
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    borderRadius: 10,
+                    background: "black",
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div
+            className="card"
+            style={{ padding: 0, overflow: "hidden", minWidth: 0 }}
+          >
+            <div
+              style={{
+                display: "flex",
+                borderBottom: "1px solid var(--line-soft)",
+                background: "var(--bg-2)",
+              }}
+            >
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    aria-label={tab.label}
+                    className="mono property-tab-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-inset"
+                    style={{
+                      background: isActive ? "var(--bg-1)" : "transparent",
+                      color: isActive ? "var(--gold-hi)" : "var(--fg-2)",
+                      borderBottom: isActive
+                        ? "2px solid var(--gold)"
+                        : "2px solid transparent",
+                    }}
+                  >
+                    <tab.Icon size={14} />
+                    <span className="property-tab-btn-label">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="property-tab-content">
+              {activeTab === "info" && (
+                <InfoTab data={propertyData} onChange={handleDataChange} />
+              )}
+              {activeTab === "photos" && (
+                <PhotosTab
+                  projectId={projectId}
+                  assets={projectAssets}
+                  selectedAssetId={selectedAssetId}
+                  onSelect={handleSelectAsset}
+                  onAddToCreator={handleAddToCreator}
+                />
+              )}
+              {activeTab === "videos" && (
+                <VideosTab
+                  assets={projectAssets}
+                  selectedAssetId={selectedAssetId}
+                  onSelect={handleSelectAsset}
+                />
+              )}
+              {activeTab === "copy" && (
+                <CopyTab data={propertyData} onChange={handleDataChange} />
+              )}
             </div>
           </div>
-        </div>
-
-        {/* Desktop preview + gallery panel — Gallery first so RTL grid places it on the right.
-            5-col grid: gallery takes 2/5 (right, narrower), preview takes 3/5 (left, wider). */}
-        <div className="hidden md:grid md:grid-cols-5 gap-6 lg:gap-8 mb-6 lg:mb-8">
-          {/* Gallery panel */}
-          <div className="md:col-span-2 bg-white rounded-xl shadow-lg border border-stone-200 p-5 lg:p-6">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4 text-right">
-              גלריה
-            </h2>
-            {previewAssets.length > 0 ? (
-              <div className="grid grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3 max-h-[420px] overflow-y-auto pr-1">
-                {previewAssets.map((asset) => (
-                  <button
-                    key={asset.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedPreview({
-                        type: asset.asset_type === "video" ? "video" : "photo",
-                        id: asset.id,
-                        url: asset.original_url ?? "",
-                      })
-                    }
-                    className={`aspect-square bg-stone-100 rounded-lg overflow-hidden cursor-pointer transition-all ring-2 ${
-                      previewAsset?.id === asset.id
-                        ? "ring-amber-600"
-                        : "ring-transparent hover:ring-amber-300"
-                    }`}
-                  >
-                    {asset.asset_type === "video" ? (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-200">
-                        <Video className="w-6 h-6 text-slate-500" />
-                      </div>
-                    ) : (
-                      <img
-                        src={
-                          (asset as { thumbnail_url?: string | null })
-                            .thumbnail_url ??
-                          asset.original_url ??
-                          undefined
-                        }
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3 max-h-[420px] overflow-y-auto pr-1">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-square bg-stone-100 rounded-lg animate-pulse"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Preview panel */}
-          <div className="md:col-span-3 bg-white rounded-xl shadow-lg border border-stone-200 p-5 lg:p-6">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4 text-right">
-              תצוגה מקדימה
-            </h2>
-            {previewAsset ? (
-              previewAsset.asset_type === "video" ? (
-                <video
-                  src={previewAsset.original_url ?? undefined}
-                  controls
-                  className="w-full aspect-video object-cover rounded-lg bg-black"
-                />
-              ) : (
-                <img
-                  src={
-                    (previewAsset as { thumbnail_url?: string | null })
-                      .thumbnail_url ??
-                    previewAsset.original_url ??
-                    undefined
-                  }
-                  alt="תצוגה מקדימה"
-                  className="w-full aspect-video object-cover rounded-lg"
-                />
-              )
-            ) : (
-              <div className="aspect-video bg-gradient-to-br from-slate-100 to-stone-100 rounded-lg flex items-center justify-center">
-                <ImageIcon className="w-12 h-12 text-stone-300" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CreationBar — primary upload + create-video surface, always visible above the tabs */}
-        <div className="mb-6">
-          <CreationBar projectId={projectId} />
-        </div>
-
-        {/* Tabs container */}
-        <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
-          {/* Tab bar */}
-          <div className="grid grid-cols-4 md:flex border-b border-stone-200">
-            {TABS.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 py-3 md:py-4 text-sm font-medium transition-all border-b-4 ${
-                    isActive
-                      ? "bg-gradient-to-br md:bg-gradient-to-r from-amber-50 to-stone-50 border-amber-600 text-amber-900"
-                      : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-stone-50"
-                  }`}
-                >
-                  <tab.Icon className="w-4 h-4 md:w-5 md:h-5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Tab content */}
-          <div className="p-4 md:p-6">
-            {activeTab === "info" && (
-              <InfoTab data={propertyData} onChange={handleDataChange} />
-            )}
-            {activeTab === "photos" && <PhotosTab projectId={projectId} />}
-            {activeTab === "videos" && <VideosTab projectId={projectId} />}
-            {activeTab === "copy" && (
-              <CopyTab data={propertyData} onChange={handleDataChange} />
-            )}
-          </div>
-        </div>
+        </main>
+      </section>
     </div>
   );
 }

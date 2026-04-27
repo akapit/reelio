@@ -97,6 +97,21 @@ interface CreationBarProps {
   projectId: string;
   preload?: RerunPayload | null;
   addAssets?: AddAssetsPayload | null;
+  /**
+   * Fires whenever the set of attached existing-asset IDs changes (drag-drop,
+   * `addAssets`, `preload`, manual remove, submit-clear). Lets parents mirror
+   * what's currently in the bar so they can dedupe their own "Add" actions
+   * and skip redundant toasts.
+   */
+  onExistingAssetsChange?: (ids: string[]) => void;
+  /**
+   * "horizontal" (default) is the original wide centered bar with `max-w-4xl`
+   * and a single-row action footer. "vertical" stretches to its container,
+   * stacks the action footer, and renders Generate full-width — used inside
+   * the property-detail creator rail (~360–400px). Only layout/className
+   * branches differ; every handler, effect, and piece of state is shared.
+   */
+  variant?: "horizontal" | "vertical";
 }
 
 interface PendingFile {
@@ -135,7 +150,14 @@ const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = 
   { id: "1:1", label: "ריבוע", icon: "◼" },
 ];
 
-export function CreationBar({ projectId, preload, addAssets }: CreationBarProps) {
+export function CreationBar({
+  projectId,
+  preload,
+  addAssets,
+  onExistingAssetsChange,
+  variant = "horizontal",
+}: CreationBarProps) {
+  const isVertical = variant === "vertical";
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [existingAssets, setExistingAssets] = useState<ExistingAsset[]>([]);
   const [prompt, setPrompt] = useState("");
@@ -221,6 +243,13 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
     uploadedAssetIds.length > MAX_IMAGES_SEEDANCE;
   const canSubmit =
     hasAssets && !isUploading && mode !== null && videoGateMet && !seedanceOver;
+  const sourceStatusText = isUploading
+    ? "Uploading source photos"
+    : hasAssets
+      ? `${uploadedAssetIds.length} source ${
+          uploadedAssetIds.length === 1 ? "photo" : "photos"
+        } ready`
+      : "No source photos added";
 
   // Auto-resize textarea
   useEffect(() => {
@@ -229,6 +258,13 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, [prompt]);
+
+  // Mirror existing-asset IDs to the parent so it can dedupe its own "Add"
+  // actions (e.g. suppress redundant toasts when the user re-adds a photo
+  // they've already dragged in).
+  useEffect(() => {
+    onExistingAssetsChange?.(existingAssets.map((a) => a.id));
+  }, [existingAssets, onExistingAssetsChange]);
 
   // Cleanup object URLs on unmount
   useEffect(() => {
@@ -674,20 +710,70 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
       animate={{
         borderColor: isDragOver
           ? "var(--color-accent)"
-          : "rgba(212,168,79,0.5)",
+          : isVertical
+            ? "var(--line-soft)"
+            : "rgba(212,168,79,0.5)",
         backgroundColor: isDragOver
           ? "rgba(212,168,79,0.04)"
-          : "var(--color-surface)",
+          : isVertical
+            ? "var(--bg-1)"
+            : "var(--color-surface)",
       }}
       transition={{ duration: 0.15 }}
       className={cn(
-        "relative max-w-4xl mx-auto rounded-2xl border p-4 sm:p-5",
+        "relative border",
+        isVertical
+          ? "w-full rounded-xl p-3.5 sm:p-4"
+          : "max-w-4xl mx-auto rounded-2xl p-4 sm:p-5",
         "transition-[border-color,box-shadow] duration-200",
-        "shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35),0_4px_16px_-2px_rgba(0,0,0,0.2),0_0_0_1px_rgba(255,255,255,0.02)]",
+        isVertical
+          ? "shadow-[var(--shadow-card)]"
+          : "shadow-[0_8px_32px_-4px_rgba(0,0,0,0.35),0_4px_16px_-2px_rgba(0,0,0,0.2),0_0_0_1px_rgba(255,255,255,0.02)]",
         "focus-within:!border-[var(--color-accent)]",
-        "focus-within:shadow-[0_0_0_2px_rgba(212,168,79,0.55),0_12px_40px_-4px_rgba(212,168,79,0.14),0_4px_16px_-2px_rgba(0,0,0,0.3)]"
+        isVertical
+          ? "focus-within:ring-2 focus-within:ring-[var(--gold-tint-2)]"
+          : "focus-within:shadow-[0_0_0_2px_rgba(212,168,79,0.55),0_12px_40px_-4px_rgba(212,168,79,0.14),0_4px_16px_-2px_rgba(0,0,0,0.3)]"
       )}
     >
+      {isVertical && !hasAssets && (
+        <div
+          className={cn(
+            "mb-3 rounded-lg border border-dashed px-4 py-5 text-center",
+            "transition-[background-color,border-color] duration-150",
+            isDragOver
+              ? "border-[var(--gold)] bg-[var(--gold-tint)]"
+              : "border-[var(--line)] bg-[var(--bg-2)]/45",
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--gold-tint)] text-[var(--gold-lo)] ring-1 ring-[var(--gold-tint-2)]">
+            <ImageIcon size={18} aria-hidden="true" />
+          </div>
+          <p className="text-sm font-medium text-[var(--fg-0)]">
+            Drop Photos Here
+          </p>
+          <p className="mx-auto mt-1.5 max-w-[18rem] text-xs leading-relaxed text-[var(--fg-2)]">
+            Use Add in the Photos tab, drag ready photos here, or browse local
+            files.
+          </p>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className={cn(
+              "mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5",
+              "border border-[var(--line)] bg-[var(--bg-1)] shadow-[0_1px_1px_rgba(60,40,10,0.04)]",
+              "text-xs font-medium text-[var(--fg-0)]",
+              "transition-[border-color,color,background-color] duration-150 hover:border-[var(--gold)] hover:text-[var(--gold-lo)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+            )}
+          >
+            <Paperclip size={13} aria-hidden="true" />
+            Browse Files
+          </button>
+        </div>
+      )}
+
       {/* Thumbnail strip */}
       <AnimatePresence>
         {(pendingFiles.length > 0 || existingAssets.length > 0) && (
@@ -697,7 +783,18 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
             transition={{ duration: 0.2, ease: "easeOut" as const }}
             className="overflow-hidden"
+            role="status"
+            aria-live="polite"
           >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-[var(--color-foreground)]">
+                {sourceStatusText}
+              </span>
+              <span className="text-[11px] text-[var(--color-muted)] tabular-nums">
+                {uploadedAssetIds.length}
+                {mode === "video" ? ` / ${videoMinImages}` : ""}
+              </span>
+            </div>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
               {existingAssets.map((asset, i) => {
                 const imageNumber = i + 1;
@@ -710,9 +807,18 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                   transition={{ duration: 0.15, ease: "easeOut" as const }}
                   className="relative shrink-0 group"
                 >
-                  <div className="relative w-16 h-12 rounded-lg overflow-hidden ring-1 ring-[var(--color-accent)]/30">
+                  <div
+                    className={cn(
+                      "relative overflow-hidden rounded-lg ring-1 ring-[var(--color-accent)]/30",
+                      isVertical ? "h-16 w-20" : "h-12 w-16",
+                    )}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={asset.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={asset.thumbnailUrl}
+                      alt={`Source photo ${imageNumber}`}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <p className="text-[10px] text-[var(--color-muted)] text-center mt-1 leading-none tabular-nums font-mono">
                     @image{imageNumber}
@@ -726,7 +832,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       "flex items-center justify-center",
                       "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                      "focus:opacity-100 outline-none"
+                      "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                     )}
                     aria-label={`הסר תמונה ${imageNumber}`}
                   >
@@ -747,9 +853,18 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                   transition={{ duration: 0.15, ease: "easeOut" as const }}
                   className="relative shrink-0 group"
                 >
-                  <div className="relative w-16 h-12 rounded-lg overflow-hidden">
+                  <div
+                    className={cn(
+                      "relative overflow-hidden rounded-lg",
+                      isVertical ? "h-16 w-20" : "h-12 w-16",
+                    )}
+                  >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={pf.preview} alt="" className="w-full h-full object-cover" />
+                    <img
+                      src={pf.preview}
+                      alt={`Uploading source photo ${imageNumber}`}
+                      className="w-full h-full object-cover"
+                    />
                     {pf.isUploading && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <Loader2 size={14} className="text-white animate-spin" />
@@ -768,7 +883,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       "flex items-center justify-center",
                       "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
-                      "focus:opacity-100 outline-none"
+                      "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                     )}
                     aria-label={`הסר תמונה ${imageNumber}`}
                   >
@@ -832,7 +947,13 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           only bred confusion. The textarea stays for enhance mode (prompts
           still steer the image tools) and for the empty/initial state. */}
       {mode !== "video" && (
-        <div className="relative">
+        <div
+          className={cn(
+            "relative",
+            isVertical &&
+              "rounded-lg border border-transparent bg-transparent transition-[border-color,background-color] duration-150 focus-within:border-[var(--line-soft)] focus-within:bg-[var(--bg-2)]/35",
+          )}
+        >
           <textarea
             ref={textareaRef}
             value={prompt}
@@ -843,14 +964,16 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
             }}
             placeholder={
               mode === "enhance"
-                ? "תאר את השדרוג (או השאר ריק לאוטומטי)..."
-                : "שחרר תמונות ובחר מה ליצור..."
+                ? "תאר את השדרוג (או השאר ריק לאוטומטי)…"
+                : "שחרר תמונות ובחר מה ליצור…"
             }
             rows={1}
             className={cn(
-              "w-full bg-transparent resize-none outline-none",
+              "w-full bg-transparent resize-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
               "text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-              "leading-relaxed"
+              "leading-relaxed",
+              isVertical && "px-1.5 py-1.5 focus-visible:ring-0",
             )}
           />
 
@@ -888,7 +1011,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       }
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left",
-                        "text-xs font-medium transition-colors duration-100",
+                        "text-xs font-medium transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                         active
                           ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
                           : "text-[var(--color-foreground)] hover:bg-[var(--color-accent)]/8"
@@ -924,26 +1047,26 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     onChange={(e) => setVoiceoverSubject(e.target.value)}
                     placeholder="מה לציין (אופציונלי) — למשל: 4 חדרים, נוף לים, גג"
                     maxLength={240}
-                    className={cn(
-                      "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
-                      "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-                      "border border-[var(--color-border)] outline-none",
-                      "focus:border-[var(--color-accent)]/50"
-                    )}
+	                    className={cn(
+	                      "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
+	                      "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+	                      "border border-[var(--color-border)]",
+	                      "focus-visible:outline-none focus-visible:border-[var(--color-accent)]/50 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30"
+	                    )}
                   />
                   <div className="relative">
                     <textarea
                       value={voiceoverText}
                       onChange={(e) => setVoiceoverText(e.target.value)}
-                      placeholder="כתוב את תסריט הקריינות..."
+	                      placeholder="כתוב את תסריט הקריינות…"
                       rows={2}
                       maxLength={500}
-                      className={cn(
-                        "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-2 pr-9",
-                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-                        "border border-[var(--color-border)] outline-none resize-none",
-                        "focus:border-[var(--color-accent)]/50"
-                      )}
+	                      className={cn(
+	                        "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-2 pr-9",
+	                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+	                        "border border-[var(--color-border)] resize-none",
+	                        "focus-visible:outline-none focus-visible:border-[var(--color-accent)]/50 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30"
+	                      )}
                     />
                   <button
                     type="button"
@@ -952,7 +1075,8 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                         ? "צור תסריט עם AI"
                         : "הוסף נושא קצר למעלה כדי ליצור תסריט"
                     }
-                    disabled={generatingScript || !voiceoverSubject.trim()}
+	                    disabled={generatingScript || !voiceoverSubject.trim()}
+	                    aria-label="צור תסריט עם AI"
                     onClick={async () => {
                       setGeneratingScript(true);
                       try {
@@ -1003,9 +1127,9 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                         setGeneratingScript(false);
                       }
                     }}
-                    className={cn(
-                      "absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center",
-                      "transition-colors duration-150",
+	                    className={cn(
+	                      "absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center",
+	                      "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                       generatingScript || !voiceoverSubject.trim()
                         ? "text-[var(--color-muted)]/40 cursor-not-allowed"
                         : "text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
@@ -1031,9 +1155,9 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                           key={m}
                           type="button"
                           onClick={() => setMusicMood(m)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-md text-[11px] font-medium capitalize",
-                            "transition-colors duration-150 outline-none",
+	                          className={cn(
+	                            "px-2.5 py-1 rounded-md text-[11px] font-medium capitalize",
+	                            "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                             musicMood === m
                               ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
                               : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
@@ -1049,24 +1173,25 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                       type="text"
                       value={musicPrompt}
                       onChange={(e) => setMusicPrompt(e.target.value)}
-                      placeholder="סגנון מוזיקה..."
-                      className={cn(
-                        "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
-                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-                        "border border-[var(--color-border)] outline-none",
-                        "focus:border-[var(--color-accent)]/50"
-                      )}
+	                      placeholder="סגנון מוזיקה…"
+	                      className={cn(
+	                        "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
+	                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+	                        "border border-[var(--color-border)]",
+	                        "focus-visible:outline-none focus-visible:border-[var(--color-accent)]/50 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30"
+	                      )}
                     />
                   )}
                   <input
                     type="range"
                     min={0}
                     max={100}
-                    value={musicVolume}
-                    onChange={(e) => setMusicVolume(Number(e.target.value))}
-                    className="w-14 accent-[var(--color-accent)]"
-                    title={`עוצמת שמע: ${musicVolume}%`}
-                  />
+	                    value={musicVolume}
+	                    onChange={(e) => setMusicVolume(Number(e.target.value))}
+	                    className="w-14 accent-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+	                    title={`עוצמת שמע: ${musicVolume}%`}
+	                    aria-label="עוצמת מוזיקה"
+	                  />
                   <span className="text-xs text-[var(--color-muted)] w-7 text-left tabular-nums">
                     {musicVolume}%
                   </span>
@@ -1077,16 +1202,33 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
         )}
       </AnimatePresence>
 
-      {/* Action row — all on one line */}
-      <div className="flex items-center gap-1 mt-3 flex-wrap">
+      {/* Action row. Horizontal: single line with `flex-1` spacer pushing
+          Submit to the end. Vertical (rail): stacks the mode toggles and
+          options on top, then a full-width Submit row at the bottom. */}
+      <div
+        className={cn(
+          "mt-3",
+          isVertical
+            ? "flex flex-col gap-2"
+            : "flex items-center gap-1 flex-wrap",
+        )}
+      >
+        <div
+          className={cn(
+            isVertical
+              ? "flex items-center gap-1 flex-wrap"
+              : "contents",
+          )}
+        >
         {/* Photo Enhance toggle */}
         <button
           type="button"
           onClick={() => toggleMode("enhance")}
           title="שדרג תמונות"
+          aria-label="שדרג תמונות"
           className={cn(
             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-            "text-xs font-medium transition-colors duration-150 outline-none",
+            "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
             mode === "enhance"
               ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
               : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
@@ -1101,9 +1243,10 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           type="button"
           onClick={() => toggleMode("video")}
           title="צור סרטון"
+          aria-label="צור סרטון"
           className={cn(
             "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-            "text-xs font-medium transition-colors duration-150 outline-none",
+            "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
             mode === "video"
               ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
               : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
@@ -1141,6 +1284,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     ? `מצב Seedance (סרטון 15 שנ' בודד, עד ${MAX_IMAGES_SEEDANCE} תמונות)`
                     : "עבור למצב Seedance"
                 }
+                aria-label="החלף מצב Seedance"
                 className={cn(
                   "inline-flex items-center gap-1 px-2 h-7 rounded-md transition-colors duration-150",
                   "text-[11px] font-medium",
@@ -1157,6 +1301,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                 type="button"
                 onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
                 title={voiceoverEnabled ? "קריינות מופעלת" : "הוסף קריינות"}
+                aria-label={voiceoverEnabled ? "כבה קריינות" : "הוסף קריינות"}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   voiceoverEnabled
@@ -1171,6 +1316,7 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                 type="button"
                 onClick={() => setMusicEnabled(!musicEnabled)}
                 title={musicEnabled ? "מוזיקה מופעלת" : "הוסף מוזיקת רקע"}
+                aria-label={musicEnabled ? "כבה מוזיקת רקע" : "הוסף מוזיקת רקע"}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   musicEnabled
@@ -1192,9 +1338,10 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
               type="button"
               onClick={() => setAspectRatioOpen((prev) => !prev)}
               title="יחס תמונה"
+              aria-label="בחר יחס תמונה"
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-                "text-xs font-medium transition-colors duration-150 outline-none",
+                "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                 aspectRatioOpen
                   ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
                   : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
@@ -1276,20 +1423,32 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           </div>
         )}
 
-        <div className="flex-1" />
+        {!isVertical && <div className="flex-1" />}
+        </div>
 
+        {/* Browse + Submit. Horizontal: trailing inline buttons (the wrapper
+            uses `display: contents` so they flow on the same line as the
+            mode toggles). Vertical: bottom row with Submit stretched. */}
+        <div
+          className={cn(
+            isVertical ? "flex items-center gap-2 pt-1" : "contents",
+          )}
+        >
         {/* Browse */}
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           title="עיין בקבצים"
+          aria-label="עיין בקבצי תמונה"
           className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center",
-            "text-[var(--color-muted)] transition-colors duration-150 outline-none",
-            "hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
+            "rounded-lg flex items-center justify-center shrink-0",
+            "text-[var(--color-muted)] transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+            isVertical
+              ? "w-10 h-10 border border-[var(--line-soft)] bg-[var(--bg-1)] hover:border-[var(--gold)] hover:text-[var(--gold-lo)]"
+              : "w-8 h-8 hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
           )}
         >
-          <Paperclip size={15} />
+          <Paperclip size={isVertical ? 16 : 15} />
         </button>
 
         {/* Submit */}
@@ -1297,6 +1456,13 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
+          aria-label={
+            mode === "enhance"
+              ? "שדרג תמונות"
+              : mode === "video"
+                ? "צור סרטון"
+                : "צור"
+          }
           title={
             !hasAssets
               ? "הוסף תמונות תחילה"
@@ -1311,15 +1477,18 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                     : "צור סרטון"
           }
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg",
-            "text-xs font-medium transition-all duration-150 outline-none",
+            "inline-flex items-center justify-center gap-1.5 rounded-lg",
+            "font-medium transition-[background-color,color,filter,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+            isVertical ? "flex-1 h-10 px-4 text-sm" : "px-3 py-1.5 text-xs",
             canSubmit
-              ? "bg-[var(--color-accent)] text-[var(--color-background)] hover:brightness-110"
-              : "bg-[var(--color-surface-raised)] text-[var(--color-muted)]/50 cursor-not-allowed"
+              ? "bg-[var(--gold)] text-[var(--on-gold)] shadow-[var(--shadow-gold)] hover:brightness-105"
+              : isVertical
+                ? "bg-[var(--bg-2)] text-[var(--fg-3)] cursor-not-allowed"
+                : "bg-[var(--color-surface-raised)] text-[var(--color-muted)]/50 cursor-not-allowed",
           )}
         >
-          <Send size={13} />
-          <span className="hidden sm:inline">
+          <Send size={isVertical ? 14 : 13} />
+          <span className={isVertical ? "" : "hidden sm:inline"}>
             {mode === "enhance"
               ? "שדרג"
               : mode === "video"
@@ -1327,12 +1496,14 @@ export function CreationBar({ projectId, preload, addAssets }: CreationBarProps)
                 : "צור"}
           </span>
         </button>
+        </div>
       </div>
 
       {/* Hidden file input */}
       <input
         ref={inputRef}
         type="file"
+        name="sourceImages"
         accept="image/*"
         multiple
         className="sr-only"

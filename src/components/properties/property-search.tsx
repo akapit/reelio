@@ -9,14 +9,32 @@ interface PropertySearchProps {
 
 export function PropertySearch({ value, onChange }: PropertySearchProps) {
   return (
-    <div className="relative">
-      <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+    <div
+      className="flex items-center gap-2"
+      style={{
+        height: 36,
+        padding: "0 12px",
+        borderRadius: 8,
+        border: "1px solid var(--line-soft)",
+        background: "var(--bg-1)",
+        transition: "border-color .15s var(--ease)",
+        width: 220,
+      }}
+      onFocus={(e) =>
+        (e.currentTarget.style.borderColor = "oklch(0.66 0.12 75 / 0.5)")
+      }
+      onBlur={(e) =>
+        (e.currentTarget.style.borderColor = "var(--line-soft)")
+      }
+    >
+      <Search size={14} style={{ color: "var(--fg-2)" }} />
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="חפש לפי כתובת, שם בעלים או טלפון..."
-        className="w-full pr-12 pl-4 py-3 bg-white border border-stone-300 rounded-xl focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-200 text-right"
+        placeholder="Search reels, addresses…"
+        className="w-full bg-transparent outline-none border-0"
+        style={{ fontSize: 13, color: "var(--fg-1)" }}
       />
     </div>
   );

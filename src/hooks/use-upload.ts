@@ -2,6 +2,60 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { generateThumbnail } from "@/lib/image-thumbnail";
+
+interface PresignedUpload {
+  presignedUrl: string;
+  key: string;
+  publicUrl: string;
+}
+
+async function getPresignedUrl(
+  filename: string,
+  contentType: string,
+): Promise<PresignedUpload> {
+  const res = await fetch("/api/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, contentType }),
+  });
+  if (!res.ok) throw new Error("Failed to get upload URL");
+  return res.json();
+}
+
+async function putToR2(
+  presignedUrl: string,
+  body: Blob,
+  contentType: string,
+): Promise<void> {
+  const res = await fetch(presignedUrl, {
+    method: "PUT",
+    body,
+    headers: { "Content-Type": contentType },
+  });
+  if (!res.ok) throw new Error("Upload failed");
+}
+
+/**
+ * For images, generate a small JPEG thumbnail client-side and upload it
+ * alongside the original. Failures here don't block the upload — the asset
+ * row still gets the original URL; the photos tab and backfill flow will
+ * fall back to the original until a thumbnail is available.
+ */
+async function uploadThumbnail(file: File): Promise<string | null> {
+  try {
+    const thumb = await generateThumbnail(file);
+    const { presignedUrl, publicUrl } = await getPresignedUrl(
+      "thumb.jpg",
+      thumb.type || "image/jpeg",
+    );
+    await putToR2(presignedUrl, thumb, thumb.type || "image/jpeg");
+    return publicUrl;
+  } catch (err) {
+    console.warn("[upload] thumbnail generation failed", err);
+    return null;
+  }
+}
 
 export function useUpload(projectId: string) {
   const supabase = createClient();
@@ -9,24 +63,13 @@ export function useUpload(projectId: string) {
 
   return useMutation({
     mutationFn: async (file: File) => {
-      // 1. Get presigned URL
-      const res = await fetch("/api/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      });
-      if (!res.ok) throw new Error("Failed to get upload URL");
-      const { presignedUrl, publicUrl } = await res.json();
+      const isImage = file.type.startsWith("image/");
 
-      // 2. Upload directly to R2
-      const uploadRes = await fetch(presignedUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-      if (!uploadRes.ok) throw new Error("Upload failed");
+      const original = await getPresignedUrl(file.name, file.type);
+      await putToR2(original.presignedUrl, file, file.type);
 
-      // 3. Create asset record
+      const thumbnailUrl = isImage ? await uploadThumbnail(file) : null;
+
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -38,7 +81,8 @@ export function useUpload(projectId: string) {
         .insert({
           project_id: projectId,
           user_id: user.id,
-          original_url: publicUrl,
+          original_url: original.publicUrl,
+          thumbnail_url: thumbnailUrl,
           asset_type: assetType,
           status: "uploaded",
         })

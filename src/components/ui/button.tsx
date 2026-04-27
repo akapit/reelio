@@ -10,28 +10,39 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
+  // Primary uses the .btn-generate gold gradient (handled in globals.css).
+  // We reset the conflicting Tailwind reset here so .btn-generate's box-shadow
+  // and gradient win.
   primary: [
-    "bg-[var(--color-accent)] text-[#0e0e0f] font-medium",
-    "hover:bg-[#d9b85c] active:bg-[var(--color-accent-dim)]",
-    "focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
-    "disabled:bg-[var(--color-accent-dim)] disabled:text-[#0e0e0f]/50 disabled:cursor-not-allowed",
+    "btn-generate",
+    "hover:brightness-105",
+    "disabled:opacity-50 disabled:cursor-not-allowed",
   ].join(" "),
 
   secondary: [
-    "bg-[var(--color-surface)] text-[var(--color-foreground)] border border-[var(--color-border)]",
-    "hover:bg-[var(--color-surface-raised)] hover:border-[var(--color-muted)]",
-    "active:bg-[var(--color-surface)]",
-    "focus-visible:ring-2 focus-visible:ring-[var(--color-border)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
+    "border",
+    "hover:brightness-95",
     "disabled:opacity-40 disabled:cursor-not-allowed",
   ].join(" "),
 
   ghost: [
-    "bg-transparent text-[var(--color-foreground)]",
-    "hover:bg-[var(--color-surface-raised)]",
-    "active:bg-[var(--color-surface)]",
-    "focus-visible:ring-2 focus-visible:ring-[var(--color-border)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]",
+    "border border-transparent",
+    "hover:brightness-95",
     "disabled:opacity-40 disabled:cursor-not-allowed",
   ].join(" "),
+};
+
+const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
+  primary: {},
+  secondary: {
+    background: "var(--bg-1)",
+    borderColor: "var(--line-soft)",
+    color: "var(--fg-0)",
+  },
+  ghost: {
+    background: "transparent",
+    color: "var(--fg-1)",
+  },
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -46,24 +57,29 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       variant = "primary",
       size = "md",
       className,
+      style,
       disabled,
       children,
       ...props
     },
     ref
   ) => {
+    // Primary already gets dimensions from .btn-generate; size class is only
+    // applied to non-primary variants so we don't fight the design tokens.
+    const dim = variant === "primary" ? "" : sizeClasses[size];
     return (
       <button
         ref={ref}
         disabled={disabled}
         className={cn(
           "inline-flex items-center justify-center font-sans font-medium",
-          "transition-colors duration-150 outline-none select-none",
-          "cursor-pointer",
+          "transition-[filter,background,border-color] duration-150 outline-none select-none",
+          "cursor-pointer focus-visible:outline-1 focus-visible:outline-offset-2",
           variantClasses[variant],
-          sizeClasses[size],
+          dim,
           className
         )}
+        style={{ ...variantStyles[variant], ...style }}
         {...props}
       >
         {children}

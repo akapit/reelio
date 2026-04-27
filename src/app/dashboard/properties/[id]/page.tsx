@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PropertyDetail } from "@/components/properties/property-detail";
 
@@ -52,28 +54,72 @@ export default function PropertyDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="hidden md:grid md:grid-cols-5 gap-6 lg:gap-8">
-          <div className="md:col-span-2 bg-white rounded-xl shadow-lg border border-stone-200 p-5 lg:p-6">
-            <div className="grid grid-cols-3 lg:grid-cols-4 gap-2 lg:gap-3">
+      <div
+        className="mx-auto flex flex-col"
+        style={{ maxWidth: 1280, gap: 22 }}
+      >
+        {/* Header skeleton */}
+        <div style={{ paddingBlock: 4 }}>
+          <div
+            className="h-3 w-32 rounded animate-pulse"
+            style={{ background: "var(--bg-2)" }}
+          />
+          <div
+            className="h-10 w-96 rounded animate-pulse"
+            style={{ background: "var(--bg-2)", marginTop: 10 }}
+          />
+          <div
+            className="h-3 w-64 rounded animate-pulse"
+            style={{ background: "var(--bg-2)", marginTop: 12 }}
+          />
+        </div>
+
+        {/* Two-card skeleton */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)",
+            gap: 16,
+          }}
+        >
+          <div className="card" style={{ padding: 18 }}>
+            <div
+              className="prop-img animate-pulse"
+              data-tone="warm"
+              style={{ aspectRatio: "5 / 4", borderRadius: 12 }}
+            />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 8,
+                marginTop: 18,
+              }}
+            >
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="aspect-square bg-stone-100 rounded-lg animate-pulse" />
+                <div
+                  key={i}
+                  className="prop-img animate-pulse"
+                  data-tone="warm"
+                  style={{
+                    aspectRatio: "1 / 1",
+                    borderRadius: 6,
+                    border: "1px solid var(--line-soft)",
+                  }}
+                />
               ))}
             </div>
           </div>
-          <div className="md:col-span-3 bg-white rounded-xl shadow-lg border border-stone-200 p-5 lg:p-6">
-            <div className="aspect-video bg-stone-100 rounded-lg animate-pulse" />
-          </div>
-        </div>
-        <div className="bg-white rounded-xl shadow-lg border border-stone-200 overflow-hidden">
-          <div className="grid grid-cols-4 border-b border-stone-200">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-14 bg-stone-50 border-l border-stone-200 animate-pulse last:border-l-0" />
-            ))}
-          </div>
-          <div className="p-4 md:p-6 space-y-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-10 bg-stone-100 rounded-lg animate-pulse" style={{ width: `${70 + (i % 3) * 10}%` }} />
+          <div className="card" style={{ padding: 22 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-9 w-full rounded animate-pulse"
+                style={{
+                  background: "var(--bg-2)",
+                  marginBottom: 10,
+                }}
+              />
             ))}
           </div>
         </div>
@@ -83,12 +129,57 @@ export default function PropertyDetailPage() {
 
   if (isError || !property) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center bg-white rounded-xl border border-red-200 p-8 shadow-md max-w-md mx-4">
-          <p className="text-sm font-medium text-red-500 mb-1">הנכס לא נמצא</p>
-          <p className="text-xs text-slate-500">
-            ייתכן שהנכס נמחק או שאין לך הרשאת גישה.
+      <div
+        className="mx-auto"
+        style={{ maxWidth: 640, padding: "80px 0", color: "var(--fg-0)" }}
+      >
+        <div
+          className="card"
+          style={{
+            padding: 40,
+            textAlign: "center",
+            borderColor: "oklch(0.65 0.20 25 / 0.4)",
+          }}
+        >
+          <div className="kicker" style={{ marginBottom: 8 }}>
+            404 · not found
+          </div>
+          <h1
+            className="serif"
+            style={{
+              fontSize: 32,
+              margin: 0,
+              letterSpacing: "-0.02em",
+              fontWeight: 400,
+            }}
+          >
+            Listing not found
+          </h1>
+          <p
+            style={{
+              color: "var(--fg-2)",
+              fontSize: 13,
+              marginTop: 10,
+            }}
+          >
+            It may have been deleted, or you may not have access to view it.
           </p>
+          <Link
+            href="/dashboard/properties"
+            className="inline-flex items-center gap-2"
+            style={{
+              marginTop: 22,
+              height: 36,
+              padding: "0 14px",
+              borderRadius: 8,
+              border: "1px solid var(--line)",
+              color: "var(--fg-1)",
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            <ArrowLeft size={14} /> Back to properties
+          </Link>
         </div>
       </div>
     );

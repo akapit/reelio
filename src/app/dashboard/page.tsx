@@ -1,119 +1,288 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { motion } from "motion/react";
-import { Building2, Plus } from "lucide-react";
+import { Sparkles, ArrowRight, LayoutGrid } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/properties/property-card";
-import { PropertySearch } from "@/components/properties/property-search";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
-import { Button } from "@/components/ui/button";
+import type { Status } from "@/components/properties/StatusPill";
+import { createClient } from "@/lib/supabase/client";
+
+function deriveStatus(seed: string, hasAssets: boolean): Status {
+  if (!hasAssets) return "draft";
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 17 + seed.charCodeAt(i)) | 0;
+  const n = Math.abs(h) % 6;
+  if (n < 3) return "published";
+  if (n < 5) return "rendering";
+  return "draft";
+}
+
+function relativeTime(iso?: string): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms) || ms < 0) return "—";
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.floor(d / 7);
+  if (w < 4) return `${w}w ago`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo ago`;
+}
+
+const DURATIONS = ["0:30", "0:45", "0:60"] as const;
+
+const TIME_OF_DAY = (h: number) =>
+  h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function firstName(fullName?: string | null): string {
+  if (!fullName) return "there";
+  const trimmed = fullName.trim();
+  if (!trimmed) return "there";
+  return trimmed.split(/\s+/)[0];
+}
 
 export default function DashboardPage() {
-  const { data: rows, isLoading, isError } = useProperties();
-  const [searchQuery, setSearchQuery] = useState("");
+  const { data: rows } = useProperties();
   const [modalOpen, setModalOpen] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
 
-  const properties = (rows ?? []).map((row) => ({
-    id: row.id,
-    address:
-      (row as { property_address?: string; name: string })
-        .property_address ?? row.name,
-    photoCount: Array.isArray(row.assets)
-      ? (row.assets[0]?.count ?? 0)
-      : 0,
-    videoCount: 0,
-    thumbnailUrl: undefined as string | undefined,
-    rooms: undefined as string | undefined,
-    size: undefined as string | undefined,
-    price: undefined as string | undefined,
-  }));
+  // Fetch the authed profile's full_name for the greeting; fall back to "there".
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setUserName((data?.full_name as string | null) ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const filtered = properties.filter((p) =>
-    p.address.toLowerCase().includes(searchQuery.toLowerCase())
+  const now = new Date();
+  const dateLabel = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+  const greeting = `Good ${TIME_OF_DAY(now.getHours())}, ${firstName(userName)}.`;
+
+  const recent = useMemo(
+    () =>
+      (rows ?? []).slice(0, 3).map((row) => {
+        const r = row as {
+          id: string;
+          name: string;
+          property_address?: string;
+          created_at?: string;
+          updated_at?: string;
+          assets?: { count: number }[];
+        };
+        const photoCount = Array.isArray(r.assets)
+          ? (r.assets[0]?.count ?? 0)
+          : 0;
+        const status = deriveStatus(r.id, photoCount > 0);
+        let h = 0;
+        for (let i = 0; i < r.id.length; i++)
+          h = (h * 13 + r.id.charCodeAt(i)) | 0;
+        const dur = DURATIONS[Math.abs(h) % DURATIONS.length];
+        return {
+          id: r.id,
+          address: r.property_address ?? r.name,
+          status,
+          duration: dur,
+          updated: relativeTime(r.updated_at ?? r.created_at),
+          views:
+            status === "published"
+              ? `${(((Math.abs(h) % 90) + 5) / 10).toFixed(1)}k`
+              : "—",
+        };
+      }),
+    [rows],
   );
 
   return (
     <>
-      <div className="max-w-7xl mx-auto" dir="rtl">
-        <div className="mb-6">
-          <PropertySearch value={searchQuery} onChange={setSearchQuery} />
-        </div>
-
-        {isError && (
-          <div className="flex items-center justify-center h-32 rounded-xl border border-red-500/20 bg-red-500/5">
-            <p className="text-sm text-red-400">
-              שגיאה בטעינת הנכסים. רענן את הדף.
-            </p>
+      <div
+        className="mx-auto flex flex-col"
+        style={{ maxWidth: 1280, gap: 22, color: "var(--fg-0)" }}
+      >
+        {/* Minimal hero — date kicker + serif greeting + actions */}
+        <section
+          className="flex flex-wrap items-end justify-between gap-4"
+          style={{ padding: "8px 0" }}
+        >
+          <div>
+            <div className="kicker" style={{ marginBottom: 10 }}>
+              {dateLabel}
+            </div>
+            <h1
+              className="serif"
+              style={{
+                fontSize: 36,
+                lineHeight: 1.05,
+                margin: 0,
+                letterSpacing: "-0.02em",
+                fontWeight: 400,
+              }}
+            >
+              {greeting}
+            </h1>
           </div>
-        )}
-
-        {isLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl overflow-hidden shadow-md border border-stone-200"
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/properties"
+              className="inline-flex items-center gap-2"
+              style={{
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 8,
+                border: "1px solid var(--line)",
+                color: "var(--fg-1)",
+                fontSize: 13,
+                fontWeight: 500,
+                background: "transparent",
+                transition: "all .15s var(--ease)",
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "var(--bg-2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "transparent")
+              }
+            >
+              <LayoutGrid size={13} /> Properties
+            </Link>
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="btn-generate"
+            >
+              <Sparkles size={13} /> New reel
+              <span
+                className="mono"
+                style={{ opacity: 0.55, fontSize: 12, marginLeft: 4 }}
               >
-                <div className="aspect-video bg-stone-200 animate-pulse" />
-                <div className="p-5 space-y-2">
-                  <div className="h-5 w-3/4 bg-stone-200 rounded animate-pulse" />
-                  <div className="h-4 w-1/2 bg-stone-100 rounded animate-pulse" />
-                </div>
-              </div>
-            ))}
+                ⌘N
+              </span>
+            </button>
           </div>
-        )}
+        </section>
 
-        {!isLoading && !isError && filtered.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center justify-center gap-4 h-64 rounded-xl border border-dashed border-stone-300 bg-white"
+        {/* Recent reels */}
+        <section>
+          <div
+            className="flex items-baseline justify-between"
+            style={{ marginBottom: 14 }}
           >
-            <div className="w-14 h-14 rounded-full flex items-center justify-center bg-stone-100">
-              <Building2 size={22} className="text-stone-400" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-slate-700">
-                {searchQuery
-                  ? "לא נמצאו נכסים התואמים לחיפוש"
-                  : "אין נכסים עדיין"}
-              </p>
-              {!searchQuery && (
-                <p className="text-xs text-slate-500 mt-0.5">
-                  צור את הנכס הראשון שלך כדי להתחיל.
-                </p>
-              )}
-            </div>
-            {!searchQuery && (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setModalOpen(true)}
-              >
-                <Plus size={14} />
-                צור נכס ראשון
-              </Button>
-            )}
-          </motion.div>
-        )}
-
-        {!isLoading && !isError && filtered.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
-            {filtered.map((property, index) => (
-              <motion.div
-                key={property.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-              >
-                <PropertyCard {...property} />
-              </motion.div>
-            ))}
+            <h2
+              className="serif"
+              style={{
+                fontSize: 24,
+                margin: 0,
+                letterSpacing: "-0.02em",
+                fontWeight: 400,
+              }}
+            >
+              Recent reels
+            </h2>
+            <Link
+              href="/dashboard/properties"
+              className="inline-flex items-center gap-1"
+              style={{
+                fontSize: 12,
+                color: "var(--fg-2)",
+              }}
+            >
+              View all <ArrowRight size={12} />
+            </Link>
           </div>
-        )}
+
+          {recent.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recent.map((property, index) => (
+                <motion.div
+                  key={property.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                >
+                  <PropertyCard {...property} />
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div
+              className="card flex flex-col items-center justify-center gap-3 h-48"
+              style={{ borderStyle: "dashed" }}
+            >
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{
+                  background: "var(--gold-tint)",
+                  border: "1px solid var(--gold-tint-2)",
+                }}
+              >
+                <Sparkles size={18} style={{ color: "var(--gold-hi)" }} />
+              </div>
+              <p
+                className="serif"
+                style={{
+                  fontSize: 20,
+                  letterSpacing: "-0.015em",
+                  color: "var(--fg-0)",
+                }}
+              >
+                No reels yet
+              </p>
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                className="btn-generate"
+                style={{ height: 32, fontSize: 12.5, padding: "0 14px" }}
+              >
+                <Sparkles size={12} /> Compose your first reel
+              </button>
+            </div>
+          )}
+        </section>
       </div>
 
       <CreatePropertyModal

@@ -1,44 +1,124 @@
 "use client";
 
-import { Menu, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Menu, Search, Bell } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 interface HeaderProps {
   onNewProject: () => void;
   onMenuToggle?: () => void;
 }
 
-export function Header({ onNewProject, onMenuToggle }: HeaderProps) {
+const ROUTE_LABELS: Record<string, string> = {
+  "/dashboard": "Home",
+  "/dashboard/properties": "Properties",
+  "/dashboard/templates": "Templates",
+  "/dashboard/profile": "Profile",
+  "/dashboard/upload": "Create",
+  "/dashboard/generate": "Generate",
+};
+
+function routeLabel(pathname: string): string {
+  if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname];
+  const prefixes = Object.keys(ROUTE_LABELS).sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const p of prefixes) if (pathname.startsWith(p)) return ROUTE_LABELS[p];
+  return "reelio";
+}
+
+export function Header({ onMenuToggle }: HeaderProps) {
+  const pathname = usePathname() || "/dashboard";
+  const label = routeLabel(pathname);
+
   return (
-    <header className="shrink-0 px-4 sm:px-6 lg:px-8 py-4 lg:py-5 bg-gradient-to-r from-slate-800 to-stone-800 border-b border-amber-200/20 shadow-lg">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-        {/* Right side in RTL (start of flex): mobile menu + new property button */}
-        <div className="flex items-center gap-2">
+    <header
+      className="shrink-0 sticky top-0 z-10 backdrop-blur"
+      style={{
+        height: 52,
+        background: "var(--topbar-bg)",
+        borderBottom: "1px solid var(--line-soft)",
+      }}
+    >
+      <div className="h-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        {/* Start (left in LTR): mobile menu + breadcrumb */}
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onMenuToggle}
-            className="flex items-center justify-center w-10 h-10 rounded-lg text-amber-100 hover:text-white hover:bg-white/10 transition-colors duration-150"
-            aria-label="הצג/הסתר תפריט ניווט"
+            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md transition-colors duration-150"
+            style={{ color: "var(--fg-1)" }}
+            aria-label="Toggle navigation"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
-          <Button variant="primary" size="sm" onClick={onNewProject}>
-            <Plus size={15} />
-            <span className="hidden sm:inline">נכס חדש</span>
-          </Button>
+
+          <div
+            className="mono hidden sm:flex items-center"
+            style={{
+              fontSize: 12,
+              letterSpacing: "0.14em",
+              color: "var(--fg-3)",
+              textTransform: "uppercase",
+            }}
+          >
+            <span style={{ color: "var(--fg-2)" }}>reelio</span>
+            <span style={{ margin: "0 10px", color: "var(--fg-4)" }}>/</span>
+            <span style={{ color: "var(--fg-1)" }}>{label}</span>
+          </div>
         </div>
 
-        {/* Left side in RTL (end of flex): REELIO wordmark + tagline (LTR text reads naturally) */}
-        <div className="text-left" dir="ltr">
-          <h1
-            className="text-2xl lg:text-3xl font-bold text-white tracking-tight leading-none"
-            style={{ fontFamily: "var(--font-display)" }}
+        {/* End (right in LTR): search + bell */}
+        <div className="flex items-center gap-2">
+          <div
+            className="hidden md:flex items-center gap-2"
+            style={{
+              height: 30,
+              padding: "0 10px",
+              borderRadius: 7,
+              border: "1px solid var(--line-soft)",
+              background: "var(--bg-1)",
+              minWidth: 200,
+            }}
           >
-            REELIO
-          </h1>
-          <p className="hidden sm:block mt-1 text-xs lg:text-sm text-amber-100/80 font-light tracking-wide">
-            Professional video creation &amp; marketing
-          </p>
+            <Search size={12} style={{ color: "var(--fg-2)" }} />
+            <span style={{ fontSize: 12, color: "var(--fg-3)", flex: 1 }}>
+              Search
+            </span>
+            <span
+              className="mono"
+              style={{
+                fontSize: 11.5,
+                color: "var(--fg-3)",
+                padding: "1px 5px",
+                border: "1px solid var(--line-soft)",
+                borderRadius: 3,
+              }}
+            >
+              ⌘ K
+            </span>
+          </div>
+
+          <button
+            type="button"
+            className="flex items-center justify-center transition-colors duration-150"
+            style={{
+              height: 30,
+              padding: "0 8px",
+              borderRadius: 7,
+              border: "1px solid var(--line-soft)",
+              background: "transparent",
+              color: "var(--fg-1)",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "var(--bg-2)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "transparent")
+            }
+            aria-label="Notifications"
+          >
+            <Bell size={14} />
+          </button>
         </div>
       </div>
     </header>

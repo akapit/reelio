@@ -1,23 +1,82 @@
 "use client";
 
 import { Video, Image as ImageIcon, Share2 } from "lucide-react";
-import { useAssets } from "@/hooks/use-assets";
+import { cn } from "@/lib/utils";
+import type { SelectableAsset } from "@/components/properties/property-detail";
 
-interface VideosTabProps {
-  projectId: string;
+interface VideoTabAsset {
+  id: string;
+  asset_type: string;
+  status: string;
+  original_url?: string | null;
+  processed_url?: string | null;
+  thumbnail_url?: string | null;
+  metadata?: unknown;
 }
 
-export function VideosTab({ projectId }: VideosTabProps) {
-  const { data: assets } = useAssets(projectId);
+interface VideosTabProps {
+  assets?: VideoTabAsset[];
+  /** Id of the asset currently shown in the parent preview pane. */
+  selectedAssetId?: string | null;
+  /** Click handler — parent swaps the preview to this video and autoplays. */
+  onSelect?: (asset: SelectableAsset) => void;
+}
 
-  const videos = (assets ?? []).filter((a) => a.asset_type === "video");
+const STATUS_MAP = {
+  done: { label: "Live", color: "var(--positive)" },
+  processing: { label: "Rendering", color: "var(--gold-hi)" },
+  failed: { label: "Failed", color: "oklch(0.65 0.20 25)" },
+} as const;
+
+export function VideosTab({
+  assets = [],
+  selectedAssetId,
+  onSelect,
+}: VideosTabProps) {
+  const videos = assets.filter((a) => a.asset_type === "video");
 
   if (videos.length === 0) {
     return (
-      <div className="text-center py-16" dir="rtl">
-        <Video className="w-16 h-16 mx-auto text-stone-300 mb-4" />
-        <p className="text-slate-500 text-sm">
-          עדיין אין סרטונים — עבור לטאב &quot;תמונות&quot; כדי ליצור סרטון
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 14,
+          padding: "56px 0",
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 999,
+            background: "var(--gold-tint)",
+            border: "1px solid var(--gold-tint-2)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Video size={22} style={{ color: "var(--gold-hi)" }} />
+        </div>
+        <p
+          className="serif"
+          style={{
+            fontSize: 20,
+            letterSpacing: "-0.015em",
+            color: "var(--fg-0)",
+            margin: 0,
+          }}
+        >
+          No reels yet
+        </p>
+        <p
+          className="kicker"
+          style={{ color: "var(--fg-3)", margin: 0 }}
+        >
+          Upload photos and compose your first reel from the bar above
         </p>
       </div>
     );
@@ -25,73 +84,212 @@ export function VideosTab({ projectId }: VideosTabProps) {
 
   return (
     <div
-      className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4"
-      dir="rtl"
+      style={{
+        display: "grid",
+        // auto-fill keeps cells at a sensible minimum and packs as many as the
+        // current container width allows — no breakpoint guessing required.
+        // Min 130px = ~9:16 portrait reel preview at a readable size on phones;
+        // grows naturally on tablets/desktops.
+        gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+        gap: 12,
+        width: "100%",
+      }}
+      className="videos-tab-grid"
     >
       {videos.map((video) => {
         const meta = video.metadata as
-          | { referenceAssetIds?: string[]; videoModel?: string; prompt?: string }
+          | {
+              referenceAssetIds?: string[];
+              videoModel?: string;
+              prompt?: string;
+            }
           | null
           | undefined;
         const sourceCount = meta?.referenceAssetIds?.length ?? 0;
         const thumbnailUrl =
           (video as { thumbnail_url?: string | null }).thumbnail_url ?? null;
+        const statusKey = (
+          video.status === "done"
+            ? "done"
+            : video.status === "processing"
+              ? "processing"
+              : video.status === "failed"
+                ? "failed"
+                : null
+        ) as keyof typeof STATUS_MAP | null;
+        const statusInfo = statusKey ? STATUS_MAP[statusKey] : null;
+        const isSelected = selectedAssetId === video.id;
+        const playableUrl = video.processed_url ?? video.original_url ?? "";
+        const canSelect = video.status === "done" && !!playableUrl;
 
         return (
           <div
             key={video.id}
-            className="relative aspect-[3/4] rounded-xl overflow-hidden bg-slate-200 border border-stone-200 group"
+            className={cn("prop-img relative")}
+            data-tone="warm"
+            style={{
+              aspectRatio: "3 / 4",
+              borderRadius: 12,
+              border: isSelected
+                ? "1.5px solid var(--gold)"
+                : "1px solid var(--line-soft)",
+              boxShadow: isSelected
+                ? "0 0 0 3px oklch(0.66 0.12 75 / 0.18)"
+                : undefined,
+              position: "relative",
+              overflow: "hidden",
+              transition:
+                "border-color .15s var(--ease), box-shadow .15s var(--ease)",
+            }}
           >
-            {/* Full-bleed thumbnail / preview */}
-            {video.status === "done" && video.original_url ? (
+            {/* Click target sits above the thumbnail so the user can pick the
+                video to play in the hero. The bottom action row (share button)
+                lives outside this layer so its click doesn't bubble through. */}
+            <button
+              type="button"
+              onClick={() =>
+                canSelect &&
+                onSelect?.({ id: video.id, asset_type: "video" })
+              }
+              disabled={!canSelect}
+              aria-label={isSelected ? "Selected reel" : "Play this reel"}
+              aria-pressed={isSelected}
+              className="absolute inset-0 z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+              style={{
+                background: "transparent",
+                border: 0,
+                padding: 0,
+                cursor: canSelect ? "pointer" : "default",
+              }}
+            />
+
+            {video.status === "done" && playableUrl ? (
               thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={thumbnailUrl}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
+                  alt="Generated reel thumbnail"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
                 />
               ) : (
                 <video
-                  src={video.original_url}
-                  className="absolute inset-0 w-full h-full object-cover"
+                  src={playableUrl}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
                   preload="metadata"
                 />
               )
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "oklch(0.95 0.02 80 / 0.55)",
+                }}
+              >
                 {video.status === "processing" ? (
-                  <div className="w-7 h-7 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                  <div
+                    style={{
+                      width: 26,
+                      height: 26,
+                      border: "2px solid var(--gold-hi)",
+                      borderTopColor: "transparent",
+                      borderRadius: "50%",
+                      animation: "spin 0.8s linear infinite",
+                    }}
+                  />
                 ) : (
-                  <Video className="w-10 h-10 text-slate-400" />
+                  <Video size={32} />
                 )}
               </div>
             )}
 
-            {/* Status badge */}
-            {video.status === "done" && (
-              <span className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded-full shadow">
-                הושלם
-              </span>
-            )}
-            {video.status === "processing" && (
-              <span className="absolute top-2 right-2 bg-amber-600 text-white text-xs px-2 py-0.5 rounded-full shadow">
-                בעיבוד
-              </span>
-            )}
-            {video.status === "failed" && (
-              <span className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded-full shadow">
-                נכשל
+            {/* Status pill */}
+            {statusInfo && (
+              <span
+                className="mono"
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  insetInlineStart: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: statusInfo.color,
+                  padding: "3px 8px",
+                  borderRadius: 999,
+                  background: "oklch(0.10 0.01 70 / 0.55)",
+                  backdropFilter: "blur(4px)",
+                  zIndex: 2,
+                  pointerEvents: "none",
+                }}
+              >
+                <span
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: 999,
+                    background: statusInfo.color,
+                    animation:
+                      video.status === "processing"
+                        ? "pulse-dot 1.4s ease-in-out infinite"
+                        : "none",
+                  }}
+                />
+                {statusInfo.label}
               </span>
             )}
 
-            {/* Bottom action row — source count + share, both as compact icon buttons */}
-            <div className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2">
+            {/* Bottom action row — sits above the click overlay */}
+            <div
+              style={{
+                position: "absolute",
+                insetInlineStart: 8,
+                insetInlineEnd: 8,
+                bottom: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 6,
+                zIndex: 2,
+              }}
+            >
               {sourceCount > 0 ? (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-black/55 backdrop-blur text-white text-xs font-medium"
-                  title={`${sourceCount} תמונות מקור`}
+                  className="mono"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 11,
+                    letterSpacing: "0.08em",
+                    padding: "3px 7px",
+                    borderRadius: 999,
+                    background: "oklch(0.10 0.01 70 / 0.55)",
+                    backdropFilter: "blur(4px)",
+                    color: "oklch(0.95 0.02 80 / 0.92)",
+                    pointerEvents: "none",
+                  }}
+                  title={`${sourceCount} source images`}
                 >
-                  <ImageIcon className="w-3.5 h-3.5" />
+                  <ImageIcon size={11} />
                   {sourceCount}
                 </span>
               ) : (
@@ -100,12 +298,32 @@ export function VideosTab({ projectId }: VideosTabProps) {
 
               <button
                 type="button"
-                onClick={() => console.log("TODO: share video", video.id)}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-white/90 backdrop-blur text-slate-700 hover:bg-white hover:text-amber-700 transition-colors shadow"
-                aria-label="שתף"
-                title="שתף"
+                onClick={(e) => {
+                  // Don't bubble to the click overlay underneath — share is
+                  // its own action.
+                  e.stopPropagation();
+                  console.log("TODO: share video", video.id);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 30,
+                  height: 30,
+                  borderRadius: 999,
+                  background: "oklch(0.95 0.02 80 / 0.92)",
+                  backdropFilter: "blur(4px)",
+                  color: "var(--fg-1)",
+                  border: 0,
+                  cursor: "pointer",
+                  transition:
+                    "background-color .15s var(--ease), color .15s var(--ease), transform .15s var(--ease)",
+                }}
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                aria-label="Share"
+                title="Share"
               >
-                <Share2 className="w-4 h-4" />
+                <Share2 size={14} />
               </button>
             </div>
           </div>

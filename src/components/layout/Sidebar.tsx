@@ -4,36 +4,75 @@ import { useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { LayoutDashboard, Home, User, X } from "lucide-react";
+import {
+  Home as HomeIcon,
+  LayoutGrid,
+  LayoutTemplate,
+  CircleUser,
+  Sparkles,
+  X,
+  User,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ReelioWordmark } from "@/components/brand/ReelioMark";
+import { useProperties } from "@/hooks/use-properties";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 const navItems = [
+  { label: "Home", href: "/dashboard", icon: HomeIcon, exact: true },
   {
-    label: "לוח בקרה",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    exact: true,
+    label: "Properties",
+    href: "/dashboard/properties",
+    icon: LayoutGrid,
+    exact: false,
   },
   {
-    label: "נכסים",
-    href: "/dashboard/properties",
-    icon: Home,
+    label: "Templates",
+    href: "/dashboard/templates",
+    icon: LayoutTemplate,
+    exact: false,
+  },
+  {
+    label: "Profile",
+    href: "/dashboard/profile",
+    icon: CircleUser,
     exact: false,
   },
 ];
+
+const TONES = ["warm", "cool", "amber", "sunset", "mono"] as const;
+function pickTone(seed: string) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return TONES[Math.abs(h) % TONES.length];
+}
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   desktopCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+  onNewProject?: () => void;
 }
 
-export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarProps) {
+export function Sidebar({
+  isOpen,
+  onClose,
+  desktopCollapsed = false,
+  onToggleCollapse,
+  onNewProject,
+}: SidebarProps) {
   const pathname = usePathname();
+  const { data: rows } = useProperties();
+  const recent = (rows ?? []).slice(0, 3) as Array<{
+    id: string;
+    name: string;
+    property_address?: string;
+  }>;
 
-  // Close on Escape key
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -53,29 +92,131 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
     return pathname.startsWith(href);
   }
 
-  const sidebarContent = (
+  // Sidebar uses dark warm-charcoal even in light theme — mirrors the design.
+  // Locally redefine token vars so child elements using var(--bg-2)/var(--fg-2)
+  // resolve to dark equivalents inside the sidebar.
+  const sidebarStyle: React.CSSProperties = {
+    background: "oklch(0.18 0.008 72)",
+    borderRight: "1px solid oklch(0.30 0.010 70 / 0.5)",
+    color: "oklch(0.96 0.010 80)",
+    ["--bg-1" as string]: "oklch(0.20 0.008 72)",
+    ["--bg-2" as string]: "oklch(0.24 0.010 72)",
+    ["--bg-3" as string]: "oklch(0.28 0.012 72)",
+    ["--fg-0" as string]: "oklch(0.96 0.010 80)",
+    ["--fg-1" as string]: "oklch(0.86 0.010 80)",
+    ["--fg-2" as string]: "oklch(0.74 0.010 80)",
+    ["--fg-3" as string]: "oklch(0.58 0.010 80)",
+    ["--line" as string]: "oklch(0.45 0.010 70 / 0.5)",
+    ["--line-soft" as string]: "oklch(0.45 0.010 70 / 0.28)",
+    ["--rail-bg" as string]: "oklch(0.30 0.010 72)",
+  };
+
+  // `collapsed` only applies to the desktop rail (the mobile drawer always
+  // shows full content since it's a slide-over). We render the same component
+  // tree in both states and just hide labels / footer text in collapsed mode
+  // so the width transition is purely a CSS animation on a single element.
+  const buildSidebarContent = (collapsed: boolean) => (
     <>
-      {/* Wordmark — matches Header height + dark gradient palette */}
-      <div className="flex items-center justify-between h-[68px] lg:h-[76px] px-5 border-b border-amber-200/20 shrink-0">
-        <span
-          className="text-xl font-bold text-white tracking-tight"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          REELIO
-        </span>
+      {/* Wordmark + collapse toggle */}
+      <div
+        className={cn(
+          "flex items-center shrink-0",
+          collapsed ? "flex-col gap-2 px-3 pt-4 pb-3" : "justify-between px-5 pt-5 pb-3",
+        )}
+      >
+        {!collapsed && <ReelioWordmark size={13} />}
+        {collapsed && (
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              background:
+                "linear-gradient(135deg, oklch(0.86 0.14 82), oklch(0.55 0.10 72))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "var(--font-display)",
+              fontSize: 15,
+              fontWeight: 600,
+              color: "oklch(0.16 0.02 70)",
+            }}
+            aria-hidden="true"
+          >
+            r
+          </div>
+        )}
         <button
           type="button"
           onClick={onClose}
-          className="lg:hidden flex items-center justify-center w-8 h-8 rounded-md text-amber-100 hover:text-white hover:bg-white/10 transition-colors duration-150"
-          aria-label="סגור תפריט"
+          className="lg:hidden flex items-center justify-center w-8 h-8 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-150"
+          aria-label="Close menu"
         >
-          <X size={18} />
+          <X size={16} />
+        </button>
+        {/* Desktop collapse toggle — only render when handler is supplied */}
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-colors duration-150"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          </button>
+        )}
+      </div>
+
+      {/* New reel CTA — gold gradient */}
+      <div className={cn(collapsed ? "px-2 pb-3" : "px-4 pb-4")}>
+        <button
+          type="button"
+          onClick={onNewProject}
+          className={cn(
+            "btn-generate w-full",
+            collapsed ? "justify-center" : "justify-between",
+          )}
+          style={{ height: 36 }}
+          title={collapsed ? "New reel" : undefined}
+          aria-label="New reel"
+        >
+          {collapsed ? (
+            <Sparkles size={14} />
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-2">
+                <Sparkles size={13} />
+                New reel
+              </span>
+              <span
+                className="mono"
+                style={{ fontSize: 11.5, opacity: 0.65 }}
+              >
+                ⌘N
+              </span>
+            </>
+          )}
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3" aria-label="ניווט ראשי">
-        <ul className="space-y-1">
+      {/* Navigation + Recent — single scroll container */}
+      <nav
+        className={cn(
+          "flex-1 overflow-y-auto scroll",
+          collapsed ? "px-2" : "px-4",
+        )}
+        aria-label="Primary"
+      >
+        {!collapsed && (
+          <div
+            className="kicker"
+            style={{ padding: "6px 8px", marginBottom: 4, color: "var(--fg-3)" }}
+          >
+            Workspace
+          </div>
+        )}
+        <ul className="space-y-0.5">
           {navItems.map(({ label, href, icon: Icon, exact }) => {
             const active = isActive(href, exact);
             return (
@@ -84,72 +225,274 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
                   href={href}
                   onClick={onClose}
                   aria-current={active ? "page" : undefined}
+                  aria-label={collapsed ? label : undefined}
+                  title={collapsed ? label : undefined}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 relative group",
-                    active
-                      ? "text-white bg-white/10"
-                      : "text-amber-100/70 hover:text-white hover:bg-white/5",
+                    "group relative flex items-center rounded-md text-[13px] transition-colors duration-150",
+                    collapsed
+                      ? "justify-center h-9"
+                      : "gap-2.5 px-2.5 py-2",
                   )}
+                  style={{
+                    color: active
+                      ? "oklch(0.96 0.010 80)"
+                      : "oklch(0.74 0.010 80)",
+                    background: active ? "oklch(0.28 0.012 72)" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active)
+                      e.currentTarget.style.background =
+                        "oklch(0.24 0.010 72)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active)
+                      e.currentTarget.style.background = "transparent";
+                  }}
                 >
-                  {/* Active right border indicator (RTL) */}
-                  {active && (
-                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-amber-400" />
+                  {active && !collapsed && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        insetInlineStart: -16,
+                        top: 8,
+                        bottom: 8,
+                        width: 2,
+                        background: "var(--gold)",
+                        borderRadius: 2,
+                      }}
+                    />
                   )}
                   <Icon
-                    size={16}
-                    className={cn(
-                      "shrink-0 transition-colors duration-150",
-                      active
-                        ? "text-amber-300"
-                        : "text-amber-100/60 group-hover:text-amber-200",
-                    )}
+                    size={15}
+                    style={{
+                      color: active
+                        ? "oklch(0.96 0.010 80)"
+                        : "oklch(0.74 0.010 80)",
+                    }}
                   />
-                  {label}
+                  {!collapsed && label}
                 </Link>
               </li>
             );
           })}
         </ul>
+
+        {!collapsed && recent.length > 0 && (
+          <>
+            <div
+              className="kicker"
+              style={{
+                padding: "20px 8px 6px",
+                color: "var(--fg-3)",
+              }}
+            >
+              Recent
+            </div>
+            <ul className="space-y-0.5">
+              {recent.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/dashboard/properties/${p.id}`}
+                    onClick={onClose}
+                    className="flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors duration-150"
+                    style={{
+                      color: "oklch(0.74 0.010 80)",
+                      fontSize: 12.5,
+                      background: "transparent",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background =
+                        "oklch(0.24 0.010 72)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    <span
+                      className="prop-img"
+                      data-tone={pickTone(p.id)}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 4,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.property_address ?? p.name}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </nav>
 
-      {/* User section */}
-      <div className="shrink-0 border-t border-amber-200/20 p-3">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors duration-150 cursor-pointer">
-          <div className="w-8 h-8 rounded-full bg-amber-400/15 border border-amber-300/30 flex items-center justify-center shrink-0">
-            <User size={14} className="text-amber-300" />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-medium text-white truncate leading-none">
-              החשבון שלי
-            </span>
-            <span className="text-xs text-amber-100/60 truncate mt-0.5 leading-none">
-              ניהול פרופיל
-            </span>
+      {/* Credits widget — hidden in collapsed mode */}
+      {!collapsed && (
+        <div className="px-4 pb-3">
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              background: "oklch(0.74 0.13 78 / 0.08)",
+              border: "1px solid oklch(0.74 0.13 78 / 0.20)",
+            }}
+          >
+            <div
+              className="kicker"
+              style={{ marginBottom: 6, color: "var(--gold-hi)" }}
+            >
+              credits
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+              }}
+            >
+              <span
+                className="serif"
+                style={{ fontSize: 22, letterSpacing: "-0.02em" }}
+              >
+                47
+              </span>
+              <span
+                className="mono"
+                style={{
+                  fontSize: 11.5,
+                  color: "var(--fg-3)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                OF 100
+              </span>
+            </div>
+            <div
+              style={{
+                height: 3,
+                background: "var(--rail-bg)",
+                borderRadius: 2,
+                overflow: "hidden",
+                marginTop: 8,
+              }}
+            >
+              <div
+                style={{
+                  width: "47%",
+                  height: "100%",
+                  background:
+                    "linear-gradient(90deg, var(--gold-lo), var(--gold-hi))",
+                }}
+              />
+            </div>
           </div>
         </div>
+      )}
+
+      {/* User pill — links to /dashboard/profile */}
+      <div className={cn("shrink-0", collapsed ? "px-2 pb-3" : "px-3 pb-3")}>
+        <Link
+          href="/dashboard/profile"
+          onClick={onClose}
+          aria-label="Profile"
+          title={collapsed ? "Profile" : undefined}
+          className={cn(
+            "flex items-center w-full rounded-lg transition-colors duration-150",
+            collapsed ? "justify-center p-1.5" : "gap-2.5 p-1.5",
+          )}
+          style={{ background: "transparent" }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.background = "oklch(0.24 0.010 72)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.background = "transparent")
+          }
+        >
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              background:
+                "linear-gradient(135deg, oklch(0.86 0.14 82), oklch(0.55 0.10 72))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontFamily: "var(--font-display)",
+              fontSize: 14,
+              color: "oklch(0.16 0.02 70)",
+              flexShrink: 0,
+            }}
+          >
+            <User size={13} />
+          </div>
+          {!collapsed && (
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                textAlign: "start",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: "oklch(0.96 0.010 80)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                Daniela Reyes
+              </div>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  color: "var(--fg-3)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                ATELIER PLAN
+              </div>
+            </div>
+          )}
+        </Link>
       </div>
     </>
   );
 
-  const panelClasses =
-    "h-screen w-52 flex flex-col bg-gradient-to-b from-slate-800 to-stone-800 border-l border-amber-200/20 shadow-xl";
-
   return (
     <>
-      {/* Desktop sidebar — fixed to the RIGHT in RTL layout */}
+      {/* Desktop sidebar — width animates between 232 (open) and 64 (collapsed) */}
       <aside
         className={cn(
-          "hidden lg:flex fixed right-0 top-0 z-40",
-          panelClasses,
-          "transition-transform duration-300 ease-out",
-          desktopCollapsed && "lg:translate-x-full",
+          "hidden lg:flex fixed top-0 z-40 h-screen flex-col shadow-xl overflow-hidden",
+          "transition-[width] duration-100 ease-out",
         )}
-        aria-hidden={desktopCollapsed}
+        style={{
+          ...sidebarStyle,
+          insetInlineStart: 0,
+          width: desktopCollapsed ? 64 : 232,
+          contain: "layout paint style",
+          willChange: "width",
+        }}
+        data-shell-sidebar=""
       >
-        {sidebarContent}
+        {buildSidebarContent(desktopCollapsed)}
       </aside>
 
-      {/* Mobile sidebar -- slide-over drawer from the right */}
+      {/* Mobile drawer — slides in from the start edge, always full-width */}
       <AnimatePresence>
         {isOpen && (
           <>
@@ -166,16 +509,18 @@ export function Sidebar({ isOpen, onClose, desktopCollapsed = false }: SidebarPr
 
             <motion.aside
               key="sidebar-drawer"
-              initial={{ x: "100%" }}
+              initial={{ x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              exit={{ x: "-100%" }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
-              className={cn("fixed right-0 top-0 z-50 lg:hidden", panelClasses)}
+              className="fixed top-0 z-50 lg:hidden h-screen w-[232px] flex flex-col shadow-xl"
+              style={{ ...sidebarStyle, insetInlineStart: 0 }}
               role="dialog"
               aria-modal="true"
-              aria-label="תפריט ניווט"
+              aria-label="Navigation"
+              data-shell-sidebar=""
             >
-              {sidebarContent}
+              {buildSidebarContent(false)}
             </motion.aside>
           </>
         )}
