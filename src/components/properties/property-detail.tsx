@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Info,
   Image as ImageIcon,
@@ -12,17 +12,24 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useAssets } from "@/hooks/use-assets";
-import {
-  CreationBar,
-  type AddAssetsPayload,
-} from "@/components/media/CreationBar";
+import { useEngineGenerate } from "@/hooks/use-engine-generate";
+import { useProcess } from "@/hooks/use-process";
 import { InfoTab } from "./tabs/info-tab";
-import { PhotosTab, type CreatorPhotoAsset } from "./tabs/photos-tab";
+import { PhotosTab } from "./tabs/photos-tab";
 import { VideosTab } from "./tabs/videos-tab";
 import { CopyTab } from "./tabs/copy-tab";
-import { AIEnhancementModal } from "./modals/ai-enhancement-modal";
+import {
+  AIEnhancementModal,
+  type PresetSelection,
+} from "./modals/ai-enhancement-modal";
 import { ShareModal } from "./modals/share-modal";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  FALLBACK_PRESETS,
+  findFallbackPreset,
+  DEFAULT_ENHANCEMENT_MODEL,
+  type EnhancementPreset,
+} from "@/lib/ai/enhancement-presets";
 
 /**
  * Minimal asset shape used by the preview-selection callback. We deliberately
@@ -103,20 +110,28 @@ interface PropertyDetailProps {
 export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   const [activeTab, setActiveTab] = useState<TabId>("photos");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [creatorAssets, setCreatorAssets] = useState<AddAssetsPayload | null>(
-    null,
-  );
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [actionAssetIds, setActionAssetIds] = useState<string[]>([]);
+  const [presets, setPresets] = useState<EnhancementPreset[]>(FALLBACK_PRESETS);
   const { t } = useI18n();
-  // Mirror of the IDs currently attached to the creator bar (driven by
-  // CreationBar's onExistingAssetsChange). Lets us skip the "added" toast
-  // when the user re-adds a photo that's already in the rail.
-  const creatorIdsRef = useRef<Set<string>>(new Set());
+  const engineGenerate = useEngineGenerate();
+  const process = useProcess();
 
-  const handleCreatorAssetsChange = useCallback((ids: string[]) => {
-    creatorIdsRef.current = new Set(ids);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/ai/presets")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled || !body || !Array.isArray(body.presets)) return;
+        setPresets(body.presets as EnhancementPreset[]);
+      })
+      .catch(() => {
+        // keep fallback
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Inline rename state
@@ -218,30 +233,38 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     }
   };
 
-  const handleAddToCreator = (photos: CreatorPhotoAsset[]) => {
-    if (photos.length === 0) return;
-    const fresh = photos.filter((p) => !creatorIdsRef.current.has(p.id));
-    if (fresh.length === 0) {
-      // Everything in this batch is already in the creator rail — skip the
-      // dispatch and the toast so re-adding a photo is a silent no-op.
-      setSelectedAssetId(photos[0]?.id ?? null);
-      return;
-    }
-    setCreatorAssets({
-      nonce: Date.now(),
-      assets: fresh.map((photo) => ({
-        id: photo.id,
-        originalUrl: photo.originalUrl,
-        thumbnailUrl: photo.thumbnailUrl,
-        assetType: "image",
-      })),
+  const handleCreateVideo = (assetIds: string[]) => {
+    if (assetIds.length === 0) return;
+    engineGenerate.mutate({
+      projectId,
+      imageAssetIds: assetIds,
+      templateName: "luxury_30s",
     });
-    setSelectedAssetId(fresh[0]?.id ?? photos[0]?.id ?? null);
-    toast.success(
-      fresh.length === 1
-        ? t.properties.toasts.photoAdded
-        : `${fresh.length} ${t.properties.toasts.photosAdded}`,
-    );
+    setSelectedAssetId(assetIds[0] ?? null);
+  };
+
+  const handleAiSelect = (selection: PresetSelection) => {
+    if (actionAssetIds.length === 0) return;
+    let prompt: string;
+    let model: string;
+    if (selection.kind === "custom") {
+      prompt = selection.prompt;
+      model = DEFAULT_ENHANCEMENT_MODEL;
+    } else {
+      const fromDb = presets.find((p) => p.key === selection.key);
+      const resolved = fromDb ?? findFallbackPreset(selection.key);
+      prompt = resolved.prompt;
+      model = resolved.model;
+    }
+    for (const assetId of actionAssetIds) {
+      process.mutate({
+        assetId,
+        projectId,
+        tool: "enhance",
+        prompt,
+        model,
+      });
+    }
   };
 
   return (
@@ -367,74 +390,22 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
         )}
       </section>
 
-      {/* ─── Two-column stage: persistent creator rail + workspace ────────── */}
+      {/* ─── Single-column workspace — selection-driven actions live in the
+            photo tab toolbar; the creator rail has been retired. ───────── */}
       <section className="property-stage">
         <style>{`
           .property-stage {
-            display: grid;
-            grid-template-columns: minmax(360px, 400px) minmax(0, 1fr);
-            gap: 20px;
-            align-items: start;
-          }
-          .property-rail {
-            position: sticky;
-            inset-block-start: 16px;
-            align-self: start;
-            max-height: calc(100vh - 32px);
             display: flex;
             flex-direction: column;
-            min-height: 0;
-            overflow-y: auto;
+            align-items: stretch;
           }
-          .property-rail::-webkit-scrollbar { width: 6px; }
-          .property-rail::-webkit-scrollbar-thumb {
-            background: var(--line);
-            border-radius: 3px;
-          }
-          .property-rail::-webkit-scrollbar-track { background: transparent; }
           .property-workspace {
             display: flex;
             flex-direction: column;
             gap: 16px;
             min-width: 0;
           }
-          @media (max-width: 1180px) and (min-width: 1024px) {
-            .property-stage {
-              grid-template-columns: minmax(320px, 340px) minmax(0, 1fr);
-              gap: 14px;
-            }
-          }
-          /* Below the lg breakpoint the dashboard sidebar disappears too — at
-             that point we don't have room for a 360-400px rail next to the
-             workspace, so collapse to a single column. */
-          @media (max-width: 1023px) {
-            .property-stage {
-              display: flex;
-              flex-direction: column;
-              gap: 16px;
-            }
-            .property-rail {
-              position: static;
-              max-height: none;
-              overflow: visible;
-              order: 1;
-              width: 100%;
-            }
-            .property-workspace {
-              order: 2;
-              width: 100%;
-            }
-          }
         `}</style>
-
-        <aside className="property-rail">
-          <CreationBar
-            projectId={projectId}
-            addAssets={creatorAssets}
-            onExistingAssetsChange={handleCreatorAssetsChange}
-            variant="vertical"
-          />
-        </aside>
 
         <main className="property-workspace">
           {selectedVideoAsset && selectedVideoUrl && (
@@ -558,7 +529,6 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                   assets={projectAssets}
                   selectedAssetId={selectedAssetId}
                   onSelect={handleSelectAsset}
-                  onAddToCreator={handleAddToCreator}
                   onDelete={(assetId) => deleteAsset.mutate(assetId)}
                   onAiEnhance={(ids) => {
                     setActionAssetIds(ids);
@@ -568,7 +538,9 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                     setActionAssetIds(ids);
                     setShareModalOpen(true);
                   }}
-                  onCreateVideo={(picked) => handleAddToCreator(picked)}
+                  onCreateVideo={(picked) =>
+                    handleCreateVideo(picked.map((p) => p.id))
+                  }
                 />
               )}
               {activeTab === "videos" && (
@@ -591,6 +563,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
         open={aiModalOpen}
         onClose={() => setAiModalOpen(false)}
         selectedCount={actionAssetIds.length}
+        onSelect={handleAiSelect}
       />
       <ShareModal
         open={shareModalOpen}

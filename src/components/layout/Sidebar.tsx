@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -8,7 +8,6 @@ import {
   Home as HomeIcon,
   LayoutGrid,
   LayoutTemplate,
-  CircleUser,
   X,
   User,
   ChevronLeft,
@@ -18,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { ReelioWordmark } from "@/components/brand/ReelioMark";
 import { useProperties } from "@/hooks/use-properties";
 import { useI18n } from "@/lib/i18n/client";
+import { createClient } from "@/lib/supabase/client";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
@@ -36,13 +36,6 @@ const navItems = [
     icon: LayoutTemplate,
     exact: false,
     disabled: true,
-  },
-  {
-    labelKey: "profile",
-    href: "/dashboard/profile",
-    icon: CircleUser,
-    exact: false,
-    disabled: false,
   },
 ] as const;
 
@@ -76,6 +69,35 @@ export function Sidebar({
     name: string;
     property_address?: string;
   }>;
+
+  const [profile, setProfile] = useState<{
+    full_name: string | null;
+    plan: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, plan")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setProfile({
+        full_name: (data?.full_name as string | null) ?? null,
+        plan: (data?.plan as string | null) ?? null,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -502,7 +524,7 @@ export function Sidebar({
                   textOverflow: "ellipsis",
                 }}
               >
-                Daniela Reyes
+                {profile?.full_name ?? t.shell.profile}
               </div>
               <div
                 className="mono"
@@ -512,7 +534,7 @@ export function Sidebar({
                   letterSpacing: "0.04em",
                 }}
               >
-                ATELIER PLAN
+                {profile?.plan ? `${profile.plan.toUpperCase()} PLAN` : ""}
               </div>
             </div>
           )}

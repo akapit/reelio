@@ -88,19 +88,39 @@ export function VideosTab({
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        // auto-fill keeps cells at a sensible minimum and packs as many as the
-        // current container width allows — no breakpoint guessing required.
-        // Min 130px = ~9:16 portrait reel preview at a readable size on phones;
-        // grows naturally on tablets/desktops.
-        gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
-        gap: 12,
-        width: "100%",
-      }}
-      className="videos-tab-grid"
-    >
+    <div className="videos-tab-grid">
+      <style>{`
+        .videos-tab-grid {
+          --videos-grid-gap: 12px;
+          --videos-grid-cap: 5;
+          --videos-grid-max: 1080px;
+          display: grid;
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(
+              max(130px, calc((100% - (var(--videos-grid-cap) - 1) * var(--videos-grid-gap)) / var(--videos-grid-cap))),
+              1fr
+            )
+          );
+          gap: var(--videos-grid-gap);
+          width: 100%;
+          max-width: var(--videos-grid-max);
+          margin-inline: auto;
+        }
+        @media (max-width: 640px) {
+          .videos-tab-grid {
+            --videos-grid-gap: 8px;
+            --videos-grid-cap: 3;
+            grid-template-columns: repeat(
+              auto-fill,
+              minmax(
+                max(110px, calc((100% - (var(--videos-grid-cap) - 1) * var(--videos-grid-gap)) / var(--videos-grid-cap))),
+                1fr
+              )
+            );
+          }
+        }
+      `}</style>
       {videos.map((video) => {
         const meta = video.metadata as
           | {

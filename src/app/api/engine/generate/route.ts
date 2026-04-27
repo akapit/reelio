@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   const { data: sourceAssets, error: assetsErr } = await supabase
     .from("assets")
-    .select("id, user_id, project_id, original_url, processed_url, asset_type")
+    .select("id, user_id, project_id, original_url, processed_url, thumbnail_url, asset_type")
     .in("id", imageAssetIds);
   if (assetsErr) {
     console.error("[engine/generate] Failed to load source assets:", assetsErr);
@@ -157,7 +157,11 @@ export async function POST(req: NextRequest) {
       // tool, so "video" is the correct bucket. The scene-based lineage lives
       // in `metadata.engineRequest` / `engine_runs`.
       tool_used: "video",
-      thumbnail_url: firstAsset.original_url,
+      // Use the source image's lightweight thumbnail (≤480px JPEG) so video
+      // cards have a real poster the moment they render. Without this, the
+      // browser starts decoding the 1080p mp4 just to show the first frame,
+      // which makes the grid feel slow and laggy on first paint.
+      thumbnail_url: firstAsset.thumbnail_url ?? firstAsset.original_url,
       source_asset_id: firstAsset.id,
       metadata: {
         // Mirror the reference ids at the top level so the AssetGrid preview

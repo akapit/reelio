@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { assetId, tool, prompt, duration, aspectRatio, quality, voiceoverText, musicPrompt, musicVolume, videoModel, referenceAssetIds, effectId, effectPhrases } = body as {
+  const { assetId, tool, prompt, duration, aspectRatio, quality, voiceoverText, musicPrompt, musicVolume, videoModel, model, referenceAssetIds, effectId, effectPhrases } = body as {
     assetId?: string;
     tool?: string;
     prompt?: string;
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     musicPrompt?: string;
     musicVolume?: number;
     videoModel?: string;
+    model?: string;
     referenceAssetIds?: string[];
     effectId?: string;
     effectPhrases?: unknown;
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
   // Resolve reference asset IDs → URLs (multi-image prompts for Seedance).
   // We verify each belongs to the caller to avoid leaking URLs across users,
   // and cap at 9 to match Seedance's reference_image_urls limit.
-  let referenceImageUrls: string[] = [];
+  const referenceImageUrls: string[] = [];
   if (
     tool === "video" &&
     Array.isArray(referenceAssetIds) &&
@@ -282,6 +283,10 @@ export async function POST(req: NextRequest) {
         assetId: placeholderAsset.id,
         originalUrl: asset.original_url,
         userId: user.id,
+        prompt:
+          typeof prompt === "string" && prompt.length > 0 ? prompt : undefined,
+        model:
+          typeof model === "string" && model.length > 0 ? model : undefined,
       });
     }
     // staging / sky dispatch is handled elsewhere or queued for follow-up —

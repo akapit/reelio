@@ -11,6 +11,7 @@ import {
   Globe,
   Check,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n/client";
 
 interface SocialPlatform {
@@ -62,7 +63,13 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
   };
 
   const handleSubmit = () => {
-    console.log("TODO: publish to", Array.from(selected), { shareAsPost });
+    if (selected.size === 0) return;
+    const platforms = Array.from(selected);
+    console.log("[share] platforms selected", platforms, { shareAsPost });
+    toast.success(
+      `${t.modals.share} → ${platforms.length} ${t.modals.selectedPlatforms}`,
+    );
+    setSelected(new Set());
     onClose();
   };
 

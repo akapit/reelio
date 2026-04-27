@@ -5,20 +5,35 @@ import { updateAssetStatus, uploadResultToR2, appendAssetMetadata } from "./_sha
 export const enhanceImageTask = task({
   id: "enhance-image",
   retry: { maxAttempts: 3 },
-  run: async (payload: { assetId: string; originalUrl: string; userId: string }) => {
+  run: async (payload: {
+    assetId: string;
+    originalUrl: string;
+    userId: string;
+    prompt?: string;
+    model?: string;
+  }) => {
     const runStart = Date.now();
 
     await tags.add(`asset_${payload.assetId}`);
     await tags.add(`user_${payload.userId}`);
+    if (payload.model) await tags.add(`model_${payload.model}`);
     metadata.set("assetId", payload.assetId);
     metadata.set("userId", payload.userId);
+    if (payload.prompt) metadata.set("enhance.prompt", payload.prompt);
+    if (payload.model) metadata.set("enhance.model", payload.model);
 
-    logger.info("[enhance-image] start", { assetId: payload.assetId });
+    logger.info("[enhance-image] start", {
+      assetId: payload.assetId,
+      model: payload.model,
+      hasPrompt: Boolean(payload.prompt),
+    });
     await updateAssetStatus(payload.assetId, "processing");
     try {
       const provider = getProvider("enhance-image");
       const result = await provider.enhanceImage({
         imageUrl: payload.originalUrl,
+        prompt: payload.prompt,
+        model: payload.model,
         onTaskId: async (taskId) => {
           logger.info("[kieai] taskId minted", { taskId });
           await tags.add(`kie_${taskId}`);

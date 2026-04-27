@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Check,
+  Eye,
   Image as ImageIcon,
-  Plus,
   Share2,
   Sparkles,
   Trash2,
@@ -13,6 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
 import { useI18n } from "@/lib/i18n/client";
+import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
+import { ImagePreviewModal } from "@/components/properties/modals/image-preview-modal";
 
 interface PhotoTabAsset {
   id: string;
@@ -20,6 +22,7 @@ interface PhotoTabAsset {
   status: string;
   original_url?: string | null;
   thumbnail_url?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CreatorPhotoAsset {
@@ -35,15 +38,13 @@ interface PhotosTabProps {
   selectedAssetId?: string | null;
   /** Click handler — parent swaps the preview to this asset. */
   onSelect?: (asset: SelectableAsset) => void;
-  /** Adds one or more done photos into the persistent creator rail. */
-  onAddToCreator?: (assets: CreatorPhotoAsset[]) => void;
   /** Deletes this asset row from the project. */
   onDelete?: (assetId: string) => void;
   /** Opens AI enhancement modal for the selected photo ids. */
   onAiEnhance?: (assetIds: string[]) => void;
   /** Opens share modal for the selected photo ids. */
   onShare?: (assetIds: string[]) => void;
-  /** Adds selected photos to the creator rail in video mode. */
+  /** Dispatches video generation for the selected photos. */
   onCreateVideo?: (assets: CreatorPhotoAsset[]) => void;
 }
 
@@ -76,12 +77,108 @@ function ActionPill({
   );
 }
 
+function getRoomType(asset: PhotoTabAsset): RoomType | null {
+  const meta = asset.metadata;
+  const value = meta && typeof meta === "object" ? (meta as Record<string, unknown>).roomType : null;
+  return isRoomType(value) ? value : null;
+}
+
+function RoomTypePill({
+  current,
+  onChange,
+  loading,
+  labels,
+  detectingLabel,
+  fallbackLabel,
+}: {
+  current: RoomType | null;
+  onChange: (next: RoomType) => void;
+  loading?: boolean;
+  labels: Record<RoomType, string>;
+  detectingLabel: string;
+  fallbackLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const label = current
+    ? labels[current]
+    : loading
+      ? detectingLabel
+      : fallbackLabel;
+
+  return (
+    <div ref={ref} className="relative mx-auto inline-block">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className={cn(
+          "rounded-full border border-[var(--line-soft)] bg-[var(--bg-1)] px-3 py-0.5 text-[11px] text-[var(--fg-2)]",
+          "transition-colors duration-150 hover:border-[var(--gold)]/60 hover:text-[var(--fg-0)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+        )}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {label}
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute z-40 mt-1 max-h-64 w-44 overflow-y-auto rounded-lg border border-[var(--line-soft)] bg-[var(--bg-1)] py-1 shadow-lg"
+          style={{
+            insetInlineStart: "50%",
+            transform: "translateX(-50%)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {ROOM_TYPES.map((type) => (
+            <li key={type}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={current === type}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(type);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "w-full px-3 py-1.5 text-start text-[12px] transition-colors",
+                  current === type
+                    ? "bg-[var(--gold-tint)] text-[var(--fg-0)]"
+                    : "text-[var(--fg-1)] hover:bg-[var(--bg-2)]",
+                )}
+              >
+                {labels[type]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function PhotosTab({
   projectId,
   assets = [],
   selectedAssetId,
   onSelect,
-  onAddToCreator,
   onDelete,
   onAiEnhance,
   onShare,
@@ -108,16 +205,56 @@ export function PhotosTab({
       console.warn("[backfill] kickoff failed", err);
     });
   }, [missingThumbCount, projectId]);
-  // Track which card is mid-drag so we can ghost it (visual feedback for
-  // drag-to-creation-bar). Cleared on `dragend` regardless of where the drop
-  // landed.
-  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Auto-detect room types for any asset still missing one. Same idempotent
+  // pattern as thumbnails — keeps firing until the server reports 0 results.
+  const detectingRef = useRef<{ inFlight: boolean; cooldownUntil: number }>({
+    inFlight: false,
+    cooldownUntil: 0,
+  });
+  const missingRoomCount = assets.filter(
+    (a) => a.asset_type === "image" && a.status === "uploaded" && !getRoomType(a),
+  ).length;
+  useEffect(() => {
+    if (missingRoomCount === 0) return;
+    if (detectingRef.current.inFlight) return;
+    if (Date.now() < detectingRef.current.cooldownUntil) return;
+    detectingRef.current.inFlight = true;
+    fetch("/api/assets/detect-room", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    })
+      .catch((err) => {
+        console.warn("[detect-room] kickoff failed", err);
+      })
+      .finally(() => {
+        detectingRef.current.inFlight = false;
+        detectingRef.current.cooldownUntil = Date.now() + 4_000;
+      });
+  }, [missingRoomCount, projectId]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [optimisticRoomTypes, setOptimisticRoomTypes] = useState<
+    Record<string, RoomType>
+  >({});
+
+  const handleRoomTypeChange = (assetId: string, next: RoomType) => {
+    setOptimisticRoomTypes((prev) => ({ ...prev, [assetId]: next }));
+    fetch("/api/assets/room-type", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assetId, roomType: next }),
+    }).catch((err) => {
+      console.warn("[room-type] update failed", err);
+    });
+  };
 
   // A photo is "ready" once it has a usable original_url and isn't actively
   // failing or processing. Source uploads land with status="uploaded";
-  // AI-generated outputs land with status="done". Both are valid drag/select
-  // sources for the creator bar.
+  // AI-generated outputs land with status="done". Both are valid select
+  // sources for the action pills.
   const isReady = (photo: PhotoTabAsset) =>
     !!photo.original_url &&
     photo.status !== "processing" &&
@@ -138,13 +275,6 @@ export function PhotosTab({
     };
   };
 
-  const addOne = (photo: (typeof photos)[number]) => {
-    const creatorPhoto = toCreatorPhoto(photo);
-    if (!creatorPhoto) return;
-    onAddToCreator?.([creatorPhoto]);
-    onSelect?.({ id: photo.id, asset_type: "image" });
-  };
-
   const toggleSelected = (photoId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -163,8 +293,7 @@ export function PhotosTab({
   const handleCreateVideo = () => {
     const picked = pickedCreatorPhotos();
     if (picked.length === 0) return;
-    if (onCreateVideo) onCreateVideo(picked);
-    else onAddToCreator?.(picked);
+    onCreateVideo?.(picked);
     setSelectedIds(new Set());
   };
 
@@ -271,15 +400,36 @@ export function PhotosTab({
       >
         <style>{`
           .photos-tab-grid {
+            --photos-grid-gap: 12px;
+            --photos-grid-cap: 5;
+            --photos-grid-max: 1080px;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 12px;
+            /* min-cell width = max(120px, share-of-row-for-cap-cols), so on
+               wide screens we get exactly 'cap' columns and on narrow screens
+               we collapse gracefully. */
+            grid-template-columns: repeat(
+              auto-fill,
+              minmax(
+                max(120px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
+                1fr
+              )
+            );
+            gap: var(--photos-grid-gap);
             width: 100%;
+            max-width: var(--photos-grid-max);
+            margin-inline: auto;
           }
           @media (max-width: 640px) {
             .photos-tab-grid {
-              grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-              gap: 8px;
+              --photos-grid-gap: 8px;
+              --photos-grid-cap: 3;
+              grid-template-columns: repeat(
+                auto-fill,
+                minmax(
+                  max(96px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
+                  1fr
+                )
+              );
             }
           }
         `}</style>
@@ -288,9 +438,7 @@ export function PhotosTab({
             (photo as { thumbnail_url?: string | null }).thumbnail_url ??
             photo.original_url ??
             undefined;
-          const originalUrl = photo.original_url ?? "";
           const isPreview = selectedAssetId === photo.id;
-          const isDragging = draggingId === photo.id;
           const canAdd = isReady(photo);
           const isPicked = selectedIds.has(photo.id);
           const showRing = isPicked || isPreview;
@@ -312,26 +460,6 @@ export function PhotosTab({
                   "focus-within:ring-2 focus-within:ring-[var(--gold)]",
                 )}
                 data-tone="warm"
-                draggable={canAdd}
-                onDragStart={(e) => {
-                  if (!canAdd) {
-                    e.preventDefault();
-                    return;
-                  }
-                  const payload = {
-                    id: photo.id,
-                    originalUrl,
-                    thumbnailUrl: thumbnailUrl ?? originalUrl,
-                    assetType: "image" as const,
-                  };
-                  e.dataTransfer.effectAllowed = "copy";
-                  e.dataTransfer.setData(
-                    "application/reelio-asset",
-                    JSON.stringify(payload),
-                  );
-                  setDraggingId(photo.id);
-                }}
-                onDragEnd={() => setDraggingId(null)}
                 role="button"
                 tabIndex={canAdd ? 0 : -1}
                 aria-label={isPicked ? "Selected photo" : "Select this photo"}
@@ -355,9 +483,8 @@ export function PhotosTab({
                     : undefined,
                   padding: 0,
                   cursor: canAdd ? "pointer" : "default",
-                  opacity: isDragging ? 0.4 : 1,
                   transition:
-                    "opacity .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease)",
+                    "border-color .15s var(--ease), box-shadow .15s var(--ease)",
                   overflow: "hidden",
                   background: "transparent",
                   textAlign: "left",
@@ -403,46 +530,51 @@ export function PhotosTab({
                   {index + 1}
                 </div>
 
-                {onDelete && !isPicked && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(photo.id);
-                    }}
+                {!isPicked && (thumbnailUrl ?? photo.original_url) && (
+                  <div
                     className={cn(
-                      "absolute end-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
-                      "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
-                      "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                      "pointer-events-none absolute end-2 top-2 z-30 flex items-center gap-1.5",
+                      "opacity-100 transition-opacity duration-150",
                       "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                     )}
-                    aria-label={t.photos.deletePhoto}
-                    title={t.common.delete}
                   >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-
-                {canAdd && !isPicked && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addOne(photo);
-                    }}
-                    className={cn(
-                      "absolute bottom-2 end-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
-                      "bg-[var(--gold)] text-[var(--on-gold)] shadow-[var(--shadow-gold)]",
-                      "opacity-100 transition-[background-color,opacity,transform] duration-150 hover:bg-[var(--gold-hi)] hover:scale-110",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-                      "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewUrl(photo.original_url ?? thumbnailUrl ?? null);
+                      }}
+                      className={cn(
+                        "pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full",
+                        "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
+                        "transition-colors duration-150 hover:border-white/80 hover:bg-black/70",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+                      )}
+                      aria-label={t.photos.preview}
+                      title={t.photos.preview}
+                    >
+                      <Eye size={14} />
+                    </button>
+                    {onDelete && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(photo.id);
+                        }}
+                        className={cn(
+                          "pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full",
+                          "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
+                          "transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                        )}
+                        aria-label={t.photos.deletePhoto}
+                        title={t.common.delete}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     )}
-                    aria-label={t.photos.addThis}
-                    title={t.photos.addToCreator}
-                  >
-                    <Plus size={15} strokeWidth={2.5} />
-                  </button>
+                  </div>
                 )}
 
                 {isPicked && (
@@ -498,9 +630,14 @@ export function PhotosTab({
                 )}
               </div>
 
-              <span className="mx-auto inline-block rounded-full border border-[var(--line-soft)] bg-[var(--bg-1)] px-3 py-0.5 text-[11px] text-[var(--fg-2)]">
-                {t.photos.roomTag}
-              </span>
+              <RoomTypePill
+                current={optimisticRoomTypes[photo.id] ?? getRoomType(photo)}
+                loading={photo.status === "uploaded"}
+                onChange={(next) => handleRoomTypeChange(photo.id, next)}
+                labels={t.photos.roomTypes}
+                detectingLabel={t.photos.detectingRoom}
+                fallbackLabel={t.photos.roomTag}
+              />
             </div>
           );
         })}
@@ -508,6 +645,12 @@ export function PhotosTab({
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
+
+      <ImagePreviewModal
+        open={previewUrl !== null}
+        imageUrl={previewUrl}
+        onClose={() => setPreviewUrl(null)}
+      />
     </div>
   );
 }

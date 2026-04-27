@@ -96,6 +96,8 @@ export const dictionaries = {
     },
     modals: {
       aiEnhancement: "AI enhancement",
+      aiKicker: "AI · OPTIONS",
+      aiSubmit: "Enhance",
       selectedPhotos: "photos selected",
       deselectAll: "Deselect all",
       selectedPlatforms: "platforms selected",
@@ -122,6 +124,11 @@ export const dictionaries = {
         refurnish: {
           label: "Refurnish",
           description: "Replace furniture with a fresh modern style",
+        },
+        custom: {
+          label: "Custom prompt",
+          description: "Describe exactly what you want changed",
+          placeholder: "e.g. Repaint the walls warm white and add a Persian rug",
         },
       },
     },
@@ -335,6 +342,20 @@ export const dictionaries = {
       actionAi: "AI",
       actionShare: "Share",
       roomTag: "Room",
+      preview: "Preview",
+      detectingRoom: "…",
+      roomTypes: {
+        bedroom: "Bedroom",
+        living_room: "Living room",
+        kitchen: "Kitchen",
+        bathroom: "Bathroom",
+        dining_room: "Dining room",
+        office: "Office",
+        balcony: "Balcony",
+        hallway: "Hallway",
+        exterior: "Exterior",
+        other: "Other",
+      },
     },
     videos: {
       deleteVideo: "Delete video",
@@ -617,6 +638,8 @@ export const dictionaries = {
     },
     modals: {
       aiEnhancement: "שדרוג AI",
+      aiKicker: "AI · אפשרויות",
+      aiSubmit: "שדרג",
       selectedPhotos: "תמונות נבחרו",
       deselectAll: "בטל הכל",
       selectedPlatforms: "פלטפורמות נבחרו",
@@ -643,6 +666,11 @@ export const dictionaries = {
         refurnish: {
           label: "ריהוט מחדש",
           description: "החלף ריהוט בסגנון חדש ומודרני",
+        },
+        custom: {
+          label: "הוראה מותאמת",
+          description: "תאר במדויק מה לשנות בתמונה",
+          placeholder: "לדוגמה: צבע את הקירות בלבן חמים והוסף שטיח פרסי",
         },
       },
     },
@@ -856,6 +884,20 @@ export const dictionaries = {
       actionAi: "AI",
       actionShare: "שתף",
       roomTag: "חדר",
+      preview: "תצוגה",
+      detectingRoom: "…",
+      roomTypes: {
+        bedroom: "חדר שינה",
+        living_room: "סלון",
+        kitchen: "מטבח",
+        bathroom: "חדר אמבטיה",
+        dining_room: "פינת אוכל",
+        office: "משרד",
+        balcony: "מרפסת",
+        hallway: "מסדרון",
+        exterior: "חוץ",
+        other: "אחר",
+      },
     },
     videos: {
       deleteVideo: "מחק סרטון",

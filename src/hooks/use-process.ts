@@ -17,6 +17,9 @@ interface ProcessOptions {
   /** 0..1 (metadata scale) */
   musicVolume?: number;
   videoModel?: VideoModel;
+  /** Generic kie.ai model slug for the enhance path (e.g. "openai/gpt-image-2.0").
+   * Distinct from `videoModel` which is constrained to the video provider's enum. */
+  model?: string;
   /** Additional images attached to the prompt beyond `assetId`. Passed to
    * Seedance as `reference_image_urls`. */
   referenceAssetIds?: string[];

@@ -69,15 +69,15 @@
   /* Action accent gradients — used by photo-tab "Video / AI / Share" pills.
      Each variant ships a hi/lo pair so the gradient direction can flip in
      hover/active states without redefining the whole stack. */
-  --action-video-hi:  oklch(0.74 0.17 55);
-  --action-video-lo:  oklch(0.62 0.20 45);
-  --action-video-glow: oklch(0.62 0.20 45 / 0.30);
-  --action-ai-hi:     oklch(0.66 0.20 300);
-  --action-ai-lo:     oklch(0.52 0.22 295);
-  --action-ai-glow:   oklch(0.52 0.22 295 / 0.30);
-  --action-share-hi:  oklch(0.65 0.18 245);
-  --action-share-lo:  oklch(0.50 0.20 245);
-  --action-share-glow: oklch(0.50 0.20 245 / 0.30);
+  --action-video-hi:  oklch(0.72 0.17 55);
+  --action-video-lo:  oklch(0.60 0.20 45);
+  --action-video-glow: oklch(0.60 0.20 45 / 0.30);
+  --action-ai-hi:     oklch(0.55 0.22 300);
+  --action-ai-lo:     oklch(0.40 0.22 295);
+  --action-ai-glow:   oklch(0.40 0.22 295 / 0.32);
+  --action-share-hi:  oklch(0.55 0.18 245);
+  --action-share-lo:  oklch(0.38 0.20 245);
+  --action-share-glow: oklch(0.38 0.20 245 / 0.32);
   --on-action:        oklch(0.99 0.005 80);
 
   /* Shell-specific (dark sidebar even in light theme) */
@@ -322,9 +322,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.005em;
   color: var(--on-action);
