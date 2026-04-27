@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { generateThumbnail } from "@/lib/image-thumbnail";
+import { useI18n } from "@/lib/i18n/client";
 
 interface PresignedUpload {
   presignedUrl: string;
@@ -60,6 +61,7 @@ async function uploadThumbnail(file: File): Promise<string | null> {
 export function useUpload(projectId: string) {
   const supabase = createClient();
   const qc = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async (file: File) => {
@@ -73,7 +75,7 @@ export function useUpload(projectId: string) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      if (!user) throw new Error(t.hooks.notAuthenticated);
 
       const assetType = file.type.startsWith("video/") ? "video" : "image";
       const { data, error } = await supabase
@@ -93,10 +95,10 @@ export function useUpload(projectId: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["assets", projectId] });
-      toast.success("File uploaded successfully");
+      toast.success(t.hooks.fileUploaded);
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : t.hooks.uploadFailed);
     },
   });
 }

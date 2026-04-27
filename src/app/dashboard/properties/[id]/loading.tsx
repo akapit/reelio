@@ -1,9 +1,6 @@
 export default function PropertyDetailLoading() {
   return (
-    <div
-      className="min-h-screen bg-gradient-to-br from-slate-50 to-stone-100 flex flex-col"
-      dir="rtl"
-    >
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-stone-100 flex flex-col">
       {/* Header skeleton */}
       <div className="bg-gradient-to-r from-slate-800 to-stone-800 border-b border-amber-200/20 px-4 md:px-8 py-4 shadow-lg">
         <div className="max-w-[1800px] mx-auto flex items-center justify-between">

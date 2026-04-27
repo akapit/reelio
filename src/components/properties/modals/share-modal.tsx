@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Globe,
 } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 interface SocialPlatform {
   id: string;
@@ -88,6 +89,7 @@ interface ShareModalProps {
 }
 
 export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
+  const { t } = useI18n();
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   if (!open) return null;
@@ -122,7 +124,6 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      dir="rtl"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -130,7 +131,7 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
       <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-white rounded-t-2xl border-b border-stone-200 px-6 py-5 flex items-center justify-between z-10">
-          <h2 className="text-xl font-bold text-slate-900">שיתוף ברשתות חברתיות</h2>
+          <h2 className="text-xl font-bold text-slate-900">{t.modals.socialShare}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -144,14 +145,14 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
           {/* Select all / deselect all */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-slate-600">
-              {selected.size} פלטפורמות נבחרו
+              {selected.size} {t.modals.selectedPlatforms}
             </p>
             <button
               type="button"
               onClick={toggleAll}
               className="text-sm font-medium text-amber-700 hover:text-amber-900 transition-colors"
             >
-              {allSelected ? "בטל הכל" : "בחר הכל"}
+              {allSelected ? t.modals.deselectAll : t.common.selectAll}
             </button>
           </div>
 
@@ -164,7 +165,7 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
                   key={id}
                   type="button"
                   onClick={() => togglePlatform(id)}
-                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-right ${
+                  className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-start ${
                     isActive
                       ? "border-amber-600 bg-amber-50"
                       : "border-stone-200 bg-white hover:border-amber-300 hover:bg-amber-50/50"
@@ -203,14 +204,14 @@ export function ShareModal({ open, onClose, shareAsPost }: ShareModalProps) {
               disabled={selected.size === 0}
               className="flex-1 px-5 py-3 bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-xl font-semibold hover:from-amber-700 hover:to-amber-800 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              שתף ({selected.size})
+              {t.modals.share} ({selected.size})
             </button>
             <button
               type="button"
               onClick={onClose}
               className="px-5 py-3 bg-stone-100 text-slate-700 rounded-xl font-medium hover:bg-stone-200 transition-colors"
             >
-              ביטול
+              {t.common.cancel}
             </button>
           </div>
         </div>

@@ -12,9 +12,11 @@ import {
   Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
 
 type AssetStatus = "uploaded" | "processing" | "done" | "failed";
 type AssetTool = "enhance" | "staging" | "sky" | "video";
+type StatusLabelKey = "uploaded" | "processing" | "published" | "failed";
 
 interface AssetCardProps {
   id: string;
@@ -52,41 +54,27 @@ interface AssetCardProps {
 
 const statusConfig: Record<
   AssetStatus,
-  { label: string; className: string; pulse?: boolean }
+  { labelKey: StatusLabelKey; className: string; pulse?: boolean }
 > = {
   uploaded: {
-    label: "הועלה",
+    labelKey: "uploaded",
     className:
       "bg-[var(--color-surface-raised)] text-[var(--color-muted)] border-[var(--color-border)]",
   },
   processing: {
-    label: "בעיבוד",
+    labelKey: "processing",
     className:
       "bg-[var(--color-accent)]/10 text-[var(--color-accent)] border-[var(--color-accent)]/30",
     pulse: true,
   },
   done: {
-    label: "הושלם",
+    labelKey: "published",
     className: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
   },
   failed: {
-    label: "נכשל",
+    labelKey: "failed",
     className: "bg-red-500/10 text-red-400 border-red-500/30",
   },
-};
-
-const toolLabels: Record<AssetTool, string> = {
-  enhance: "שדרוג",
-  staging: "סטיילינג",
-  sky: "החלפת שמיים",
-  video: "סרטון",
-};
-
-const processingLabels: Record<AssetTool, string> = {
-  enhance: "משדרג...",
-  staging: "מבצע סטיילינג...",
-  sky: "מחליף שמיים...",
-  video: "יוצר סרטון...",
 };
 
 export function AssetCard({
@@ -108,6 +96,7 @@ export function AssetCard({
   isSelected = false,
   onSelectToggle,
 }: AssetCardProps) {
+  const { t } = useI18n();
   const statusMeta = statusConfig[status];
   const displayUrl = status === "done" && processedUrl ? processedUrl : originalUrl;
   // For card thumbnail: use thumbnailUrl if available (e.g. source image for videos)
@@ -174,11 +163,11 @@ export function AssetCard({
             >
               <Loader2 size={24} className="animate-spin text-[var(--color-muted)]" />
               <span className="text-xs text-[var(--color-muted)]">
-                {toolUsed ? processingLabels[toolUsed] : "בעיבוד..."}
+                {toolUsed ? t.media.processingTools[toolUsed] : t.media.processing}
               </span>
               {onPreview && !isInSelectMode && (
                 <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-muted)]/80">
-                  בדוק ריצה
+                  {t.media.inspectRun}
                 </span>
               )}
             </div>
@@ -190,7 +179,7 @@ export function AssetCard({
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <button
                 type="button"
-                title="בטל עיבוד"
+                title={t.media.cancelProcessing}
                 onClick={(e) => {
                   e.stopPropagation();
                   onCancel?.();
@@ -206,7 +195,7 @@ export function AssetCard({
                 )}
               >
                 <Square size={10} className="fill-current" />
-                עצור
+                {t.media.stop}
               </button>
             </div>
           </>
@@ -232,7 +221,7 @@ export function AssetCard({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={thumbUrl}
-                  alt="נכס"
+                  alt={assetType === "video" ? t.media.videoAsset : t.media.imageAsset}
                   className="w-full h-full object-cover"
                   loading="lazy"
                 />
@@ -244,7 +233,7 @@ export function AssetCard({
             {isSelectable ? (
               <div
                 className={cn(
-                  "absolute top-2 left-2 z-10 pointer-events-none",
+                  "absolute top-2 start-2 z-10 pointer-events-none",
                 )}
                 aria-hidden
               >
@@ -263,13 +252,13 @@ export function AssetCard({
             ) : (
               <div
                 className={cn(
-                  "absolute top-2 left-2 z-10",
+                  "absolute top-2 start-2 z-10",
                   "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
                 )}
               >
                 <button
                   type="button"
-                  title="הסר נכס"
+                  title={t.media.deleteAsset}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete?.();
@@ -291,13 +280,13 @@ export function AssetCard({
             {showActionButtons && (
               <div
                 className={cn(
-                  "absolute top-2 right-2 z-10 flex items-center gap-1",
+                  "absolute top-2 end-2 z-10 flex items-center gap-1",
                   "sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200"
                 )}
               >
                 <button
                   type="button"
-                  title="שדרג תמונה"
+                  title={t.media.upgradeImage}
                   onClick={(e) => {
                     e.stopPropagation();
                     onEnhance?.();
@@ -314,7 +303,7 @@ export function AssetCard({
                 </button>
                 <button
                   type="button"
-                  title="צור סרטון"
+                  title={t.media.generateVideo}
                   onClick={(e) => {
                     e.stopPropagation();
                     onGenerateVideo?.();
@@ -331,7 +320,7 @@ export function AssetCard({
                 </button>
                 <button
                   type="button"
-                  title="הורד"
+                  title={t.media.download}
                   onClick={(e) => {
                     e.stopPropagation();
                     window.open(displayUrl, "_blank");
@@ -357,10 +346,10 @@ export function AssetCard({
                   e.stopPropagation();
                   onCompare?.();
                 }}
-                className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm hover:bg-black/80 transition-colors duration-150"
+                className="absolute bottom-2 start-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm hover:bg-black/80 transition-colors duration-150"
               >
                 <SlidersHorizontal size={10} />
-                השווה
+                {t.media.compare}
               </button>
             )}
 
@@ -369,13 +358,13 @@ export function AssetCard({
                 source image as the poster. */}
             <span
               className={cn(
-                "absolute bottom-2 right-2 z-10",
+                "absolute bottom-2 end-2 z-10",
                 "inline-flex items-center justify-center w-5 h-5 rounded-md",
                 "bg-black/55 text-white backdrop-blur-sm",
                 "pointer-events-none select-none",
               )}
-              aria-label={assetType === "video" ? "נכס סרטון" : "נכס תמונה"}
-              title={assetType === "video" ? "סרטון" : "תמונה"}
+              aria-label={assetType === "video" ? t.media.videoAsset : t.media.imageAsset}
+              title={assetType === "video" ? t.media.video : t.media.image}
             >
               {assetType === "video" ? (
                 <Video size={11} />
@@ -402,13 +391,13 @@ export function AssetCard({
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[var(--color-accent)]" />
             </span>
           )}
-          {statusMeta.label}
+          {t.status[statusMeta.labelKey]}
         </span>
 
         {/* Tool badge */}
         {toolUsed && (
           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-raised)] text-[var(--color-muted)] border border-[var(--color-border)]">
-            {toolLabels[toolUsed]}
+            {t.media.tools[toolUsed]}
           </span>
         )}
       </div>

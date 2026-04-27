@@ -9,6 +9,8 @@ import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
   const [errors, setErrors] = useState<{
     fullName?: string;
     email?: string;
@@ -24,13 +27,13 @@ export default function SignupPage() {
 
   function validate() {
     const next: typeof errors = {};
-    if (!fullName.trim()) next.fullName = "שדה חובה";
-    if (!email.trim()) next.email = "שדה חובה";
+    if (!fullName.trim()) next.fullName = t.auth.required;
+    if (!email.trim()) next.email = t.auth.required;
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = "אימייל לא תקין";
-    if (!password) next.password = "שדה חובה";
+      next.email = t.auth.invalidEmail;
+    if (!password) next.password = t.auth.required;
     else if (password.length < 8)
-      next.password = "סיסמה קצרה מדי";
+      next.password = t.auth.passwordTooShort;
     return next;
   }
 
@@ -59,20 +62,17 @@ export default function SignupPage() {
         return;
       }
 
-      toast.success("החשבון נוצר — בדוק את האימייל שלך לאישור.");
+      toast.success(t.auth.signupSuccess);
       router.push("/login?message=check-email");
     } catch {
-      toast.error("משהו השתבש. נסה שוב.");
+      toast.error(t.auth.tryAgain);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]"
-      dir="rtl"
-    >
+    <div className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]">
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -81,6 +81,9 @@ export default function SignupPage() {
       >
         {/* Wordmark */}
         <div className="text-center mb-8">
+          <div className="mb-5 flex justify-center">
+            <LanguageSwitcher />
+          </div>
           <span
             className="text-4xl font-medium tracking-[0.06em] text-[var(--color-accent)]"
             style={{ fontFamily: "var(--font-display)" }}
@@ -88,7 +91,7 @@ export default function SignupPage() {
             reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            בואו נתחיל
+            {t.auth.signupPrompt}
           </p>
         </div>
 
@@ -96,10 +99,10 @@ export default function SignupPage() {
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
-              label="שם מלא"
+              label={t.auth.fullName}
               type="text"
               autoComplete="name"
-              placeholder="ישראל ישראלי"
+              placeholder={t.auth.fullNamePlaceholder}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               error={errors.fullName}
@@ -107,7 +110,7 @@ export default function SignupPage() {
             />
 
             <Input
-              label="אימייל"
+              label={t.auth.email}
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
@@ -118,10 +121,10 @@ export default function SignupPage() {
             />
 
             <Input
-              label="סיסמה"
+              label={t.auth.password}
               type="password"
               autoComplete="new-password"
-              placeholder="לפחות 8 תווים"
+              placeholder={t.auth.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={errors.password}
@@ -138,10 +141,10 @@ export default function SignupPage() {
               {loading ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  טוען...
+                  {t.common.loading}
                 </>
               ) : (
-                "הרשם"
+                t.auth.signupCta
               )}
             </Button>
           </form>
@@ -149,12 +152,12 @@ export default function SignupPage() {
 
         {/* Footer link */}
         <p className="text-center text-sm text-[var(--color-muted)] mt-6">
-          כבר יש לך חשבון?{" "}
+          {t.auth.signupFooter}{" "}
           <Link
             href="/login"
             className="text-[var(--color-foreground)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
           >
-            התחבר
+            {t.auth.loginCta}
           </Link>
         </p>
       </motion.div>

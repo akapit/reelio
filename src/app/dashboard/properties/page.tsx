@@ -8,6 +8,7 @@ import { PropertyCard } from "@/components/properties/property-card";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
 import { Button } from "@/components/ui/button";
 import type { Status } from "@/components/properties/StatusPill";
+import { useI18n } from "@/lib/i18n/client";
 
 type Filter = "all" | "live" | "rendering" | "draft";
 const FILTERS: Filter[] = ["all", "live", "rendering", "draft"];
@@ -22,21 +23,22 @@ function deriveStatus(seed: string, hasAssets: boolean): Status {
   return "draft";
 }
 
-function relativeTime(iso?: string): string {
+function relativeTime(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   const ms = Date.now() - new Date(iso).getTime();
   if (Number.isNaN(ms) || ms < 0) return "—";
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   const m = Math.floor(ms / 60_000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return rtf.format(0, "minute");
+  if (m < 60) return rtf.format(-m, "minute");
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return rtf.format(-h, "hour");
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) return rtf.format(-d, "day");
   const w = Math.floor(d / 7);
-  if (w < 4) return `${w}w ago`;
+  if (w < 4) return rtf.format(-w, "week");
   const mo = Math.floor(d / 30);
-  return `${mo}mo ago`;
+  return rtf.format(-mo, "month");
 }
 
 const DURATIONS = ["0:30", "0:45", "0:60"] as const;
@@ -46,6 +48,7 @@ export default function PropertiesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [modalOpen, setModalOpen] = useState(false);
+  const { t, locale } = useI18n();
 
   const properties = useMemo(
     () =>
@@ -71,14 +74,14 @@ export default function PropertiesPage() {
           address: r.property_address ?? r.name,
           status,
           duration: dur,
-          updated: relativeTime(r.updated_at ?? r.created_at),
+          updated: relativeTime(r.updated_at ?? r.created_at, locale),
           views:
             status === "published"
               ? `${(((Math.abs(h) % 90) + 5) / 10).toFixed(1)}k`
               : "—",
         };
       }),
-    [rows],
+    [locale, rows],
   );
 
   const filtered = useMemo(() => {
@@ -100,7 +103,7 @@ export default function PropertiesPage() {
         >
           <div>
             <div className="kicker" style={{ marginBottom: 8 }}>
-              Properties · {properties.length} reels
+              {t.properties.propertiesCount} · {properties.length} {t.properties.reels}
             </div>
             <h1
               className="serif"
@@ -112,9 +115,9 @@ export default function PropertiesPage() {
                 fontWeight: 400,
               }}
             >
-              Your{" "}
+              {t.properties.collectionPrefix}{" "}
               <span style={{ fontStyle: "italic" }} className="gold-text">
-                collection
+                {t.properties.collectionAccent}
               </span>
             </h1>
           </div>
@@ -134,7 +137,7 @@ export default function PropertiesPage() {
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search reels, addresses…"
+                placeholder={t.properties.searchPlaceholder}
                 className="w-full bg-transparent outline-none border-0"
                 style={{ fontSize: 13, color: "var(--fg-1)" }}
               />
@@ -144,7 +147,7 @@ export default function PropertiesPage() {
               onClick={() => setModalOpen(true)}
               className="btn-generate"
             >
-              <Plus size={14} /> New
+              <Plus size={14} /> {t.common.new}
             </button>
           </div>
         </section>
@@ -161,7 +164,7 @@ export default function PropertiesPage() {
                 aria-pressed={filter === f}
                 onClick={() => setFilter(f)}
               >
-                {f[0].toUpperCase() + f.slice(1)}
+                {t.properties.filters[f]}
               </button>
             ))}
           </div>
@@ -173,7 +176,7 @@ export default function PropertiesPage() {
               letterSpacing: "0.06em",
             }}
           >
-            {filtered.length} of {properties.length}
+            {filtered.length} / {properties.length}
           </span>
         </div>
 
@@ -186,7 +189,7 @@ export default function PropertiesPage() {
             }}
           >
             <p className="text-sm" style={{ color: "oklch(0.55 0.18 25)" }}>
-              Failed to load reels. Refresh to try again.
+              {t.properties.failedLoad}
             </p>
           </div>
         )}
@@ -244,14 +247,14 @@ export default function PropertiesPage() {
                   color: "var(--fg-0)",
                 }}
               >
-                {searchQuery ? "No reels match your search" : "No reels yet"}
+                {searchQuery ? t.properties.noMatch : t.properties.noReels}
               </p>
               {!searchQuery && (
                 <p
                   className="kicker"
                   style={{ marginTop: 8, color: "var(--fg-3)" }}
                 >
-                  Compose your first reel to get started
+                  {t.properties.composeFirst}
                 </p>
               )}
             </div>
@@ -262,7 +265,7 @@ export default function PropertiesPage() {
                 onClick={() => setModalOpen(true)}
               >
                 <Sparkles size={14} />
-                New reel
+                {t.shell.newReel}
               </Button>
             )}
           </motion.div>

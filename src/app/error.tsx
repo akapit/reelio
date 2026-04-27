@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useI18n } from "@/lib/i18n/client";
 
 interface ErrorProps {
   error: Error & { digest?: string };
@@ -8,6 +9,7 @@ interface ErrorProps {
 }
 
 export default function GlobalError({ error, reset }: ErrorProps) {
+  const { t } = useI18n();
   useEffect(() => {
     // Surface the error to any error reporting service here
     console.error("[GlobalError]", error);
@@ -53,14 +55,14 @@ export default function GlobalError({ error, reset }: ErrorProps) {
             className="text-3xl font-semibold text-[var(--color-foreground)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            משהו השתבש
+            {t.errors.title}
           </h1>
           <p className="text-sm text-[var(--color-muted)] leading-relaxed">
-            אירעה שגיאה לא צפויה. ניתן לנסות שוב או לחזור ללוח הבקרה.
+            {t.errors.message}
           </p>
           {error.digest && (
             <p className="text-xs text-[var(--color-muted)]/60 font-mono mt-1">
-              מזהה שגיאה: {error.digest}
+              {t.errors.digest}: {error.digest}
             </p>
           )}
         </div>
@@ -71,13 +73,13 @@ export default function GlobalError({ error, reset }: ErrorProps) {
             onClick={reset}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 hover:border-[var(--color-accent)]/40 transition-colors duration-200"
           >
-            נסה שוב
+            {t.errors.retry}
           </button>
           <a
             href="/dashboard"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:border-[var(--color-border)]/80 transition-colors duration-200"
           >
-            חזרה לדף הבית
+            {t.errors.home}
           </a>
         </div>
       </div>

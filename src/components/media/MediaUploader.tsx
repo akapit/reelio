@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
+import { useI18n } from "@/lib/i18n/client";
 
 interface MediaUploaderProps {
   projectId: string;
@@ -15,6 +16,7 @@ const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic|mp4|mov|webm|avi)$/i;
 
 export function MediaUploader({ projectId }: MediaUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const upload = useUpload(projectId);
 
@@ -110,10 +112,10 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
                 className="text-[var(--color-accent)] animate-spin"
               />
               <p className="text-sm font-medium text-[var(--color-foreground)]">
-                מעלה...
+                {t.uploader.uploading}
               </p>
               <p className="text-xs text-[var(--color-muted)]">
-                אנא המתן בזמן העלאת הקבצים.
+                {t.uploader.uploadingHint}
               </p>
             </motion.div>
           ) : (
@@ -145,10 +147,10 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
               </div>
               <div className="text-center">
                 <p className="text-sm font-medium text-[var(--color-foreground)]">
-                  גרור תמונות או סרטונים לכאן
+                  {t.uploader.drop}
                 </p>
                 <p className="text-xs text-[var(--color-muted)] mt-0.5">
-                  JPEG, PNG, WebP, HEIC, MP4, MOV — מספר קבצים במקביל
+                  {t.uploader.formats}
                 </p>
               </div>
               <button
@@ -159,7 +161,7 @@ export function MediaUploader({ projectId }: MediaUploaderProps) {
                   inputRef.current?.click();
                 }}
               >
-                או עיין בקבצים
+                {t.uploader.browse}
               </button>
             </motion.div>
           )}

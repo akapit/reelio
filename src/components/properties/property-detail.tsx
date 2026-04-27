@@ -6,7 +6,6 @@ import {
   Image as ImageIcon,
   Video,
   PenLine,
-  Calendar,
   Pencil,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,6 +20,7 @@ import { InfoTab } from "./tabs/info-tab";
 import { PhotosTab, type CreatorPhotoAsset } from "./tabs/photos-tab";
 import { VideosTab } from "./tabs/videos-tab";
 import { CopyTab } from "./tabs/copy-tab";
+import { useI18n } from "@/lib/i18n/client";
 
 /**
  * Minimal asset shape used by the preview-selection callback. We deliberately
@@ -75,24 +75,15 @@ type TabId = "info" | "photos" | "videos" | "copy";
 
 interface Tab {
   id: TabId;
-  label: string;
   Icon: React.ComponentType<{ size?: number }>;
 }
 
 const TABS: Tab[] = [
-  { id: "info", label: "Info", Icon: Info },
-  { id: "photos", label: "Photos", Icon: ImageIcon },
-  { id: "videos", label: "Videos", Icon: Video },
-  { id: "copy", label: "Copy", Icon: PenLine },
+  { id: "info", Icon: Info },
+  { id: "photos", Icon: ImageIcon },
+  { id: "videos", Icon: Video },
+  { id: "copy", Icon: PenLine },
 ];
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 interface Property {
   id: string;
@@ -113,6 +104,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   const [creatorAssets, setCreatorAssets] = useState<AddAssetsPayload | null>(
     null,
   );
+  const { t } = useI18n();
   // Mirror of the IDs currently attached to the creator bar (driven by
   // CreationBar's onExistingAssetsChange). Lets us skip the "added" toast
   // when the user re-adds a photo that's already in the rail.
@@ -159,10 +151,10 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
         setSelectedAssetId(null);
       }
       queryClient.invalidateQueries({ queryKey: ["assets", projectId] });
-      toast.success("Media item deleted");
+      toast.success(t.properties.toasts.mediaDeleted);
     },
     onError: () => {
-      toast.error("Failed to delete media item");
+      toast.error(t.properties.toasts.mediaDeleteFailed);
     },
   });
 
@@ -192,23 +184,16 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
       .eq("id", projectId);
     setIsSavingName(false);
     if (error) {
-      toast.error("Failed to save name");
+      toast.error(t.properties.toasts.nameSaveFailed);
       setNameDraft(propertyName);
     } else {
       setPropertyName(trimmed);
-      toast.success("Name updated");
+      toast.success(t.properties.toasts.nameSaved);
     }
     setIsEditingName(false);
   }
 
   const projectAssets = useMemo(() => assets ?? [], [assets]);
-
-  const photoCount = projectAssets.filter(
-    (a) => a.asset_type === "image",
-  ).length;
-  const videoCount = projectAssets.filter(
-    (a) => a.asset_type === "video",
-  ).length;
 
   const selectedVideoAsset = useMemo(() => {
     if (!selectedAssetId) return null;
@@ -249,8 +234,8 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     setSelectedAssetId(fresh[0]?.id ?? photos[0]?.id ?? null);
     toast.success(
       fresh.length === 1
-        ? "Photo added to creator"
-        : `${fresh.length} photos added to creator`,
+        ? t.properties.toasts.photoAdded
+        : `${fresh.length} ${t.properties.toasts.photosAdded}`,
     );
   };
 
@@ -260,47 +245,9 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
       style={{ maxWidth: 1280, gap: 22, color: "var(--fg-0)" }}
     >
       <style>{`
-        .property-header {
-          padding-block: 4px;
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          align-items: end;
-          gap: 16px;
-        }
-        .property-header-meta {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-        .property-meta-chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          height: 28px;
-          padding: 0 10px;
-          border-radius: 999px;
-          border: 1px solid var(--line-soft);
-          background: var(--bg-1);
-          color: var(--fg-2);
-          font-size: 12px;
-          font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-          letter-spacing: 0.04em;
-          white-space: nowrap;
-        }
-        .property-meta-chip svg { color: var(--gold); }
-        @media (max-width: 640px) {
-          .property-header {
-            grid-template-columns: 1fr;
-            align-items: start;
-            gap: 10px;
-          }
-          .property-header-meta { justify-content: flex-start; }
-          .property-meta-chip { height: 26px; font-size: 11px; }
-        }
+        .property-header { padding-block: 4px; }
         .property-title {
-          font-size: clamp(28px, 5vw, 36px);
+          font-size: clamp(24px, 5vw, 36px);
           line-height: 1.08;
           letter-spacing: -0.022em;
           font-weight: 400;
@@ -324,108 +271,95 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
         }
         .property-tab-content { padding: 20px 22px; }
         @media (max-width: 640px) {
-          .property-detail { gap: 16px; }
+          .property-detail { gap: 14px; }
+          .property-header { padding-block: 0; }
           .property-tab-btn {
-            padding: 12px 6px;
+            padding: 11px 4px;
             gap: 5px;
-            letter-spacing: 0.08em;
-            font-size: 11px;
+            letter-spacing: 0.06em;
+            font-size: 10.5px;
           }
-          .property-tab-btn-label { display: none; }
-          .property-tab-content { padding: 14px; }
+          .property-tab-content { padding: 12px; }
         }
       `}</style>
-      {/* ─── Header — title-block on the left, meta chips on the right ─── */}
-      <section className="property-header">
-        <div className="property-header-title min-w-0">
-          <div className="kicker" style={{ marginBottom: 6 }}>
-            Listing
-          </div>
-
-          {isEditingName ? (
-            <input
-              ref={nameInputRef}
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  saveName();
-                } else if (e.key === "Escape") {
-                  e.preventDefault();
-                  setNameDraft(propertyName);
-                  setIsEditingName(false);
-                }
-              }}
-              disabled={isSavingName}
-              maxLength={120}
-              className="serif property-title w-full bg-transparent border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-              style={{
-                color: "var(--fg-0)",
-                padding: 0,
-                margin: 0,
-                borderBottom: "1px solid oklch(0.66 0.12 75 / 0.6)",
-              }}
-              aria-label="Property name"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
+      {/* ─── Header — title only; kicker + meta chips removed per design ─── */}
+      <section className="property-header min-w-0">
+        {isEditingName ? (
+          <input
+            ref={nameInputRef}
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveName();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
                 setNameDraft(propertyName);
-                setIsEditingName(true);
-              }}
-              className="serif property-title group inline-flex min-w-0 items-center gap-2 cursor-text text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-              style={{
-                background: "transparent",
-                border: 0,
-                padding: 0,
-                color: "var(--fg-0)",
-              }}
-              title="Click to rename"
-            >
-              <span className="min-w-0 break-words">{propertyName}</span>
-              <Pencil
-                size={16}
-                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-                style={{ color: "var(--fg-3)" }}
-              />
-            </button>
-          )}
-
-          {property.property_address && (
-            <p
-              className="property-header-address"
-              style={{
-                margin: "8px 0 0",
-                fontSize: 13,
-                color: "var(--fg-2)",
-              }}
-            >
-              {property.property_address}
-            </p>
-          )}
-        </div>
-
-        {/* Meta chips — right column on desktop, wraps under title on narrow */}
-        <div className="property-header-meta">
-          <span className="property-meta-chip" title="Created">
-            <Calendar size={12} /> {formatDate(property.created_at)}
-          </span>
-          <span
-            className="property-meta-chip"
-            title={`${photoCount} photos`}
+                setIsEditingName(false);
+              }
+            }}
+            disabled={isSavingName}
+            maxLength={120}
+            className="serif property-title w-full bg-transparent border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+            style={{
+              color: "var(--fg-0)",
+              padding: 0,
+              margin: 0,
+              borderBottom: "1px solid oklch(0.66 0.12 75 / 0.6)",
+            }}
+            aria-label={t.properties.propertyName}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setNameDraft(propertyName);
+              setIsEditingName(true);
+            }}
+            className="serif property-title group inline-flex min-w-0 items-center gap-2 cursor-text text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+            style={{
+              background: "transparent",
+              border: 0,
+              padding: 0,
+              color: "var(--fg-0)",
+            }}
+            title={t.properties.renameTitle}
           >
-            <ImageIcon size={12} /> {photoCount}
-          </span>
-          <span
-            className="property-meta-chip"
-            title={`${videoCount} reels`}
+            <span className="min-w-0 break-words">{propertyName}</span>
+            <Pencil
+              size={16}
+              className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ color: "var(--fg-3)" }}
+            />
+          </button>
+        )}
+
+        <p
+          className="property-header-tagline"
+          style={{
+            margin: "6px 0 0",
+            fontSize: 13,
+            lineHeight: 1.45,
+            color: "var(--fg-2)",
+          }}
+        >
+          {t.properties.tagline}
+        </p>
+
+        {property.property_address && (
+          <p
+            className="property-header-address"
+            style={{
+              margin: "4px 0 0",
+              fontSize: 12,
+              color: "var(--fg-3)",
+            }}
           >
-            <Video size={12} /> {videoCount}
-          </span>
-        </div>
+            {property.property_address}
+          </p>
+        )}
       </section>
 
       {/* ─── Two-column stage: persistent creator rail + workspace ────────── */}
@@ -511,7 +445,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
               >
                 <div className="min-w-0">
                   <div className="kicker" style={{ marginBottom: 4 }}>
-                    Selected reel
+                    {t.properties.selectedReel}
                   </div>
                   <p
                     style={{
@@ -520,7 +454,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                       color: "var(--fg-2)",
                     }}
                   >
-                    Playing only after selection from the video library.
+                    {t.properties.selectedReelHint}
                   </p>
                 </div>
                 <button
@@ -540,7 +474,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                       "background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease)",
                   }}
                 >
-                  Close
+                  {t.common.close}
                 </button>
               </div>
               <div
@@ -585,13 +519,14 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
               }}
             >
               {TABS.map((tab) => {
+                const label = t.properties.tabs[tab.id];
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    aria-label={tab.label}
+                    aria-label={label}
                     className="mono property-tab-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-inset"
                     style={{
                       background: isActive ? "var(--bg-1)" : "transparent",
@@ -602,7 +537,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                     }}
                   >
                     <tab.Icon size={14} />
-                    <span className="property-tab-btn-label">{tab.label}</span>
+                    <span className="property-tab-btn-label">{label}</span>
                   </button>
                 );
               })}

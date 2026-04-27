@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { Sparkles, Copy, Share2, Check } from "lucide-react";
 import type { PropertyData } from "../property-detail";
+import { useI18n } from "@/lib/i18n/client";
+import type { Dictionary } from "@/lib/i18n/dictionaries";
 
-function generateSmartCopy(data: PropertyData): string {
+function generateSmartCopy(data: PropertyData, t: Dictionary): string {
   const parts: string[] = [];
 
   const address = [
@@ -18,21 +20,21 @@ function generateSmartCopy(data: PropertyData): string {
 
   if (address) {
     parts.push(
-      `🏠 ${data.propertyType || "Property"} for sale${address ? ` at ${address}` : ""}`,
+      `🏠 ${data.propertyType || t.copy.fallbackProperty} ${t.copy.forSale}${address ? ` ${address}` : ""}`,
     );
   } else {
-    parts.push(`🏠 Stunning ${data.propertyType || "property"} for sale`);
+    parts.push(`🏠 ${t.copy.stunning} ${data.propertyType || t.copy.fallbackProperty} ${t.copy.forSale}`);
   }
 
   parts.push("");
 
   const details: string[] = [];
-  if (data.rooms) details.push(`🛏️ ${data.rooms} rooms`);
+  if (data.rooms) details.push(`🛏️ ${data.rooms} ${t.copy.rooms}`);
   if (data.size) details.push(`📐 ${data.size} m²`);
   if (data.floor && data.totalFloors) {
-    details.push(`🏢 Floor ${data.floor} of ${data.totalFloors}`);
+    details.push(`🏢 ${t.copy.floor} ${data.floor} / ${data.totalFloors}`);
   } else if (data.floor) {
-    details.push(`🏢 Floor ${data.floor}`);
+    details.push(`🏢 ${t.copy.floor} ${data.floor}`);
   }
   if (data.price) details.push(`💰 ${data.price}`);
 
@@ -42,13 +44,13 @@ function generateSmartCopy(data: PropertyData): string {
   }
 
   if (data.description) {
-    parts.push("✨ About:");
+    parts.push(`✨ ${t.copy.about}`);
     parts.push(data.description);
     parts.push("");
   }
 
   if (data.features.length > 0) {
-    parts.push("🌟 What you'll find here:");
+    parts.push(`🌟 ${t.copy.whatYouFind}`);
     data.features.forEach((f) => parts.push(`✅ ${f}`));
     parts.push("");
   }
@@ -57,7 +59,7 @@ function generateSmartCopy(data: PropertyData): string {
     .filter(Boolean)
     .join(" ");
   if (ownerName || data.ownerPhone) {
-    parts.push("📞 Contact:");
+    parts.push(`📞 ${t.copy.contact}`);
     if (ownerName) parts.push(`👤 ${ownerName}`);
     if (data.ownerPhone) parts.push(`📱 ${data.ownerPhone}`);
     parts.push("");
@@ -76,16 +78,17 @@ interface CopyTabProps {
 }
 
 export function CopyTab({ data }: CopyTabProps) {
-  const [copyText, setCopyText] = useState(() => generateSmartCopy(data));
+  const { t } = useI18n();
+  const [copyText, setCopyText] = useState(() => generateSmartCopy(data, t));
   const [copied, setCopied] = useState(false);
 
   const regenerate = () => {
-    setCopyText(generateSmartCopy(data));
+    setCopyText(generateSmartCopy(data, t));
   };
 
   // Auto-generate once on mount
   useEffect(() => {
-    setCopyText(generateSmartCopy(data));
+    setCopyText(generateSmartCopy(data, t));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -113,7 +116,7 @@ export function CopyTab({ data }: CopyTabProps) {
       >
         <div>
           <div className="kicker" style={{ marginBottom: 8 }}>
-            Marketing copy
+            {t.copy.marketingCopy}
           </div>
           <h2
             className="serif"
@@ -124,9 +127,9 @@ export function CopyTab({ data }: CopyTabProps) {
               fontWeight: 400,
             }}
           >
-            Listing{" "}
+            {t.copy.copyTitle}{" "}
             <span style={{ fontStyle: "italic" }} className="gold-text">
-              caption
+              {t.copy.caption}
             </span>
           </h2>
         </div>
@@ -136,7 +139,7 @@ export function CopyTab({ data }: CopyTabProps) {
           className="btn-generate"
           style={{ height: 36 }}
         >
-          <Sparkles size={13} /> Regenerate
+          <Sparkles size={13} /> {t.copy.regenerate}
         </button>
       </div>
 
@@ -162,7 +165,7 @@ export function CopyTab({ data }: CopyTabProps) {
             className="kicker"
             style={{ color: "var(--gold-hi)" }}
           >
-            ready to share
+            {t.copy.ready}
           </span>
           <div
             style={{ display: "flex", alignItems: "center", gap: 10 }}
@@ -180,13 +183,13 @@ export function CopyTab({ data }: CopyTabProps) {
                   gap: 4,
                 }}
               >
-                <Check size={11} /> copied
+                <Check size={11} /> {t.copy.copied}
               </span>
             )}
             <button
               type="button"
               onClick={handleCopy}
-              title="Copy to clipboard"
+              title={t.copy.copyToClipboard}
               style={{
                 background: "transparent",
                 border: 0,
@@ -225,7 +228,7 @@ export function CopyTab({ data }: CopyTabProps) {
             resize: "vertical",
             fontFamily: "inherit",
           }}
-          placeholder="Click 'Regenerate' to compose marketing copy…"
+          placeholder={t.copy.placeholder}
         />
       </div>
 
@@ -241,7 +244,7 @@ export function CopyTab({ data }: CopyTabProps) {
           fontSize: 14,
         }}
       >
-        <Share2 size={15} /> Share caption
+        <Share2 size={15} /> {t.copy.shareCaption}
       </button>
     </div>
   );

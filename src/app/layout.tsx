@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { dirForLocale } from "@/lib/i18n/config";
+import { getRequestLocale } from "@/lib/i18n/server";
 
 const heebo = Heebo({
   subsets: ["latin", "hebrew"],
@@ -20,10 +22,17 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  return <RootLayoutInner>{children}</RootLayoutInner>;
+}
+
+async function RootLayoutInner({ children }: { children: React.ReactNode }) {
+  const locale = await getRequestLocale();
+  const dir = dirForLocale(locale);
+
   return (
-    <html lang="en" dir="ltr" className={heebo.variable}>
+    <html lang={locale} dir={dir} className={heebo.variable}>
       <body className="min-h-screen antialiased font-heebo">
-        <Providers>{children}</Providers>
+        <Providers initialLocale={locale}>{children}</Providers>
       </body>
     </html>
   );

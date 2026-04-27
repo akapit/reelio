@@ -16,6 +16,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { getEffect } from "@/lib/media/effects/library";
 import { useEngineRun } from "@/hooks/use-engine-run";
@@ -73,24 +74,24 @@ const MODEL_LABELS: Record<string, string> = {
 
 const RUN_STATUS_META = {
   pending: {
-    label: "ממתין",
+    label: "pending",
     icon: Clock3,
     className:
       "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)]",
   },
   running: {
-    label: "רץ",
+    label: "running",
     icon: Loader2,
     className:
       "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 text-[var(--color-accent)]",
   },
   done: {
-    label: "הושלם",
+    label: "done",
     icon: CheckCircle2,
     className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
   },
   failed: {
-    label: "נכשל",
+    label: "failed",
     icon: XCircle,
     className: "border-red-500/30 bg-red-500/10 text-red-400",
   },
@@ -160,6 +161,8 @@ export function PreviewModal({
   sourceAssets,
   onRerun,
 }: PreviewModalProps) {
+  const { t } = useI18n();
+  const previewText = t.media.preview;
   const hasBoth = !!originalUrl && !!processedUrl && assetType === "image";
   const sources = sourceAssets ?? [];
   const hasSources = sources.length > 0;
@@ -276,12 +279,14 @@ export function PreviewModal({
   const effectName = effectFromLibrary
     ? effectFromLibrary.name
     : hasAnyEffect
-      ? "Custom"
+      ? previewText.customEffect
       : null;
   const openerSnippet =
     generationConfig?.effectPhrases?.opener ?? effectFromLibrary?.openerPhrase;
   const effectTitle = openerSnippet
-    ? `פתיחה: ${openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}…` : openerSnippet}`
+    ? `${previewText.opener}: ${
+        openerSnippet.length > 80 ? `${openerSnippet.slice(0, 80)}...` : openerSnippet
+      }`
     : undefined;
   const RunStatusIcon = runStatusMeta?.icon;
 
@@ -338,7 +343,7 @@ export function PreviewModal({
                             : "text-[var(--color-muted)] hover:text-[var(--color-foreground)]"
                         )}
                       >
-                        {tab === "original" ? "מקורי" : "משודרג"}
+                        {tab === "original" ? t.media.original : t.media.enhanced}
                       </button>
                     ))}
                   </div>
@@ -351,7 +356,7 @@ export function PreviewModal({
                   type="button"
                   onClick={onClose}
                   className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150 flex-shrink-0"
-                  aria-label="סגור תצוגה מקדימה"
+                  aria-label={t.media.closePreview}
                 >
                   <X size={16} />
                 </button>
@@ -384,10 +389,10 @@ export function PreviewModal({
                       </div>
                       <div className="space-y-1">
                         <p className="text-sm font-medium text-[var(--color-foreground)]">
-                          הסרטון עדיין בעיבוד
+                          {previewText.videoStillProcessing}
                         </p>
                         <p className="text-xs text-[var(--color-muted)] max-w-md">
-                          ציר הזמן של הריצה למטה מציג את השלב הנוכחי, פרומפטים לסצנות ומזהי משימות.
+                          {previewText.videoStillProcessingHint}
                         </p>
                       </div>
                       {sources[0] && (
@@ -395,7 +400,7 @@ export function PreviewModal({
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={sources[0].thumbnailUrl ?? sources[0].originalUrl}
-                            alt="מקור ראשי"
+                            alt={previewText.primarySourceAlt}
                             className="w-full h-full object-cover"
                           />
                         </div>
@@ -406,7 +411,7 @@ export function PreviewModal({
                     <img
                       key={currentUrl ?? originalUrl}
                       src={currentUrl ?? originalUrl}
-                      alt="תצוגה מקדימה"
+                      alt={previewText.previewAlt}
                       className="max-w-full max-h-full object-contain rounded-xl"
                     />
                   )}
@@ -421,7 +426,7 @@ export function PreviewModal({
                   {generationConfig?.prompt && (
                     <div>
                       <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
-                        פרומפט
+                        {previewText.prompt}
                       </p>
                       <p className="text-sm text-[var(--color-foreground)] whitespace-pre-wrap break-words leading-relaxed">
                         {generationConfig.prompt}
@@ -478,7 +483,7 @@ export function PreviewModal({
                       >
                         <Sparkles size={12} />
                         <span className="text-[var(--color-foreground)] font-medium">
-                          אפקט: {effectName}
+                          {previewText.effect}: {effectName}
                         </span>
                       </div>
                     )}
@@ -499,19 +504,19 @@ export function PreviewModal({
                               className={cn(engineRun.status === "running" && "animate-spin")}
                             />
                           )}
-                          {runStatusMeta.label}
+                          {previewText.runStatuses[runStatusMeta.label]}
                         </span>
                         <span className="text-[11px] text-[var(--color-muted)]">
-                          ריצה {engineRun.id.slice(0, 8)}
+                          {previewText.run} {engineRun.id.slice(0, 8)}
                         </span>
                         {typeof engineRun.input?.templateName === "string" && (
                           <span className="text-[11px] text-[var(--color-muted)]">
-                            תבנית: {engineRun.input.templateName}
+                            {previewText.template}: {engineRun.input.templateName}
                           </span>
                         )}
                         {totalRunDuration && (
                           <span className="text-[11px] text-[var(--color-muted)]">
-                            סה״כ: {totalRunDuration}
+                            {previewText.total}: {totalRunDuration}
                           </span>
                         )}
                       </div>
@@ -525,7 +530,7 @@ export function PreviewModal({
                       {engineScenes.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                            סצנות
+                            {previewText.scenes}
                           </p>
                           <div className="grid gap-2">
                             {engineScenes.map((scene) => {
@@ -565,7 +570,7 @@ export function PreviewModal({
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span className="text-xs font-medium text-[var(--color-foreground)]">
-                                        סצנה {scene.scene_order}
+                                        {previewText.scene} {scene.scene_order}
                                       </span>
                                       <span className="text-[10px] text-[var(--color-muted)] uppercase tracking-[0.12em]">
                                         {scene.scene_role}
@@ -580,7 +585,7 @@ export function PreviewModal({
                                           size={10}
                                           className={cn(scene.status === "running" && "animate-spin")}
                                         />
-                                        {sceneStatusMeta.label}
+                                        {previewText.runStatuses[sceneStatusMeta.label]}
                                       </span>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
@@ -599,7 +604,7 @@ export function PreviewModal({
                                     {scene.motion_intent && <span>{scene.motion_intent}</span>}
                                     {typeof scene.prompt?.modelChoice === "string" && (
                                       <span>
-                                        מודל:{" "}
+                                        {previewText.model}:{" "}
                                         {MODEL_LABELS[scene.prompt.modelChoice] ??
                                           scene.prompt.modelChoice}
                                       </span>
@@ -607,12 +612,12 @@ export function PreviewModal({
                                     {typeof scene.output?.videoUrl === "string" && (
                                       <span className="inline-flex items-center gap-1">
                                         <Upload size={10} />
-                                        קליפ מוכן
+                                        {previewText.clipReady}
                                       </span>
                                     )}
                                     {typeof crop?.reason === "string" && (
                                       <span>
-                                        חיתוך: {crop.reason}
+                                        {previewText.crop}: {crop.reason}
                                       </span>
                                     )}
                                     {typeof evaluation?.score === "number" && (
@@ -632,13 +637,13 @@ export function PreviewModal({
                                       {Array.isArray(evaluation.issues) &&
                                         evaluation.issues.length > 0 && (
                                           <p>
-                                            בעיות:{" "}
+                                            {previewText.issues}:{" "}
                                             {evaluation.issues.join(", ")}
                                           </p>
                                         )}
                                       {typeof sceneOutput.retryReason === "string" &&
                                         sceneOutput.retryReason && (
-                                          <p>סיבת ניסיון חוזר: {sceneOutput.retryReason}</p>
+                                          <p>{previewText.retryReason}: {sceneOutput.retryReason}</p>
                                         )}
                                     </div>
                                   )}
@@ -661,7 +666,7 @@ export function PreviewModal({
                                             className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]"
                                           >
                                             <span className="text-[var(--color-foreground)] font-medium">
-                                              ניסיון {attempt.attempt_order}
+                                              {previewText.attempt} {attempt.attempt_order}
                                             </span>
                                             <span
                                               className={cn(
@@ -673,7 +678,7 @@ export function PreviewModal({
                                                 size={10}
                                                 className={cn(attempt.status === "running" && "animate-spin")}
                                               />
-                                              {attemptStatusMeta.label}
+                                              {previewText.runStatuses[attemptStatusMeta.label]}
                                             </span>
                                             {attempt.provider && <span>{attempt.provider}</span>}
                                             {attempt.model_choice && (
@@ -685,7 +690,7 @@ export function PreviewModal({
                                             {typeof attempt.external_ids?.piapiTaskId ===
                                               "string" && (
                                               <span>
-                                                משימה {attempt.external_ids.piapiTaskId}
+                                                {previewText.task} {attempt.external_ids.piapiTaskId}
                                               </span>
                                             )}
                                             {typeof attempt.metrics?.generationMs ===
@@ -726,7 +731,7 @@ export function PreviewModal({
 
                       <div className="space-y-2">
                         <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                          צינור עיבוד
+                          {previewText.pipeline}
                         </p>
                         <div className="grid gap-2">
                         {engineSteps.map((step) => {
@@ -774,11 +779,11 @@ export function PreviewModal({
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
                                   {typeof step.input?.sceneOrder === "number" && (
-                                    <span>סצנה {step.input.sceneOrder}</span>
+                                    <span>{previewText.scene} {step.input.sceneOrder}</span>
                                   )}
                                   {stepDuration && <span>{stepDuration}</span>}
                                   {typeof step.external_ids?.piapiTaskId === "string" && (
-                                    <span>משימה {step.external_ids.piapiTaskId}</span>
+                                    <span>{previewText.task} {step.external_ids.piapiTaskId}</span>
                                   )}
                                   {typeof step.external_ids?.anthropicRequestId === "string" && (
                                     <span>Anthropic {step.external_ids.anthropicRequestId}</span>
@@ -795,18 +800,18 @@ export function PreviewModal({
                               <div className="flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-muted)]">
                                 {typeof step.input?.modelChoice === "string" && (
                                   <span>
-                                    מודל: {MODEL_LABELS[step.input.modelChoice] ?? step.input.modelChoice}
+                                    {previewText.model}: {MODEL_LABELS[step.input.modelChoice] ?? step.input.modelChoice}
                                   </span>
                                 )}
                                 {typeof step.output?.videoUrl === "string" && (
                                   <span className="inline-flex items-center gap-1">
                                     <Upload size={10} />
-                                    קליפ מוכן
+                                    {previewText.clipReady}
                                   </span>
                                 )}
                                 {typeof step.metrics?.generationMs === "number" && (
                                   <span>
-                                    יצירה: {formatDurationMs(step.metrics.generationMs)}
+                                    {t.common.create}: {formatDurationMs(step.metrics.generationMs)}
                                   </span>
                                 )}
                               </div>
@@ -822,7 +827,7 @@ export function PreviewModal({
 
                         {!isEngineLoading && engineSteps.length === 0 && (
                           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-muted)]">
-                            אין רשומות שלבים עדיין.
+                            {previewText.noStepRecords}
                           </div>
                         )}
                       </div>
@@ -831,7 +836,7 @@ export function PreviewModal({
                       {engineEvents.length > 0 && (
                         <div className="space-y-2">
                           <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                            אירועים
+                            {previewText.events}
                           </p>
                           <div className="grid gap-2">
                             {engineEvents.slice(-12).map((event) => (
@@ -866,7 +871,7 @@ export function PreviewModal({
                                 )}
                                 {typeof event.payload?.retryReason === "string" &&
                                   event.payload.retryReason && (
-                                    <p>ניסיון חוזר: {event.payload.retryReason}</p>
+                                    <p>{previewText.retry}: {event.payload.retryReason}</p>
                                   )}
                               </div>
                             ))}
@@ -880,15 +885,19 @@ export function PreviewModal({
                     <div className="pt-3 border-t border-[var(--color-border)]">
                       <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
                         {sources.length > 1
-                          ? `מקורות (${sources.length})`
-                          : "מקור"}
+                          ? `${previewText.sources} (${sources.length})`
+                          : previewText.source}
                       </p>
                       <div className="flex gap-2 flex-wrap">
                         {sources.map((src) => (
                           <div
                             key={src.id}
                             className="relative w-16 h-12 rounded-md overflow-hidden bg-[var(--color-surface)] ring-1 ring-[var(--color-border)] shrink-0"
-                            title={`${src.assetType === "video" ? "סרטון" : "תמונה"} מקורי`}
+                            title={
+                              src.assetType === "video"
+                                ? previewText.sourceTitleVideo
+                                : previewText.sourceTitleImage
+                            }
                           >
                             {src.assetType === "video" ? (
                               <video
@@ -901,7 +910,7 @@ export function PreviewModal({
                               // eslint-disable-next-line @next/next/no-img-element
                               <img
                                 src={src.thumbnailUrl ?? src.originalUrl}
-                                alt="מקור"
+                                alt={previewText.sourceAlt}
                                 className="w-full h-full object-cover"
                               />
                             )}
@@ -927,7 +936,7 @@ export function PreviewModal({
                   )}
                 >
                   <Download size={13} />
-                  {downloading ? "מוריד..." : "הורד"}
+                  {downloading ? previewText.downloading : t.common.download}
                 </button>
                 {onRerun && (
                   <button
@@ -940,7 +949,7 @@ export function PreviewModal({
                     )}
                   >
                     <RotateCcw size={13} />
-                    הרץ מחדש
+                    {previewText.rerun}
                   </button>
                 )}
               </div>

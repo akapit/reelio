@@ -11,10 +11,8 @@ import {
   Mic,
   Music,
   Image as ImageIcon,
-  Check,
-  ChevronDown,
   Wand2,
-  Sparkles,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpload } from "@/hooks/use-upload";
@@ -22,6 +20,7 @@ import { useProcess } from "@/hooks/use-process";
 import { useEngineGenerate } from "@/hooks/use-engine-generate";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
+import { useI18n } from "@/lib/i18n/client";
 
 /**
  * Minimum source-image count required to kick off a video generation. Matches
@@ -31,14 +30,6 @@ import type { VideoModel } from "@/lib/media/types";
  * produce a shorter-than-intended cut.
  */
 const MIN_IMAGES_FOR_VIDEO = 6;
-
-/**
- * Seedance mode: kie.ai's spec caps `reference_image_urls` at 9. We mirror
- * the limit in the UI so the user can't attach a 10th image in the first
- * place — the server also rejects >9 in seedance mode, but gating at the
- * boundary is friendlier than a toast-on-submit.
- */
-const MAX_IMAGES_SEEDANCE = 9;
 
 /** The only template surfaced in the UI today. See engine/templates/luxury_30s.json. */
 const ENGINE_TEMPLATE = "luxury_30s" as const;
@@ -130,25 +121,10 @@ interface ExistingAsset {
 
 type CreationMode = "enhance" | "video" | null;
 
-/**
- * Video sub-mode. "scenes" runs the scene-based engine (planner -> N clips ->
- * ffmpeg concat). "seedance" runs the single-call Seedance 2 path with all
- * references attached to ONE 4-15s generation. Different image caps and
- * minimums — see `MIN_IMAGES_FOR_VIDEO` / `MAX_IMAGES_SEEDANCE`.
- */
-type VideoMode = "scenes" | "seedance";
-
 // The creation box only accepts images — both the enhance tools and the
 // scene-based video engine ingest photos only. Dropping a video here would
 // silently fail downstream, so we reject it at the boundary with a toast.
 const ACCEPTED_EXTENSIONS = /\.(jpe?g|png|webp|gif|heic)$/i;
-
-type AspectRatioOption = "16:9" | "9:16" | "1:1";
-const ASPECT_RATIOS: { id: AspectRatioOption; label: string; icon: string }[] = [
-  { id: "16:9", label: "רוחבי", icon: "▬" },
-  { id: "9:16", label: "אנכי", icon: "▮" },
-  { id: "1:1", label: "ריבוע", icon: "◼" },
-];
 
 export function CreationBar({
   projectId,
@@ -158,12 +134,12 @@ export function CreationBar({
   variant = "horizontal",
 }: CreationBarProps) {
   const isVertical = variant === "vertical";
+  const { t } = useI18n();
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [existingAssets, setExistingAssets] = useState<ExistingAsset[]>([]);
   const [prompt, setPrompt] = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
   const [mode, setMode] = useState<CreationMode>(null);
-  const [videoMode, setVideoMode] = useState<VideoMode>("scenes");
 
   const [generatingScript, setGeneratingScript] = useState(false);
 
@@ -181,19 +157,8 @@ export function CreationBar({
   const [musicPrompt, setMusicPrompt] = useState(
     "Soft ambient piano, luxury real estate"
   );
-  /**
-   * Seedance-mode music mood — picks a track from the curated R2 library
-   * (see src/lib/audio/background-music.ts). Null unless the user has
-   * picked one. Different from `musicPrompt` (scene-mode ElevenLabs prompt)
-   * because Seedance mode uses the royalty-free library instead.
-   */
-  const [musicMood, setMusicMood] = useState<
-    "upbeat" | "luxury" | "calm" | null
-  >("luxury");
   // 0..100 in UI; divided by 100 when sent server-side.
   const [musicVolume, setMusicVolume] = useState(20);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
-  const [aspectRatioOpen, setAspectRatioOpen] = useState(false);
 
   // @-mention autocomplete state. `startIndex` is the position of the '@' in `prompt`.
   const [mention, setMention] = useState<{
@@ -205,7 +170,6 @@ export function CreationBar({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const aspectRatioRef = useRef<HTMLDivElement>(null);
   const upload = useUpload(projectId);
   const process = useProcess();
   const engine = useEngineGenerate();
@@ -223,33 +187,26 @@ export function CreationBar({
   const isUploading = pendingFiles.some((f) => f.isUploading);
   const hasAssets = uploadedAssetIds.length > 0;
 
-  // Video requires ≥ MIN_IMAGES_FOR_VIDEO for the scene engine; seedance
-  // mode only needs 1 (but caps at 9, enforced at add-time). Enhance
+  // Video requires ≥ MIN_IMAGES_FOR_VIDEO for the scene engine. Enhance
   // requires ≥ 1. Show the gate inline under the thumbnail strip and
   // disable submit until it's met.
-  const videoMinImages =
-    mode === "video" && videoMode === "seedance" ? 1 : MIN_IMAGES_FOR_VIDEO;
+  const videoMinImages = MIN_IMAGES_FOR_VIDEO;
   const videoImageShortfall = Math.max(
     0,
     videoMinImages - uploadedAssetIds.length,
   );
   const videoGateMet = mode !== "video" || videoImageShortfall === 0;
-  // Seedance-mode ceiling: 9 refs. We gate at add-time below, but belt-and-
-  // braces here guards against paths (re-run preload, legacy state) that
-  // bypass `addFiles`.
-  const seedanceOver =
-    mode === "video" &&
-    videoMode === "seedance" &&
-    uploadedAssetIds.length > MAX_IMAGES_SEEDANCE;
   const canSubmit =
-    hasAssets && !isUploading && mode !== null && videoGateMet && !seedanceOver;
+    hasAssets && !isUploading && mode !== null && videoGateMet;
   const sourceStatusText = isUploading
-    ? "Uploading source photos"
+    ? t.creation.uploadingSourcePhotos
     : hasAssets
-      ? `${uploadedAssetIds.length} source ${
-          uploadedAssetIds.length === 1 ? "photo" : "photos"
-        } ready`
-      : "No source photos added";
+      ? `${uploadedAssetIds.length} ${
+          uploadedAssetIds.length === 1
+            ? t.creation.sourcePhotoReady
+            : t.creation.sourcePhotosReady
+        }`
+      : t.creation.noSourcePhotos;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -273,21 +230,6 @@ export function CreationBar({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Close aspect-ratio dropdown on outside click
-  useEffect(() => {
-    if (!aspectRatioOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (
-        aspectRatioRef.current &&
-        !aspectRatioRef.current.contains(e.target as Node)
-      ) {
-        setAspectRatioOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [aspectRatioOpen]);
 
   // Preload from a "Re-run" click on a past or in-flight generation. Keyed on
   // `nonce` so the same payload can be reapplied by bumping the nonce from
@@ -339,30 +281,16 @@ export function CreationBar({
       (a) => a.assetType !== "video",
     );
     if (onlyImages.length === 0) {
-      toast.error("לא ניתן להשתמש בסרטונים כחומר מקור.");
+      toast.error(t.creation.noVideosAsSource);
       return;
     }
     setExistingAssets((prev) => {
       const existing = new Set(prev.map((a) => a.id));
       const merged = [...prev];
-      const cap =
-        mode === "video" && videoMode === "seedance"
-          ? MAX_IMAGES_SEEDANCE
-          : Infinity;
-      let hitCap = false;
       for (const a of onlyImages) {
         if (existing.has(a.id)) continue;
-        if (merged.length + pendingFiles.length >= cap) {
-          hitCap = true;
-          break;
-        }
         existing.add(a.id);
         merged.push(a);
-      }
-      if (hitCap) {
-        toast.warning(
-          `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות — בחירות נוספות דולגו.`,
-        );
       }
       return merged;
     });
@@ -376,43 +304,15 @@ export function CreationBar({
       let accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
       if (accepted.length === 0) {
         if (all.length > 0) {
-          toast.error("ניתן להוסיף קבצי תמונה בלבד — שחרר תמונות כאן.");
+          toast.error(t.creation.imageFilesOnly);
         }
         return;
       }
       if (accepted.length < all.length) {
         const rejected = all.length - accepted.length;
         toast.warning(
-          `${rejected} ${rejected === 1 ? "קובץ דולג" : "קבצים דולגו"} — מקובלות תמונות בלבד.`,
+          `${rejected} ${rejected === 1 ? t.creation.fileSkipped : t.creation.filesSkipped}. ${t.creation.onlyImagesAccepted}`,
         );
-      }
-
-      // Seedance-mode ceiling: Seedance 2's `reference_image_urls` caps at 9
-      // (kie.ai spec). Trim at the boundary so the user sees a clear "at
-      // limit" toast instead of a server 400 later.
-      if (mode === "video" && videoMode === "seedance") {
-        const currentCount =
-          existingAssets.length +
-          pendingFiles.length;
-        const remainingSlots = Math.max(
-          0,
-          MAX_IMAGES_SEEDANCE - currentCount,
-        );
-        if (remainingSlots === 0) {
-          toast.error(
-            `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות. הסר אחת כדי להוסיף אחרת.`,
-          );
-          return;
-        }
-        if (accepted.length > remainingSlots) {
-          const trimmed = accepted.length - remainingSlots;
-          toast.warning(
-            `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות — ${trimmed} ${
-              trimmed === 1 ? "קובץ דולג" : "קבצים דולגו"
-            }.`,
-          );
-          accepted = accepted.slice(0, remainingSlots);
-        }
       }
 
       // Default to "video" mode the moment the first asset lands and no
@@ -449,7 +349,7 @@ export function CreationBar({
         );
       });
     },
-    [upload, mode, videoMode, existingAssets.length, pendingFiles.length]
+    [upload, mode, t]
   );
 
   const removeFile = useCallback((index: number) => {
@@ -473,7 +373,6 @@ export function CreationBar({
     setVoiceoverSubject("");
     setMusicEnabled(false);
     setMusicPrompt("Soft ambient piano, luxury real estate");
-    setMusicMood("luxury");
     setMusicVolume(20);
   }, []);
 
@@ -487,19 +386,7 @@ export function CreationBar({
         try {
           const asset: ExistingAsset = JSON.parse(assetData);
           if (asset.assetType === "video") {
-            toast.error("לא ניתן להשתמש בסרטונים כחומר מקור — שחרר תמונות.");
-            return;
-          }
-          // Seedance cap — mirror the addFiles guard for drag-from-library.
-          if (
-            mode === "video" &&
-            videoMode === "seedance" &&
-            existingAssets.length + pendingFiles.length >=
-              MAX_IMAGES_SEEDANCE
-          ) {
-            toast.error(
-              `מצב Seedance מוגבל ל-${MAX_IMAGES_SEEDANCE} תמונות. הסר אחת כדי להוסיף אחרת.`,
-            );
+            toast.error(t.creation.noVideosDrop);
             return;
           }
           setExistingAssets((prev) => {
@@ -514,7 +401,7 @@ export function CreationBar({
       }
       addFiles(e.dataTransfer.files);
     },
-    [addFiles, mode, videoMode, existingAssets.length, pendingFiles.length]
+    [addFiles, t]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -646,32 +533,21 @@ export function CreationBar({
         process.mutate({ assetId, projectId, tool: "enhance" });
       });
       toast.success(
-        `משדרג ${uploadedAssetIds.length} תמונ${uploadedAssetIds.length > 1 ? "ות" : "ה"}`
+        `${t.creation.enhance} ${uploadedAssetIds.length} ${t.creation.images}`
       );
     } else if (mode === "video") {
       if (uploadedAssetIds.length > 0) {
-        // Two paths:
-        //   - "scenes": the scene-based engine (planner + Kling/Seedance i2v
-        //     per scene + ffmpeg concat). Server picks the model via
-        //     ENGINE_DEFAULT_MODEL.
-        //   - "seedance": single-call Seedance 2 with all refs in one 4-15s
-        //     generation. Aspect ratio flows through; duration defaults to
-        //     15s server-side.
+        // Always uses the scene-based engine (planner + per-scene i2v +
+        // ffmpeg concat). Server picks the model via ENGINE_DEFAULT_MODEL
+        // and the provider via ENGINE_VIDEO_PROVIDER.
         engine.mutate({
           projectId,
           imageAssetIds: uploadedAssetIds,
           templateName: ENGINE_TEMPLATE,
-          mode: videoMode,
-          ...(videoMode === "seedance" ? { aspectRatio } : {}),
           voiceoverText: voiceoverEnabled
             ? voiceoverText.trim() || undefined
             : undefined,
-          // Seedance mode: pick from the R2 library by mood.
-          // Scene mode: free-text prompt routed to ElevenLabs music.
-          ...(musicEnabled && videoMode === "seedance" && musicMood
-            ? { musicMood }
-            : {}),
-          ...(musicEnabled && videoMode === "scenes"
+          ...(musicEnabled
             ? { musicPrompt: musicPrompt.trim() || undefined }
             : {}),
           musicVolume: musicEnabled ? musicVolume / 100 : undefined,
@@ -683,8 +559,6 @@ export function CreationBar({
   }, [
     canSubmit,
     mode,
-    videoMode,
-    aspectRatio,
     uploadedAssetIds,
     process,
     engine,
@@ -693,9 +567,9 @@ export function CreationBar({
     voiceoverText,
     musicEnabled,
     musicPrompt,
-    musicMood,
     musicVolume,
     clearAll,
+    t,
   ]);
 
   const toggleMode = (m: CreationMode) => {
@@ -736,42 +610,31 @@ export function CreationBar({
       )}
     >
       {isVertical && !hasAssets && (
-        <div
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          aria-label={t.creation.browseImages}
           className={cn(
-            "mb-3 rounded-lg border border-dashed px-4 py-5 text-center",
-            "transition-[background-color,border-color] duration-150",
+            "creation-empty mb-3 w-full rounded-lg border border-dashed",
+            "flex flex-col items-center justify-center gap-2 text-center",
+            "px-4 py-4 sm:py-7",
+            "cursor-pointer transition-[background-color,border-color] duration-150",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
             isDragOver
               ? "border-[var(--gold)] bg-[var(--gold-tint)]"
-              : "border-[var(--line)] bg-[var(--bg-2)]/45",
+              : "border-[var(--line)] bg-[var(--bg-2)]/45 hover:border-[var(--gold)] hover:bg-[var(--gold-tint)]/40",
           )}
-          role="status"
-          aria-live="polite"
         >
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--gold-tint)] text-[var(--gold-lo)] ring-1 ring-[var(--gold-tint-2)]">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--gold-tint)] text-[var(--gold-lo)] ring-1 ring-[var(--gold-tint-2)]">
             <ImageIcon size={18} aria-hidden="true" />
-          </div>
-          <p className="text-sm font-medium text-[var(--fg-0)]">
-            Drop Photos Here
-          </p>
-          <p className="mx-auto mt-1.5 max-w-[18rem] text-xs leading-relaxed text-[var(--fg-2)]">
-            Use Add in the Photos tab, drag ready photos here, or browse local
-            files.
-          </p>
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className={cn(
-              "mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5",
-              "border border-[var(--line)] bg-[var(--bg-1)] shadow-[0_1px_1px_rgba(60,40,10,0.04)]",
-              "text-xs font-medium text-[var(--fg-0)]",
-              "transition-[border-color,color,background-color] duration-150 hover:border-[var(--gold)] hover:text-[var(--gold-lo)]",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
-            )}
-          >
-            <Paperclip size={13} aria-hidden="true" />
-            Browse Files
-          </button>
-        </div>
+          </span>
+          <span className="text-sm font-medium text-[var(--fg-0)]">
+            {t.creation.dropPhotosHere}
+          </span>
+          <span className="hidden max-w-[18rem] text-xs leading-relaxed text-[var(--fg-2)] sm:block">
+            {t.creation.dropPhotosHint}
+          </span>
+        </button>
       )}
 
       {/* Thumbnail strip */}
@@ -816,7 +679,7 @@ export function CreationBar({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={asset.thumbnailUrl}
-                      alt={`Source photo ${imageNumber}`}
+                      alt={`${t.creation.sourcePhoto} ${imageNumber}`}
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -827,14 +690,14 @@ export function CreationBar({
                     type="button"
                     onClick={() => setExistingAssets((prev) => prev.filter((a) => a.id !== asset.id))}
                     className={cn(
-                      "absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full",
+                      "absolute -top-1.5 -end-1.5 w-5 h-5 rounded-full",
                       "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
                       "flex items-center justify-center",
                       "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
                       "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                     )}
-                    aria-label={`הסר תמונה ${imageNumber}`}
+                    aria-label={`${t.common.delete} ${t.creation.sourcePhoto} ${imageNumber}`}
                   >
                     <X size={10} />
                   </button>
@@ -862,7 +725,7 @@ export function CreationBar({
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={pf.preview}
-                      alt={`Uploading source photo ${imageNumber}`}
+                      alt={`${t.creation.uploadingSourcePhoto} ${imageNumber}`}
                       className="w-full h-full object-cover"
                     />
                     {pf.isUploading && (
@@ -878,14 +741,14 @@ export function CreationBar({
                     type="button"
                     onClick={() => removeFile(index)}
                     className={cn(
-                      "absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full",
+                      "absolute -top-1.5 -end-1.5 w-5 h-5 rounded-full",
                       "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
                       "flex items-center justify-center",
                       "text-[var(--color-muted)] hover:text-[var(--color-foreground)]",
                       "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
                       "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
                     )}
-                    aria-label={`הסר תמונה ${imageNumber}`}
+                    aria-label={`${t.common.delete} ${t.creation.sourcePhoto} ${imageNumber}`}
                   >
                     <X size={10} />
                   </button>
@@ -929,11 +792,7 @@ export function CreationBar({
                 </span>
                 <span className="text-[var(--color-muted)]">
                   {" "}
-                  {videoMode === "seedance"
-                    ? `— הוסף לפחות תמונה אחת (Seedance מקבל עד ${MAX_IMAGES_SEEDANCE}).`
-                    : `— הוסף עוד ${videoImageShortfall} ${
-                        videoImageShortfall === 1 ? "תמונה" : "תמונות"
-                      } כדי ליצור סרטון.`}
+                  {`— ${t.creation.addMoreImages} ${videoImageShortfall} ${t.creation.submitShortfallSuffix}.`}
                 </span>
               </span>
             </div>
@@ -941,12 +800,11 @@ export function CreationBar({
         )}
       </AnimatePresence>
 
-      {/* Text input — hidden in video mode. The scene-based engine derives its
-          per-scene cinematography prompts from the images + template + opener
-          bank; a user-supplied prompt was never forwarded to the engine and
-          only bred confusion. The textarea stays for enhance mode (prompts
-          still steer the image tools) and for the empty/initial state. */}
-      {mode !== "video" && (
+      {/* Text input — only shown in enhance mode where the prompt actually
+          steers the image tools. Video mode derives prompts from
+          images+template+opener-bank; null/empty mode has nothing to type yet
+          and the placeholder duplicates the drop-zone copy, so we hide it. */}
+      {mode === "enhance" && (
         <div
           className={cn(
             "relative",
@@ -964,8 +822,8 @@ export function CreationBar({
             }}
             placeholder={
               mode === "enhance"
-                ? "תאר את השדרוג (או השאר ריק לאוטומטי)…"
-                : "שחרר תמונות ובחר מה ליצור…"
+                ? t.creation.enhancePrompt
+                : t.creation.dropImages
             }
             rows={1}
             className={cn(
@@ -986,13 +844,13 @@ export function CreationBar({
                 exit={{ opacity: 0, y: 4, scale: 0.98 }}
                 transition={{ duration: 0.1, ease: "easeOut" as const }}
                 className={cn(
-                  "absolute left-0 bottom-full mb-2 z-50",
+                  "absolute start-0 bottom-full mb-2 z-50",
                   "min-w-[180px] max-h-52 overflow-y-auto rounded-xl p-1",
                   "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
                   "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
                 )}
                 role="listbox"
-                aria-label="אזכורי תמונות"
+                aria-label={t.creation.imageMentions}
               >
                 {mentionSuggestions.map((name, i) => {
                   const active = i === mention.activeIndex;
@@ -1010,7 +868,7 @@ export function CreationBar({
                         setMention((s) => ({ ...s, activeIndex: i }))
                       }
                       className={cn(
-                        "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-left",
+                        "w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-start",
                         "text-xs font-medium transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                         active
                           ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
@@ -1045,7 +903,7 @@ export function CreationBar({
                     type="text"
                     value={voiceoverSubject}
                     onChange={(e) => setVoiceoverSubject(e.target.value)}
-                    placeholder="מה לציין (אופציונלי) — למשל: 4 חדרים, נוף לים, גג"
+                    placeholder={t.creation.voiceoverSubject}
                     maxLength={240}
 	                    className={cn(
 	                      "w-full bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
@@ -1058,7 +916,7 @@ export function CreationBar({
                     <textarea
                       value={voiceoverText}
                       onChange={(e) => setVoiceoverText(e.target.value)}
-	                      placeholder="כתוב את תסריט הקריינות…"
+	                      placeholder={t.creation.voiceoverText}
                       rows={2}
                       maxLength={500}
 	                      className={cn(
@@ -1072,11 +930,11 @@ export function CreationBar({
                     type="button"
                     title={
                       voiceoverSubject.trim()
-                        ? "צור תסריט עם AI"
-                        : "הוסף נושא קצר למעלה כדי ליצור תסריט"
+                        ? t.creation.createScriptAi
+                        : t.creation.generateScriptNeedsSubject
                     }
 	                    disabled={generatingScript || !voiceoverSubject.trim()}
-	                    aria-label="צור תסריט עם AI"
+	                    aria-label={t.creation.createScriptAi}
                     onClick={async () => {
                       setGeneratingScript(true);
                       try {
@@ -1100,12 +958,10 @@ export function CreationBar({
                             res.status === 503 &&
                             body.code === "auth_fetch_failed"
                           ) {
-                            toast.error(
-                              "לא ניתן לאמת את הסשן — אנא נסה שוב.",
-                            );
+                            toast.error(t.creation.sessionAuthError);
                           } else {
                             toast.error(
-                              body.error ?? "שגיאה ביצירת התסריט",
+                              body.error ?? t.creation.scriptError,
                             );
                           }
                           return;
@@ -1115,20 +971,18 @@ export function CreationBar({
                         };
                         if (typeof script === "string" && script.trim().length > 0) {
                           setVoiceoverText(script);
-                          toast.success("התסריט נוצר");
+                          toast.success(t.creation.scriptGenerated);
                         } else {
-                          toast.error(
-                            "התסריט שהוחזר ריק — אנא נסה שוב",
-                          );
+                          toast.error(t.creation.scriptEmpty);
                         }
                       } catch {
-                        toast.error("שגיאה ביצירת התסריט");
+                        toast.error(t.creation.scriptError);
                       } finally {
                         setGeneratingScript(false);
                       }
                     }}
 	                    className={cn(
-	                      "absolute top-2 right-2 w-6 h-6 rounded-md flex items-center justify-center",
+	                      "absolute top-2 end-2 w-6 h-6 rounded-md flex items-center justify-center",
 	                      "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
                       generatingScript || !voiceoverSubject.trim()
                         ? "text-[var(--color-muted)]/40 cursor-not-allowed"
@@ -1146,42 +1000,18 @@ export function CreationBar({
               )}
               {musicEnabled && (
                 <div className="flex items-center gap-2">
-                  {videoMode === "seedance" ? (
-                    // Seedance mode: mood picker — picks from our curated
-                    // R2 library of royalty-free tracks.
-                    <div className="flex-1 flex items-center gap-1">
-                      {(["upbeat", "luxury", "calm"] as const).map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setMusicMood(m)}
-	                          className={cn(
-	                            "px-2.5 py-1 rounded-md text-[11px] font-medium capitalize",
-	                            "transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
-                            musicMood === m
-                              ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                              : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
-                          )}
-                        >
-                          {m}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    // Scene mode: still text-prompted via ElevenLabs.
-                    <input
-                      type="text"
-                      value={musicPrompt}
-                      onChange={(e) => setMusicPrompt(e.target.value)}
-	                      placeholder="סגנון מוזיקה…"
-	                      className={cn(
-	                        "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
-	                        "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
-	                        "border border-[var(--color-border)]",
-	                        "focus-visible:outline-none focus-visible:border-[var(--color-accent)]/50 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30"
-	                      )}
-                    />
-                  )}
+                  <input
+                    type="text"
+                    value={musicPrompt}
+                    onChange={(e) => setMusicPrompt(e.target.value)}
+                    placeholder={t.creation.musicPrompt}
+                    className={cn(
+                      "flex-1 bg-[var(--color-surface-raised)] rounded-lg px-3 py-1.5",
+                      "text-xs text-[var(--color-foreground)] placeholder:text-[var(--color-muted)]",
+                      "border border-[var(--color-border)]",
+                      "focus-visible:outline-none focus-visible:border-[var(--color-accent)]/50 focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]/30",
+                    )}
+                  />
                   <input
                     type="range"
                     min={0}
@@ -1189,10 +1019,10 @@ export function CreationBar({
 	                    value={musicVolume}
 	                    onChange={(e) => setMusicVolume(Number(e.target.value))}
 	                    className="w-14 accent-[var(--color-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-	                    title={`עוצמת שמע: ${musicVolume}%`}
-	                    aria-label="עוצמת מוזיקה"
+                    title={`${t.creation.musicVolume}: ${musicVolume}%`}
+	                    aria-label={t.creation.musicVolume}
 	                  />
-                  <span className="text-xs text-[var(--color-muted)] w-7 text-left tabular-nums">
+                  <span className="text-xs text-[var(--color-muted)] w-7 text-start tabular-nums">
                     {musicVolume}%
                   </span>
                 </div>
@@ -1203,16 +1033,179 @@ export function CreationBar({
       </AnimatePresence>
 
       {/* Action row. Horizontal: single line with `flex-1` spacer pushing
-          Submit to the end. Vertical (rail): stacks the mode toggles and
-          options on top, then a full-width Submit row at the bottom. */}
+          Submit to the end. Vertical (rail): stacks a 2-card mode chooser,
+          a video-extras row (only when video mode), then a full-width Submit
+          row at the bottom. */}
       <div
         className={cn(
           "mt-3",
           isVertical
-            ? "flex flex-col gap-2"
+            ? "flex flex-col gap-2.5"
             : "flex items-center gap-1 flex-wrap",
         )}
       >
+        {/* Mode chooser. Vertical: 2-card grid with bold action labels +
+            hint copy so the difference between "enhance one photo" and
+            "make a video from many photos" is immediately legible. The
+            wrapper uses `display:contents` in horizontal so the two pills
+            flow inline with the rest of the action row. */}
+        <div
+          className={cn(
+            isVertical ? "grid grid-cols-2 gap-2" : "contents",
+          )}
+          role="radiogroup"
+          aria-label={t.creation.chooseMode}
+        >
+          {/* Video toggle (left card on RTL, becomes the visual "first" choice) */}
+          <button
+            type="button"
+            onClick={() => toggleMode("video")}
+            role={isVertical ? "radio" : undefined}
+            aria-checked={isVertical ? mode === "video" : undefined}
+            title={t.creation.createVideo}
+            aria-label={t.creation.createVideo}
+            className={cn(
+              "transition-[background-color,color,border-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+              isVertical
+                ? cn(
+                    "group flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-start",
+                    mode === "video"
+                      ? "border-[var(--gold)] bg-[var(--gold-tint)] shadow-[0_0_0_1px_var(--gold-tint-2)]"
+                      : "border-[var(--line-soft)] bg-[var(--bg-1)] hover:border-[var(--gold)]/50 hover:bg-[var(--gold-tint)]/40",
+                  )
+                : cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium",
+                    mode === "video"
+                      ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
+                  ),
+            )}
+          >
+            {isVertical ? (
+              <>
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 transition-colors duration-150",
+                    mode === "video"
+                      ? "bg-[var(--gold)] text-[var(--on-gold)] ring-[var(--gold)]"
+                      : "bg-[var(--gold-tint)] text-[var(--gold-lo)] ring-[var(--gold-tint-2)] group-hover:bg-[var(--gold)]/15",
+                  )}
+                >
+                  <Video size={16} aria-hidden="true" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span
+                    className={cn(
+                      "text-[13px] font-semibold leading-tight",
+                      mode === "video" ? "text-[var(--gold-lo)]" : "text-[var(--fg-0)]",
+                    )}
+                  >
+                    {t.creation.createVideo}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[11px] leading-snug",
+                      mode === "video" ? "text-[var(--gold-lo)]/80" : "text-[var(--fg-3)]",
+                    )}
+                  >
+                    {t.creation.createVideoHint}
+                  </span>
+                </span>
+                <ChevronRight
+                  size={15}
+                  aria-hidden="true"
+                  className={cn(
+                    "shrink-0 rtl:rotate-180 transition-colors duration-150",
+                    mode === "video" ? "text-[var(--gold-lo)]" : "text-[var(--fg-3)]",
+                  )}
+                />
+              </>
+            ) : (
+              <>
+                <Video size={14} aria-hidden="true" />
+                <span>{t.creation.createVideo}</span>
+              </>
+            )}
+          </button>
+
+          {/* Photo Enhance toggle */}
+          <button
+            type="button"
+            onClick={() => toggleMode("enhance")}
+            role={isVertical ? "radio" : undefined}
+            aria-checked={isVertical ? mode === "enhance" : undefined}
+            title={t.creation.enhancePhoto}
+            aria-label={t.creation.enhancePhoto}
+            className={cn(
+              "transition-[background-color,color,border-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
+              isVertical
+                ? cn(
+                    "group flex items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-start",
+                    mode === "enhance"
+                      ? "border-[var(--gold)] bg-[var(--gold-tint)] shadow-[0_0_0_1px_var(--gold-tint-2)]"
+                      : "border-[var(--line-soft)] bg-[var(--bg-1)] hover:border-[var(--gold)]/50 hover:bg-[var(--gold-tint)]/40",
+                  )
+                : cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium",
+                    mode === "enhance"
+                      ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
+                      : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
+                  ),
+            )}
+          >
+            {isVertical ? (
+              <>
+                <span
+                  className={cn(
+                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 transition-colors duration-150",
+                    mode === "enhance"
+                      ? "bg-[var(--gold)] text-[var(--on-gold)] ring-[var(--gold)]"
+                      : "bg-[var(--gold-tint)] text-[var(--gold-lo)] ring-[var(--gold-tint-2)] group-hover:bg-[var(--gold)]/15",
+                  )}
+                >
+                  <Wand2 size={16} aria-hidden="true" />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span
+                    className={cn(
+                      "text-[13px] font-semibold leading-tight",
+                      mode === "enhance" ? "text-[var(--gold-lo)]" : "text-[var(--fg-0)]",
+                    )}
+                  >
+                    {t.creation.enhancePhoto}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[11px] leading-snug",
+                      mode === "enhance" ? "text-[var(--gold-lo)]/80" : "text-[var(--fg-3)]",
+                    )}
+                  >
+                    {t.creation.enhancePhotoHint}
+                  </span>
+                </span>
+                <ChevronRight
+                  size={15}
+                  aria-hidden="true"
+                  className={cn(
+                    "shrink-0 rtl:rotate-180 transition-colors duration-150",
+                    mode === "enhance" ? "text-[var(--gold-lo)]" : "text-[var(--fg-3)]",
+                  )}
+                />
+              </>
+            ) : (
+              <>
+                <Wand2 size={14} aria-hidden="true" />
+                <span>{t.creation.enhancePhoto}</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Video extras (voiceover / music). Vertical wraps them in their
+            own flex row below the mode chooser; horizontal flows inline via
+            the existing `display:contents` from the parent. Aspect ratio
+            and Seedance toggles were removed — the server picks the model
+            via ENGINE_DEFAULT_MODEL. */}
         <div
           className={cn(
             isVertical
@@ -1220,42 +1213,6 @@ export function CreationBar({
               : "contents",
           )}
         >
-        {/* Photo Enhance toggle */}
-        <button
-          type="button"
-          onClick={() => toggleMode("enhance")}
-          title="שדרג תמונות"
-          aria-label="שדרג תמונות"
-          className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-            "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
-            mode === "enhance"
-              ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
-              : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-          )}
-        >
-          <ImageIcon size={14} />
-          <span className="hidden sm:inline">תמונה</span>
-        </button>
-
-        {/* Video toggle */}
-        <button
-          type="button"
-          onClick={() => toggleMode("video")}
-          title="צור סרטון"
-          aria-label="צור סרטון"
-          className={cn(
-            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg",
-            "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
-            mode === "video"
-              ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)] border border-[var(--color-accent)]/30"
-              : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-          )}
-        >
-          <Video size={14} />
-          <span className="hidden sm:inline">סרטון</span>
-        </button>
-
         {/* Video options — voiceover + music only now. Model / duration /
             template pickers are gone; server picks defaults. */}
         <AnimatePresence>
@@ -1269,39 +1226,11 @@ export function CreationBar({
             >
               <div className="w-px h-5 bg-[var(--color-border)] mx-1.5" />
 
-              {/* Seedance-mode toggle. When ON, we ship all reference
-                  images to Seedance 2 in a single 15s generation (<=9
-                  refs) instead of running the scene-based engine. */}
-              <button
-                type="button"
-                onClick={() =>
-                  setVideoMode((prev) =>
-                    prev === "seedance" ? "scenes" : "seedance",
-                  )
-                }
-                title={
-                  videoMode === "seedance"
-                    ? `מצב Seedance (סרטון 15 שנ' בודד, עד ${MAX_IMAGES_SEEDANCE} תמונות)`
-                    : "עבור למצב Seedance"
-                }
-                aria-label="החלף מצב Seedance"
-                className={cn(
-                  "inline-flex items-center gap-1 px-2 h-7 rounded-md transition-colors duration-150",
-                  "text-[11px] font-medium",
-                  videoMode === "seedance"
-                    ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                    : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]",
-                )}
-              >
-                <Sparkles size={12} />
-                <span>Seedance</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
-                title={voiceoverEnabled ? "קריינות מופעלת" : "הוסף קריינות"}
-                aria-label={voiceoverEnabled ? "כבה קריינות" : "הוסף קריינות"}
+                title={voiceoverEnabled ? t.creation.voiceoverOn : t.creation.voiceoverOff}
+                aria-label={voiceoverEnabled ? t.creation.voiceoverOn : t.creation.voiceoverOff}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   voiceoverEnabled
@@ -1315,8 +1244,8 @@ export function CreationBar({
               <button
                 type="button"
                 onClick={() => setMusicEnabled(!musicEnabled)}
-                title={musicEnabled ? "מוזיקה מופעלת" : "הוסף מוזיקת רקע"}
-                aria-label={musicEnabled ? "כבה מוזיקת רקע" : "הוסף מוזיקת רקע"}
+                title={musicEnabled ? t.creation.musicOn : t.creation.musicOff}
+                aria-label={musicEnabled ? t.creation.musicOn : t.creation.musicOff}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150",
                   musicEnabled
@@ -1329,99 +1258,6 @@ export function CreationBar({
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Aspect ratio picker */}
-        {mode === "video" && (
-          <div ref={aspectRatioRef} className="relative flex items-center">
-            <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
-            <button
-              type="button"
-              onClick={() => setAspectRatioOpen((prev) => !prev)}
-              title="יחס תמונה"
-              aria-label="בחר יחס תמונה"
-              className={cn(
-                "inline-flex items-center gap-1 px-2 py-1 rounded-md",
-                "text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
-                aspectRatioOpen
-                  ? "bg-[var(--color-surface-raised)] text-[var(--color-foreground)]"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)]"
-              )}
-            >
-              <span className="truncate">{aspectRatio}</span>
-              <ChevronDown
-                size={11}
-                className={cn(
-                  "transition-transform duration-150",
-                  aspectRatioOpen && "rotate-180"
-                )}
-              />
-            </button>
-
-            <AnimatePresence>
-              {aspectRatioOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12, ease: "easeOut" as const }}
-                  className={cn(
-                    "absolute bottom-full left-0 mb-2 z-50",
-                    "w-40 rounded-xl overflow-hidden",
-                    "bg-[var(--color-surface-raised)] border border-[var(--color-border)]",
-                    "shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-                  )}
-                >
-                  <div className="p-1.5">
-                    {ASPECT_RATIOS.map((ar) => {
-                      const isSelected = aspectRatio === ar.id;
-                      return (
-                        <button
-                          key={ar.id}
-                          type="button"
-                          onClick={() => {
-                            setAspectRatio(ar.id);
-                            setAspectRatioOpen(false);
-                          }}
-                          className={cn(
-                            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left",
-                            "transition-colors duration-150",
-                            isSelected
-                              ? "bg-[var(--color-accent)]/12"
-                              : "hover:bg-[var(--color-accent)]/8"
-                          )}
-                        >
-                          <div className="w-4 h-4 shrink-0 flex items-center justify-center">
-                            {isSelected ? (
-                              <Check
-                                size={13}
-                                className="text-[var(--color-accent)]"
-                              />
-                            ) : (
-                              <span className="text-xs text-[var(--color-muted)]">{ar.icon}</span>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium truncate",
-                                isSelected
-                                  ? "text-[var(--color-accent)]"
-                                  : "text-[var(--color-foreground)]"
-                              )}
-                            >
-                              {ar.label}
-                            </p>
-                            <p className="text-[11px] text-[var(--color-muted)]">{ar.id}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
 
         {!isVertical && <div className="flex-1" />}
         </div>
@@ -1438,8 +1274,8 @@ export function CreationBar({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          title="עיין בקבצים"
-          aria-label="עיין בקבצי תמונה"
+          title={t.creation.browse}
+          aria-label={t.creation.browseImages}
           className={cn(
             "rounded-lg flex items-center justify-center shrink-0",
             "text-[var(--color-muted)] transition-[background-color,color,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]",
@@ -1458,23 +1294,21 @@ export function CreationBar({
           disabled={!canSubmit}
           aria-label={
             mode === "enhance"
-              ? "שדרג תמונות"
+              ? t.creation.enhancePhoto
               : mode === "video"
-                ? "צור סרטון"
-                : "צור"
+                ? t.creation.createVideo
+                : t.creation.create
           }
           title={
             !hasAssets
-              ? "הוסף תמונות תחילה"
+              ? t.creation.addImagesFirst
               : !mode
-                ? "בחר מצב"
+                ? t.creation.chooseMode
                 : mode === "video" && videoImageShortfall > 0
-                  ? `הוסף עוד ${videoImageShortfall} ${
-                      videoImageShortfall === 1 ? "תמונה" : "תמונות"
-                    } כדי ליצור`
+                  ? `${t.creation.addMoreImages} ${videoImageShortfall} ${t.creation.submitShortfallSuffix}`
                   : mode === "enhance"
-                    ? "שדרג תמונות"
-                    : "צור סרטון"
+                    ? t.creation.enhancePhoto
+                    : t.creation.createVideo
           }
           className={cn(
             "inline-flex items-center justify-center gap-1.5 rounded-lg",
@@ -1490,10 +1324,10 @@ export function CreationBar({
           <Send size={isVertical ? 14 : 13} />
           <span className={isVertical ? "" : "hidden sm:inline"}>
             {mode === "enhance"
-              ? "שדרג"
+              ? t.creation.enhance
               : mode === "video"
-                ? "צור"
-                : "צור"}
+                ? t.creation.create
+                : t.creation.create}
           </span>
         </button>
         </div>

@@ -1,6 +1,6 @@
 export default function PropertiesLoading() {
   return (
-    <div dir="rtl" className="min-h-screen bg-gradient-to-br from-slate-50 to-stone-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-stone-100">
       {/* Header placeholder */}
       <div className="bg-gradient-to-r from-slate-800 to-stone-800 border-b border-amber-200/20 px-8 py-6 shadow-lg">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

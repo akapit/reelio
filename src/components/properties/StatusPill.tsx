@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
+
 export type Status = "published" | "rendering" | "draft";
 
 interface StatusPillProps {
@@ -8,27 +10,25 @@ interface StatusPillProps {
 
 const MAP: Record<
   Status,
-  { label: string; color: string; dot: boolean; pulse?: boolean }
+  { color: string; dot: boolean; pulse?: boolean }
 > = {
   published: {
-    label: "Live",
     color: "var(--positive)",
     dot: true,
   },
   rendering: {
-    label: "Rendering",
     color: "var(--gold-hi)",
     dot: true,
     pulse: true,
   },
   draft: {
-    label: "Draft",
     color: "var(--fg-2)",
     dot: false,
   },
 };
 
 export function StatusPill({ status }: StatusPillProps) {
+  const { t } = useI18n();
   const m = MAP[status];
   return (
     <span
@@ -58,7 +58,7 @@ export function StatusPill({ status }: StatusPillProps) {
           }}
         />
       )}
-      {m.label}
+      {t.status[status]}
     </span>
   );
 }

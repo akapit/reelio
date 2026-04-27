@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import { BeforeAfterSlider } from "@/components/media/BeforeAfterSlider";
+import { useI18n } from "@/lib/i18n/client";
 
 interface CompareModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export function CompareModal({
   originalUrl,
   processedUrl,
 }: CompareModalProps) {
+  const { t } = useI18n();
   // Close on Escape
   useEffect(() => {
     if (!isOpen) return;
@@ -62,13 +64,13 @@ export function CompareModal({
                   className="text-2xl font-semibold text-[var(--color-foreground)]"
                   style={{ fontFamily: "var(--font-display)" }}
                 >
-                  לפני ואחרי
+                  {t.media.beforeAfter}
                 </h2>
 
                 <button
                   onClick={onClose}
                   className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                  aria-label="סגור חלון"
+                  aria-label={t.common.close}
                 >
                   <X size={16} />
                 </button>

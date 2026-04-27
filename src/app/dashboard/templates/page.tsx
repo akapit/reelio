@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTemplates } from "@/hooks/use-templates";
 import { TemplateCard } from "@/components/templates/TemplateCard";
 import { TEMPLATE_META, FALLBACK_META } from "@/components/templates/template-meta";
+import { useI18n } from "@/lib/i18n/client";
 
 export default function TemplatesPage() {
   const { data: templates, isLoading, isError } = useTemplates();
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -15,21 +17,15 @@ export default function TemplatesPage() {
     searchParams.get("selected"),
   );
 
-  // Once templates load, default to the first one if no selection yet
-  useEffect(() => {
-    if (!isLoading && templates && templates.length > 0 && activeId === null) {
-      setActiveId(templates[0].id);
-    }
-  }, [isLoading, templates, activeId]);
-
   function handleSelect(id: string) {
     setActiveId(id);
     router.replace(`?selected=${id}`, { scroll: false });
   }
 
-  const activeTemplate = templates?.find((t) => t.id === activeId);
-  const activeMeta = activeId
-    ? (TEMPLATE_META[activeId] ?? FALLBACK_META)
+  const effectiveActiveId = activeId ?? templates?.[0]?.id ?? null;
+  const activeTemplate = templates?.find((t) => t.id === effectiveActiveId);
+  const activeMeta = effectiveActiveId
+    ? (TEMPLATE_META[effectiveActiveId] ?? FALLBACK_META)
     : null;
   const activeName = activeTemplate?.name ?? activeMeta?.style ?? "—";
 
@@ -47,7 +43,7 @@ export default function TemplatesPage() {
       {/* Header */}
       <div>
         <div className="kicker" style={{ marginBottom: 8 }}>
-          Atelier · {isLoading ? "…" : (templates?.length ?? 0)} templates
+          Atelier · {isLoading ? "…" : (templates?.length ?? 0)} {t.templates.countLabel}
         </div>
         <h1
           className="serif"
@@ -59,9 +55,9 @@ export default function TemplatesPage() {
             fontWeight: 400,
           }}
         >
-          A house style for{" "}
+          {t.templates.headingPrefix}{" "}
           <span style={{ fontStyle: "italic" }} className="gold-text">
-            every listing
+            {t.templates.headingAccent}
           </span>
         </h1>
       </div>
@@ -76,7 +72,7 @@ export default function TemplatesPage() {
           }}
         >
           <p className="text-sm" style={{ color: "oklch(0.55 0.18 25)" }}>
-            Failed to load templates. Refresh to try again.
+            {t.templates.error}
           </p>
         </div>
       )}
@@ -112,7 +108,7 @@ export default function TemplatesPage() {
             <TemplateCard
               key={template.id}
               template={template}
-              selected={template.id === activeId}
+              selected={template.id === effectiveActiveId}
               onSelect={handleSelect}
             />
           ))}
@@ -128,8 +124,8 @@ export default function TemplatesPage() {
           <button
             type="button"
             onClick={() => {
-              if (activeId) {
-                router.push(`/dashboard/upload?template=${activeId}`);
+              if (effectiveActiveId) {
+                router.push(`/dashboard/upload?template=${effectiveActiveId}`);
               }
             }}
             style={{
@@ -152,14 +148,14 @@ export default function TemplatesPage() {
                 "transparent";
             }}
           >
-            Use this template
+            {t.templates.useTemplate}
           </button>
 
           <span
             className="mono gold-text"
             style={{ fontSize: 12, letterSpacing: "0.08em" }}
           >
-            Selected: {activeName}
+            {t.templates.selected}: {activeName}
           </span>
         </div>
       )}

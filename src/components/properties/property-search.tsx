@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
 
 interface PropertySearchProps {
   value: string;
@@ -8,6 +9,7 @@ interface PropertySearchProps {
 }
 
 export function PropertySearch({ value, onChange }: PropertySearchProps) {
+  const { t } = useI18n();
   return (
     <div
       className="flex items-center gap-2"
@@ -32,7 +34,7 @@ export function PropertySearch({ value, onChange }: PropertySearchProps) {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search reels, addresses…"
+        placeholder={t.properties.searchPlaceholder}
         className="w-full bg-transparent outline-none border-0"
         style={{ fontSize: 13, color: "var(--fg-1)" }}
       />

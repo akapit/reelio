@@ -5,6 +5,7 @@
 import { MapPin } from "lucide-react";
 import type { PropertyData } from "../property-detail";
 import { Field } from "@/components/upload/Field";
+import { useI18n } from "@/lib/i18n/client";
 
 const propertyTypes = [
   "Apartment",
@@ -54,12 +55,19 @@ const propertyFeaturesGroups: Record<string, string[]> = {
   ],
 };
 
+const groupLabelKeys = {
+  "Property features": "propertyFeatures",
+  "Accessibility & surroundings": "surroundings",
+  Condition: "condition",
+} as const;
+
 interface InfoTabProps {
   data: PropertyData;
   onChange: (patch: Partial<PropertyData>) => void;
 }
 
 export function InfoTab({ data, onChange }: InfoTabProps) {
+  const { t } = useI18n();
   const toggleFeature = (feature: string) => {
     const features = data.features.includes(feature)
       ? data.features.filter((f) => f !== feature)
@@ -80,7 +88,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             marginBottom: 14,
           }}
         >
-          Address
+          {t.infoTab.address}
         </div>
         <div
           style={{
@@ -90,37 +98,37 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
           }}
           className="info-tab-grid-3"
         >
-          <Field label="Street">
+          <Field label={t.infoTab.street}>
             <input
               type="text"
               value={data.street}
               onChange={(e) => onChange({ street: e.target.value })}
-              placeholder="Street name"
+              placeholder={t.infoTab.streetPlaceholder}
             />
           </Field>
-          <Field label="Number">
+          <Field label={t.infoTab.houseNumber}>
             <input
               type="text"
               value={data.streetNumber}
               onChange={(e) => onChange({ streetNumber: e.target.value })}
-              placeholder="House number"
+              placeholder={t.infoTab.houseNumber}
             />
           </Field>
-          <Field label="Neighborhood">
+          <Field label={t.infoTab.neighborhood}>
             <input
               type="text"
               value={data.neighborhood}
               onChange={(e) => onChange({ neighborhood: e.target.value })}
-              placeholder="Neighborhood"
+              placeholder={t.infoTab.neighborhood}
             />
           </Field>
           <div style={{ gridColumn: "1 / -1" }}>
-            <Field label="City">
+            <Field label={t.infoTab.city}>
               <input
                 type="text"
                 value={data.city}
                 onChange={(e) => onChange({ city: e.target.value })}
-                placeholder="City name"
+                placeholder={t.infoTab.cityPlaceholder}
               />
             </Field>
           </div>
@@ -138,7 +146,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             marginBottom: 14,
           }}
         >
-          General details
+          {t.infoTab.generalDetails}
         </div>
         <div
           style={{
@@ -148,43 +156,43 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
           }}
           className="info-tab-grid-3"
         >
-          <Field label="Property type">
+          <Field label={t.infoTab.propertyType}>
             <select
               value={data.propertyType}
               onChange={(e) => onChange({ propertyType: e.target.value })}
             >
               {propertyTypes.map((type) => (
                 <option key={type} value={type}>
-                  {type}
+                  {t.infoTab.propertyTypes[type as keyof typeof t.infoTab.propertyTypes]}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Rooms">
+          <Field label={t.infoTab.rooms}>
             <input
               type="text"
               value={data.rooms}
               onChange={(e) => onChange({ rooms: e.target.value })}
-              placeholder="# of rooms"
+              placeholder={t.infoTab.roomsPlaceholder}
             />
           </Field>
-          <Field label="Floor">
+          <Field label={t.infoTab.floor}>
             <input
               type="text"
               value={data.floor}
               onChange={(e) => onChange({ floor: e.target.value })}
-              placeholder="Floor"
+              placeholder={t.infoTab.floor}
             />
           </Field>
-          <Field label="Total floors">
+          <Field label={t.infoTab.totalFloors}>
             <input
               type="text"
               value={data.totalFloors}
               onChange={(e) => onChange({ totalFloors: e.target.value })}
-              placeholder="Total floors"
+              placeholder={t.infoTab.totalFloors}
             />
           </Field>
-          <Field label="Asking price">
+          <Field label={t.infoTab.askingPrice}>
             <input
               type="text"
               value={data.price}
@@ -192,7 +200,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
               placeholder="$"
             />
           </Field>
-          <Field label="Size (m²)">
+          <Field label={t.infoTab.size}>
             <input
               type="text"
               value={data.size}
@@ -201,11 +209,11 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             />
           </Field>
           <div style={{ gridColumn: "1 / -1" }}>
-            <Field label="Description">
+            <Field label={t.infoTab.description}>
               <textarea
                 value={data.description}
                 onChange={(e) => onChange({ description: e.target.value })}
-                placeholder="Describe the property…"
+                placeholder={t.infoTab.descriptionPlaceholder}
                 rows={4}
                 style={{
                   width: "100%",
@@ -236,7 +244,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             marginBottom: 14,
           }}
         >
-          Owner details
+          {t.infoTab.ownerDetails}
         </div>
         <div
           style={{
@@ -246,23 +254,23 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
           }}
           className="info-tab-grid-2"
         >
-          <Field label="First name">
+          <Field label={t.infoTab.firstName}>
             <input
               type="text"
               value={data.ownerFirstName}
               onChange={(e) => onChange({ ownerFirstName: e.target.value })}
-              placeholder="First name"
+              placeholder={t.infoTab.firstName}
             />
           </Field>
-          <Field label="Last name">
+          <Field label={t.infoTab.lastName}>
             <input
               type="text"
               value={data.ownerLastName}
               onChange={(e) => onChange({ ownerLastName: e.target.value })}
-              placeholder="Last name"
+              placeholder={t.infoTab.lastName}
             />
           </Field>
-          <Field label="Phone">
+          <Field label={t.infoTab.phone}>
             <input
               type="tel"
               value={data.ownerPhone}
@@ -270,7 +278,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
               placeholder="555-000-0000"
             />
           </Field>
-          <Field label="Email">
+          <Field label={t.infoTab.email}>
             <input
               type="email"
               value={data.ownerEmail}
@@ -292,13 +300,13 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             marginBottom: 14,
           }}
         >
-          Features
+          {t.infoTab.features}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {Object.entries(propertyFeaturesGroups).map(([groupName, features]) => (
             <div key={groupName}>
               <div className="kicker" style={{ marginBottom: 10 }}>
-                {groupName}
+                {t.infoTab[groupLabelKeys[groupName as keyof typeof groupLabelKeys]]}
               </div>
               <div
                 style={{
@@ -332,7 +340,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
                         transition: "all .15s var(--ease)",
                       }}
                     >
-                      {feature}
+                      {t.infoTab.featureNames[feature as keyof typeof t.infoTab.featureNames]}
                     </button>
                   );
                 })}
@@ -353,7 +361,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
             marginBottom: 14,
           }}
         >
-          Map
+          {t.infoTab.map}
         </div>
         <div
           className="prop-img"
@@ -386,7 +394,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
                 textTransform: "uppercase",
               }}
             >
-              Map preview
+              {t.infoTab.mapPreview}
             </div>
           </div>
         </div>

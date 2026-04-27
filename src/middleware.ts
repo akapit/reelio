@@ -1,5 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  LOCALE_COOKIE_NAME,
+  isLocale,
+  localeCookieOptions,
+  type Locale,
+} from "@/lib/i18n/config";
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -75,6 +81,35 @@ export async function middleware(request: NextRequest) {
   }
   if (user && (pathname === "/login" || pathname === "/signup")) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+  if (user && pathname.startsWith("/dashboard")) {
+    const cookieLocale = request.cookies.get(LOCALE_COOKIE_NAME)?.value;
+    if (!isLocale(cookieLocale)) {
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("language")
+          .eq("id", user.id)
+          .maybeSingle();
+        const profileLocale = data?.language;
+        if (isLocale(profileLocale)) {
+          supabaseResponse.cookies.set(
+            LOCALE_COOKIE_NAME,
+            profileLocale satisfies Locale,
+            localeCookieOptions,
+          );
+        }
+      } catch (err) {
+        console.warn(
+          JSON.stringify({
+            source: "middleware",
+            event: "locale.profileReadFailed",
+            path: pathname,
+            error: String(err),
+          }),
+        );
+      }
+    }
   }
   return supabaseResponse;
 }

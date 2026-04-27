@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useCreateProperty } from "@/hooks/use-properties";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/lib/i18n/client";
 
 interface CreatePropertyModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ interface CreatePropertyModalProps {
 export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProps) {
   const router = useRouter();
   const mutation = useCreateProperty();
+  const { t } = useI18n();
   const nameRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLInputElement>(null);
 
@@ -51,11 +53,11 @@ export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProp
 
     try {
       const property = await mutation.mutateAsync({ name, property_address });
-      toast.success(`"${property.name}" נוצר`);
+      toast.success(`"${property.name}" ${t.properties.toasts.created}`);
       onClose();
       router.push(`/dashboard/properties/${property.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "שגיאה ביצירת הנכס");
+      toast.error(err instanceof Error ? err.message : t.properties.toasts.createFailed);
     }
   }
 
@@ -85,14 +87,13 @@ export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProp
           >
             <div
               className="relative w-[calc(100%-2rem)] sm:w-full max-w-md mx-auto pointer-events-auto rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-6 sm:p-8"
-              dir="rtl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                aria-label="סגור"
+                className="absolute top-4 start-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
+                aria-label={t.common.close}
               >
                 <X size={16} />
               </button>
@@ -102,25 +103,25 @@ export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProp
                 className="text-2xl font-semibold text-[var(--color-foreground)] mb-1"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                נכס חדש
+                {t.properties.newProperty}
               </h2>
               <p className="text-sm text-[var(--color-muted)] mb-6">
-                צור סביבת עבודה עבור נכס חדש.
+                {t.properties.newPropertyDescription}
               </p>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
                 <Input
                   ref={nameRef}
-                  label="שם הנכס"
-                  placeholder="לדוגמה: רחוב הדקל 12"
+                  label={t.properties.propertyName}
+                  placeholder={t.properties.propertyNamePlaceholder}
                   required
                   autoComplete="off"
                 />
 
                 <Input
                   ref={addressRef}
-                  label="כתובת"
-                  placeholder="כתובת מלאה (אופציונלי)"
+                  label={t.properties.propertyAddress}
+                  placeholder={t.properties.propertyAddressPlaceholder}
                   autoComplete="street-address"
                 />
 
@@ -133,7 +134,7 @@ export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProp
                     onClick={onClose}
                     disabled={mutation.isPending}
                   >
-                    ביטול
+                    {t.common.cancel}
                   </Button>
                   <Button
                     type="submit"
@@ -142,7 +143,7 @@ export function CreatePropertyModal({ isOpen, onClose }: CreatePropertyModalProp
                     className="flex-1"
                     disabled={mutation.isPending}
                   >
-                    {mutation.isPending ? "יוצר..." : "צור נכס"}
+                    {mutation.isPending ? t.common.loading : t.common.create}
                   </Button>
                 </div>
               </form>

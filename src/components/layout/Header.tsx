@@ -2,33 +2,41 @@
 
 import { Menu, Search, Bell } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/client";
 
 interface HeaderProps {
   onNewProject: () => void;
   onMenuToggle?: () => void;
 }
 
-const ROUTE_LABELS: Record<string, string> = {
-  "/dashboard": "Home",
-  "/dashboard/properties": "Properties",
-  "/dashboard/templates": "Templates",
-  "/dashboard/profile": "Profile",
-  "/dashboard/upload": "Create",
-  "/dashboard/generate": "Generate",
-};
+const ROUTE_KEYS = {
+  "/dashboard": "home",
+  "/dashboard/properties": "properties",
+  "/dashboard/templates": "templates",
+  "/dashboard/profile": "profile",
+  "/dashboard/upload": "create",
+  "/dashboard/generate": "generate",
+} as const;
 
-function routeLabel(pathname: string): string {
-  if (ROUTE_LABELS[pathname]) return ROUTE_LABELS[pathname];
-  const prefixes = Object.keys(ROUTE_LABELS).sort(
+function routeLabel(
+  pathname: string,
+  labels: Record<(typeof ROUTE_KEYS)[keyof typeof ROUTE_KEYS], string>,
+): string {
+  if (pathname in ROUTE_KEYS) return labels[ROUTE_KEYS[pathname as keyof typeof ROUTE_KEYS]];
+  const prefixes = Object.keys(ROUTE_KEYS).sort(
     (a, b) => b.length - a.length,
   );
-  for (const p of prefixes) if (pathname.startsWith(p)) return ROUTE_LABELS[p];
+  for (const p of prefixes) {
+    if (pathname.startsWith(p)) return labels[ROUTE_KEYS[p as keyof typeof ROUTE_KEYS]];
+  }
   return "reelio";
 }
 
 export function Header({ onMenuToggle }: HeaderProps) {
   const pathname = usePathname() || "/dashboard";
-  const label = routeLabel(pathname);
+  const { t } = useI18n();
+  const label = routeLabel(pathname, t.shell.routes);
 
   return (
     <header
@@ -47,7 +55,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             onClick={onMenuToggle}
             className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md transition-colors duration-150"
             style={{ color: "var(--fg-1)" }}
-            aria-label="Toggle navigation"
+            aria-label={t.shell.toggleNavigation}
           >
             <Menu size={18} />
           </button>
@@ -61,7 +69,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
               textTransform: "uppercase",
             }}
           >
-            <span style={{ color: "var(--fg-2)" }}>reelio</span>
+            <span style={{ color: "var(--fg-2)" }}>{t.common.appName}</span>
             <span style={{ margin: "0 10px", color: "var(--fg-4)" }}>/</span>
             <span style={{ color: "var(--fg-1)" }}>{label}</span>
           </div>
@@ -80,9 +88,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
               minWidth: 200,
             }}
           >
-            <Search size={12} style={{ color: "var(--fg-2)" }} />
+              <Search size={12} style={{ color: "var(--fg-2)" }} />
             <span style={{ fontSize: 12, color: "var(--fg-3)", flex: 1 }}>
-              Search
+              {t.common.search}
             </span>
             <span
               className="mono"
@@ -115,10 +123,11 @@ export function Header({ onMenuToggle }: HeaderProps) {
             onMouseLeave={(e) =>
               (e.currentTarget.style.background = "transparent")
             }
-            aria-label="Notifications"
+            aria-label={t.shell.notifications}
           >
             <Bell size={14} />
           </button>
+          <LanguageSwitcher compact />
         </div>
       </div>
     </header>

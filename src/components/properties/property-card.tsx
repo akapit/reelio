@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { StatusPill, type Status } from "./StatusPill";
+import { useI18n } from "@/lib/i18n/client";
 
 interface PropertyCardProps {
   id: string;
@@ -33,6 +34,7 @@ export function PropertyCard({
   views,
   thumbnailUrl,
 }: PropertyCardProps) {
+  const { t } = useI18n();
   const tone = pickTone(id || address);
 
   return (
@@ -71,19 +73,19 @@ export function PropertyCard({
           />
         )}
 
-        {/* Status pill — top-left */}
-        <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1 }}>
+        {/* Status pill — top-start */}
+        <div style={{ position: "absolute", top: 10, insetInlineStart: 10, zIndex: 1 }}>
           <StatusPill status={status} />
         </div>
 
-        {/* Duration badge — bottom-right */}
+        {/* Duration badge — bottom-end */}
         {duration && (
           <div
             className="mono"
             style={{
               position: "absolute",
               bottom: 10,
-              right: 10,
+              insetInlineEnd: 10,
               fontSize: 11.5,
               letterSpacing: "0.14em",
               color: "oklch(0.95 0.02 80 / 0.85)",
@@ -142,7 +144,7 @@ export function PropertyCard({
           }}
         >
           <span>{updated ?? "—"}</span>
-          <span>{views && views !== "—" ? `${views} views` : "—"}</span>
+          <span>{views && views !== "—" ? `${views} ${t.properties.views}` : "—"}</span>
         </div>
       </div>
     </Link>

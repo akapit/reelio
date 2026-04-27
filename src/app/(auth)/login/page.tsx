@@ -9,22 +9,25 @@ import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/client";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const { t } = useI18n();
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {}
   );
 
   function validate() {
     const next: typeof errors = {};
-    if (!email.trim()) next.email = "שדה חובה";
+    if (!email.trim()) next.email = t.auth.required;
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = "אימייל לא תקין";
-    if (!password) next.password = "שדה חובה";
+      next.email = t.auth.invalidEmail;
+    if (!password) next.password = t.auth.required;
     return next;
   }
 
@@ -53,17 +56,14 @@ export default function LoginPage() {
       router.push("/dashboard/properties");
       router.refresh();
     } catch {
-      toast.error("משהו השתבש. נסה שוב.");
+      toast.error(t.auth.tryAgain);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]"
-      dir="rtl"
-    >
+    <div className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]">
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
@@ -72,6 +72,9 @@ export default function LoginPage() {
       >
         {/* Wordmark */}
         <div className="text-center mb-8">
+          <div className="mb-5 flex justify-center">
+            <LanguageSwitcher />
+          </div>
           <span
             className="text-4xl font-medium tracking-[0.06em] text-[var(--color-accent)]"
             style={{ fontFamily: "var(--font-display)" }}
@@ -79,7 +82,7 @@ export default function LoginPage() {
             reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            ברוך שובך
+            {t.auth.loginPrompt}
           </p>
         </div>
 
@@ -87,7 +90,7 @@ export default function LoginPage() {
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
-              label="אימייל"
+              label={t.auth.email}
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
@@ -98,7 +101,7 @@ export default function LoginPage() {
             />
 
             <Input
-              label="סיסמה"
+              label={t.auth.password}
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
@@ -118,10 +121,10 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 size={15} className="animate-spin" />
-                  טוען...
+                  {t.common.loading}
                 </>
               ) : (
-                "התחבר"
+                t.auth.loginCta
               )}
             </Button>
           </form>
@@ -129,12 +132,12 @@ export default function LoginPage() {
 
         {/* Footer link */}
         <p className="text-center text-sm text-[var(--color-muted)] mt-6">
-          אין לך חשבון?{" "}
+          {t.auth.loginFooter}{" "}
           <Link
             href="/signup"
             className="text-[var(--color-foreground)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
           >
-            צור חשבון
+            {t.auth.signupCta}
           </Link>
         </p>
       </motion.div>

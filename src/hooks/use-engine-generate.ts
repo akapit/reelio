@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TemplateName } from "@/lib/engine/models";
+import { useI18n } from "@/lib/i18n/client";
 
 export interface EngineGenerateOptions {
   projectId: string;
@@ -53,6 +54,7 @@ export interface EngineGenerateOptions {
  */
 export function useEngineGenerate() {
   const qc = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async (options: EngineGenerateOptions) => {
@@ -63,16 +65,16 @@ export function useEngineGenerate() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Engine dispatch failed");
+        throw new Error(data.error ?? t.hooks.engineDispatchFailed);
       }
       return res.json() as Promise<{ success: true; resultAssetId: string }>;
     },
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["assets", variables.projectId] });
-      toast.success("Video generation started");
+      toast.success(t.hooks.videoGenerationStarted);
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Engine dispatch failed");
+      toast.error(err instanceof Error ? err.message : t.hooks.engineDispatchFailed);
     },
   });
 }

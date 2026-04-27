@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   LayoutTemplate,
   CircleUser,
-  Sparkles,
   X,
   User,
   ChevronLeft,
@@ -18,30 +17,34 @@ import {
 import { cn } from "@/lib/utils";
 import { ReelioWordmark } from "@/components/brand/ReelioMark";
 import { useProperties } from "@/hooks/use-properties";
+import { useI18n } from "@/lib/i18n/client";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 const navItems = [
-  { label: "Home", href: "/dashboard", icon: HomeIcon, exact: true },
+  { labelKey: "home", href: "/dashboard", icon: HomeIcon, exact: true, disabled: false },
   {
-    label: "Properties",
+    labelKey: "properties",
     href: "/dashboard/properties",
     icon: LayoutGrid,
     exact: false,
+    disabled: false,
   },
   {
-    label: "Templates",
+    labelKey: "templates",
     href: "/dashboard/templates",
     icon: LayoutTemplate,
     exact: false,
+    disabled: true,
   },
   {
-    label: "Profile",
+    labelKey: "profile",
     href: "/dashboard/profile",
     icon: CircleUser,
     exact: false,
+    disabled: false,
   },
-];
+] as const;
 
 const TONES = ["warm", "cool", "amber", "sunset", "mono"] as const;
 function pickTone(seed: string) {
@@ -67,6 +70,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { data: rows } = useProperties();
+  const { t } = useI18n();
   const recent = (rows ?? []).slice(0, 3) as Array<{
     id: string;
     name: string;
@@ -150,7 +154,7 @@ export function Sidebar({
           type="button"
           onClick={onClose}
           className="lg:hidden flex items-center justify-center w-8 h-8 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-150"
-          aria-label="Close menu"
+          aria-label={t.common.close}
         >
           <X size={16} />
         </button>
@@ -160,8 +164,8 @@ export function Sidebar({
             type="button"
             onClick={onToggleCollapse}
             className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-colors duration-150"
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+            title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
           >
             {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
           </button>
@@ -175,27 +179,18 @@ export function Sidebar({
           onClick={onNewProject}
           className={cn(
             "btn-generate w-full",
-            collapsed ? "justify-center" : "justify-between",
+            "justify-center",
           )}
           style={{ height: 36 }}
-          title={collapsed ? "New reel" : undefined}
-          aria-label="New reel"
+          title={collapsed ? t.shell.newReel : undefined}
+          aria-label={t.shell.newReel}
         >
           {collapsed ? (
-            <Sparkles size={14} />
+            <span className="text-[11px] font-medium">
+              {t.common.new}
+            </span>
           ) : (
-            <>
-              <span className="inline-flex items-center gap-2">
-                <Sparkles size={13} />
-                New reel
-              </span>
-              <span
-                className="mono"
-                style={{ fontSize: 11.5, opacity: 0.65 }}
-              >
-                ⌘N
-              </span>
-            </>
+            <span>{t.shell.newReel}</span>
           )}
         </button>
       </div>
@@ -206,27 +201,101 @@ export function Sidebar({
           "flex-1 overflow-y-auto scroll",
           collapsed ? "px-2" : "px-4",
         )}
-        aria-label="Primary"
+        aria-label={t.shell.primary}
       >
         {!collapsed && (
           <div
             className="kicker"
             style={{ padding: "6px 8px", marginBottom: 4, color: "var(--fg-3)" }}
           >
-            Workspace
+            {t.shell.workspace}
           </div>
         )}
         <ul className="space-y-0.5">
-          {navItems.map(({ label, href, icon: Icon, exact }) => {
-            const active = isActive(href, exact);
+          {navItems.map(({ labelKey, href, icon: Icon, exact, disabled }) => {
+            const label = t.shell.routes[labelKey];
+            const active = !disabled && isActive(href, exact);
+            const title = disabled
+              ? `${label} - ${t.shell.comingSoon}`
+              : collapsed
+                ? label
+                : undefined;
+            const content = (
+              <>
+                {active && !collapsed && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      insetInlineStart: -16,
+                      top: 8,
+                      bottom: 8,
+                      width: 2,
+                      background: "var(--gold)",
+                      borderRadius: 2,
+                    }}
+                  />
+                )}
+                <Icon
+                  size={15}
+                  style={{
+                    color: disabled
+                      ? "oklch(0.58 0.010 80)"
+                      : active
+                        ? "oklch(0.96 0.010 80)"
+                        : "oklch(0.74 0.010 80)",
+                  }}
+                />
+                {!collapsed && (
+                  <>
+                    <span className="min-w-0 truncate">{label}</span>
+                    {disabled && (
+                      <span
+                        className="mono shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase"
+                        style={{
+                          borderColor: "oklch(0.74 0.13 78 / 0.35)",
+                          color: "oklch(0.86 0.14 82)",
+                          background: "oklch(0.74 0.13 78 / 0.14)",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {t.shell.comingSoon}
+                      </span>
+                    )}
+                  </>
+                )}
+              </>
+            );
             return (
               <li key={href}>
+                {disabled ? (
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    aria-label={collapsed ? title : undefined}
+                    title={title}
+                    className={cn(
+                      "group relative flex w-full items-center rounded-md text-[13px] transition-colors duration-150",
+                      collapsed
+                        ? "justify-center h-9"
+                        : "gap-2.5 px-2.5 py-2",
+                    )}
+                    style={{
+                      color: "oklch(0.58 0.010 80)",
+                      background: "transparent",
+                      cursor: "not-allowed",
+                      opacity: 0.75,
+                    }}
+                  >
+                    {content}
+                  </button>
+                ) : (
                 <Link
                   href={href}
                   onClick={onClose}
                   aria-current={active ? "page" : undefined}
                   aria-label={collapsed ? label : undefined}
-                  title={collapsed ? label : undefined}
+                  title={title}
                   className={cn(
                     "group relative flex items-center rounded-md text-[13px] transition-colors duration-150",
                     collapsed
@@ -249,29 +318,9 @@ export function Sidebar({
                       e.currentTarget.style.background = "transparent";
                   }}
                 >
-                  {active && !collapsed && (
-                    <span
-                      style={{
-                        position: "absolute",
-                        insetInlineStart: -16,
-                        top: 8,
-                        bottom: 8,
-                        width: 2,
-                        background: "var(--gold)",
-                        borderRadius: 2,
-                      }}
-                    />
-                  )}
-                  <Icon
-                    size={15}
-                    style={{
-                      color: active
-                        ? "oklch(0.96 0.010 80)"
-                        : "oklch(0.74 0.010 80)",
-                    }}
-                  />
-                  {!collapsed && label}
+                  {content}
                 </Link>
+                )}
               </li>
             );
           })}
@@ -286,7 +335,7 @@ export function Sidebar({
                 color: "var(--fg-3)",
               }}
             >
-              Recent
+              {t.shell.recent}
             </div>
             <ul className="space-y-0.5">
               {recent.map((p) => (
@@ -350,7 +399,7 @@ export function Sidebar({
               className="kicker"
               style={{ marginBottom: 6, color: "var(--gold-hi)" }}
             >
-              credits
+              {t.shell.credits}
             </div>
             <div
               style={{
@@ -373,7 +422,7 @@ export function Sidebar({
                   letterSpacing: "0.04em",
                 }}
               >
-                OF 100
+                {t.shell.of} 100
               </span>
             </div>
             <div
@@ -403,8 +452,8 @@ export function Sidebar({
         <Link
           href="/dashboard/profile"
           onClick={onClose}
-          aria-label="Profile"
-          title={collapsed ? "Profile" : undefined}
+          aria-label={t.shell.profile}
+          title={collapsed ? t.shell.profile : undefined}
           className={cn(
             "flex items-center w-full rounded-lg transition-colors duration-150",
             collapsed ? "justify-center p-1.5" : "gap-2.5 p-1.5",
@@ -517,7 +566,7 @@ export function Sidebar({
               style={{ ...sidebarStyle, insetInlineStart: 0 }}
               role="dialog"
               aria-modal="true"
-              aria-label="Navigation"
+              aria-label={t.shell.navigation}
               data-shell-sidebar=""
             >
               {buildSidebarContent(false)}

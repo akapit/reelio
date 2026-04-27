@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/client";
 
 interface BeforeAfterSliderProps {
   originalUrl: string;
@@ -14,6 +15,7 @@ export function BeforeAfterSlider({
   processedUrl,
   className,
 }: BeforeAfterSliderProps) {
+  const { t } = useI18n();
   const [position, setPosition] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -83,7 +85,7 @@ export function BeforeAfterSlider({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={processedUrl}
-        alt="אחרי"
+        alt={t.media.after}
         className="block w-full h-auto pointer-events-none"
         draggable={false}
       />
@@ -92,7 +94,7 @@ export function BeforeAfterSlider({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={originalUrl}
-        alt="לפני"
+        alt={t.media.before}
         className="absolute inset-0 w-full h-full object-cover pointer-events-none"
         style={{
           clipPath: `inset(0 ${100 - position}% 0 0)`,
@@ -128,12 +130,12 @@ export function BeforeAfterSlider({
       {/* Labels */}
       <div className="absolute top-3 left-3 pointer-events-none">
         <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-foreground)] backdrop-blur-sm">
-          לפני
+          {t.media.before}
         </span>
       </div>
       <div className="absolute top-3 right-3 pointer-events-none">
         <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-black/60 text-[var(--color-accent)] backdrop-blur-sm">
-          אחרי
+          {t.media.after}
         </span>
       </div>
     </div>

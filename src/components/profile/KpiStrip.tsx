@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useProperties } from "@/hooks/use-properties";
+import { useI18n } from "@/lib/i18n/client";
 
 type KpiCell = {
   k: string;
@@ -11,6 +13,8 @@ type KpiCell = {
 
 export function KpiStrip() {
   const { data: rows } = useProperties();
+  const { t } = useI18n();
+  const [now] = useState(() => Date.now());
 
   // Count projects that have at least one asset
   const publishedCount = (rows ?? []).filter((row) => {
@@ -19,7 +23,7 @@ export function KpiStrip() {
   }).length;
 
   // Count projects created within the last 7 days that have assets
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
   const recentCount = (rows ?? []).filter((row) => {
     const r = row as { created_at?: string; assets?: { count: number }[] };
     const hasAssets = Array.isArray(r.assets) && (r.assets[0]?.count ?? 0) > 0;
@@ -31,27 +35,27 @@ export function KpiStrip() {
 
   const kpis: KpiCell[] = [
     {
-      k: "reels published",
+      k: t.profile.kpi.reelsPublished,
       v: publishedCount > 0 ? String(publishedCount) : "0",
-      d: recentCount > 0 ? `+${recentCount} this week` : "0 this week",
+      d: recentCount > 0 ? `+${recentCount} ${t.profile.kpi.thisWeek}` : `0 ${t.profile.kpi.thisWeek}`,
       pos: recentCount > 0,
     },
     {
-      k: "cumulative views",
+      k: t.profile.kpi.cumulativeViews,
       v: "128.4k",
-      d: "+12.1% vs prev 30d",
+      d: t.profile.kpi.prev30,
       pos: true,
     },
     {
-      k: "avg. completion",
+      k: t.profile.kpi.avgCompletion,
       v: "74%",
-      d: "industry avg. 31%",
+      d: t.profile.kpi.industryAvg,
       pos: true,
     },
     {
-      k: "credits remaining",
+      k: t.profile.kpi.creditsRemaining,
       v: "47",
-      d: "resets May 1",
+      d: t.profile.kpi.resetsMay,
     },
   ];
 

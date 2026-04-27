@@ -62,13 +62,13 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
           </div>
         </div>
 
-        {/* Style label — top-left */}
+        {/* Style label — top-start */}
         <div
           className="mono"
           style={{
             position: "absolute",
             top: 10,
-            left: 12,
+            insetInlineStart: 12,
             fontSize: 12,
             letterSpacing: "0.14em",
             textTransform: "uppercase",
@@ -78,13 +78,13 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
           {meta.style}
         </div>
 
-        {/* Duration label — top-right */}
+        {/* Duration label — top-end */}
         <div
           className="mono"
           style={{
             position: "absolute",
             top: 10,
-            right: 12,
+            insetInlineEnd: 12,
             fontSize: 12,
             letterSpacing: "0.14em",
             color: "var(--gold-hi)",
@@ -93,13 +93,13 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
           {meta.durationLabel}
         </div>
 
-        {/* Selected checkmark — bottom-right */}
+        {/* Selected checkmark — bottom-end */}
         {selected && (
           <div
             style={{
               position: "absolute",
               bottom: 10,
-              right: 10,
+              insetInlineEnd: 10,
               width: 22,
               height: 22,
               borderRadius: 999,

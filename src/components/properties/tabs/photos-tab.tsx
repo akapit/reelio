@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
+import { useI18n } from "@/lib/i18n/client";
 
 interface PhotoTabAsset {
   id: string;
@@ -48,6 +49,7 @@ export function PhotosTab({
   onAddToCreator,
   onDelete,
 }: PhotosTabProps) {
+  const { t } = useI18n();
   // Silently fire a server-side thumbnail backfill the first time we mount
   // and detect images missing thumbnails. The endpoint is idempotent (it
   // selects WHERE thumbnail_url IS NULL), and Supabase Realtime will refresh
@@ -163,13 +165,13 @@ export function PhotosTab({
             margin: 0,
           }}
         >
-          No photos yet
+          {t.photos.empty}
         </p>
         <p
           className="kicker"
           style={{ color: "var(--fg-3)", margin: 0 }}
         >
-          Upload images from the creation surface above
+          {t.photos.emptyHint}
         </p>
       </div>
     );
@@ -180,12 +182,12 @@ export function PhotosTab({
       <div
         className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2"
         role="toolbar"
-        aria-label="Photo source actions"
+        aria-label={t.photos.sourceActions}
       >
         <div className="flex min-w-0 items-center gap-2 text-xs text-[var(--fg-2)]">
           <MousePointer2 size={14} className="shrink-0 text-[var(--gold)]" />
           <span className="truncate">
-            Add photos into the creator, or drag ready photos to the rail.
+            {t.photos.addInstruction}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -198,7 +200,7 @@ export function PhotosTab({
                 }}
                 className="rounded-md px-2 py-1 text-xs font-medium text-[var(--fg-2)] transition-colors duration-150 hover:bg-[var(--bg-1)] hover:text-[var(--fg-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
               >
-                Select All
+                {t.common.selectAll}
               </button>
               <button
                 type="button"
@@ -212,7 +214,7 @@ export function PhotosTab({
                 )}
               >
                 <Plus size={13} />
-                Add {selectedIds.size || ""}
+                {t.photos.addCount} {selectedIds.size || ""}
               </button>
             </>
           )}
@@ -230,23 +232,33 @@ export function PhotosTab({
             )}
           >
             {selectionMode ? <X size={13} /> : <CheckSquare size={13} />}
-            {selectionMode ? "Cancel" : "Select"}
+            {selectionMode ? t.common.cancel : t.common.select}
           </button>
         </div>
       </div>
 
       <div
-        style={{
-          display: "grid",
-          // auto-fill packs as many cells as fit with a sensible min width,
-          // so the grid scales naturally from phone (2 cols) to desktop (5+)
-          // without depending on a parent's @media breakpoint matching.
-          gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-          gap: 12,
-          width: "100%",
-        }}
+        // auto-fill packs as many cells as fit with a sensible min width,
+        // so the grid scales naturally from phone (2 cols) to desktop (5+)
+        // without depending on a parent's @media breakpoint matching. The
+        // mobile media query below tightens min-width + gap so we don't waste
+        // gutter space on narrow screens.
         className="photos-tab-grid"
       >
+        <style>{`
+          .photos-tab-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+            width: 100%;
+          }
+          @media (max-width: 640px) {
+            .photos-tab-grid {
+              grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+              gap: 8px;
+            }
+          }
+        `}</style>
         {photos.map((photo) => {
           const thumbnailUrl =
             (photo as { thumbnail_url?: string | null }).thumbnail_url ??
@@ -387,14 +399,14 @@ export function PhotosTab({
                   onDelete(photo.id);
                 }}
                 className={cn(
-                  "absolute right-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-md",
+                  "absolute end-2 top-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
                   "border border-white/45 bg-black/45 text-white shadow-sm backdrop-blur",
                   "opacity-100 transition-colors duration-150 hover:border-red-300/80 hover:bg-red-500/90",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
                   "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                 )}
-                aria-label="Delete photo"
-                title="Delete"
+                aria-label={t.photos.deletePhoto}
+                title={t.common.delete}
               >
                 <Trash2 size={14} />
               </button>
@@ -408,17 +420,16 @@ export function PhotosTab({
                   addOne(photo);
                 }}
                 className={cn(
-                  "absolute bottom-2 right-2 z-30 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5",
+                  "absolute bottom-2 end-2 z-30 flex h-8 w-8 items-center justify-center rounded-full",
                   "bg-[var(--gold)] text-[var(--on-gold)] shadow-[var(--shadow-gold)]",
-                  "text-xs font-medium opacity-100 transition-colors duration-150 hover:bg-[var(--gold-hi)]",
+                  "opacity-100 transition-[background-color,opacity,transform] duration-150 hover:bg-[var(--gold-hi)] hover:scale-110",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-offset-2 focus-visible:ring-offset-black",
                   "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                 )}
-                aria-label="Add this photo to creator"
-                title="Add to Creator"
+                aria-label={t.photos.addThis}
+                title={t.photos.addToCreator}
               >
-                <Plus size={13} />
-                Add
+                <Plus size={15} strokeWidth={2.5} />
               </button>
             )}
 

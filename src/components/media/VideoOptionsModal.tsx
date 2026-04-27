@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useProcess } from "@/hooks/use-process";
+import { useI18n } from "@/lib/i18n/client";
 
 interface VideoOptionsModalProps {
   isOpen: boolean;
@@ -29,19 +30,22 @@ export function VideoOptionsModal({
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
   const [voiceoverText, setVoiceoverText] = useState("");
   const promptId = useId();
+  const { t, dir } = useI18n();
   const firstFocusRef = useRef<HTMLButtonElement>(null);
   const process = useProcess();
 
   // Reset state each time the modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => {
       setDuration(5);
       setQuality("fast");
       setPrompt("");
       setVoiceoverEnabled(false);
       setVoiceoverText("");
-      setTimeout(() => firstFocusRef.current?.focus(), 50);
-    }
+      firstFocusRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
   // Close on Escape
@@ -101,8 +105,8 @@ export function VideoOptionsModal({
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 left-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
-                aria-label="סגור חלון"
+                className="absolute top-4 start-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--color-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-raised)] transition-colors duration-150"
+                aria-label={t.common.close}
               >
                 <X size={16} />
               </button>
@@ -112,17 +116,17 @@ export function VideoOptionsModal({
                 className="text-2xl font-semibold text-[var(--color-foreground)] mb-1"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                צור סרטון
+                {t.creation.videoModalTitle}
               </h2>
               <p className="text-sm text-[var(--color-muted)] mb-6">
-                צור סיור קולנועי מתמונה זו.
+                {t.creation.videoModalDescription}
               </p>
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-5">
                 {/* Duration selector */}
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                    משך
+                    {t.creation.duration}
                   </span>
                   <div className="flex gap-2">
                     {([5, 10] as Duration[]).map((d) => (
@@ -139,7 +143,7 @@ export function VideoOptionsModal({
                             : "bg-[var(--color-surface-raised)] text-[var(--color-foreground)] hover:bg-[#28282c]"
                         )}
                       >
-                        {d} שניות
+                        {d} {t.creation.seconds}
                       </button>
                     ))}
                   </div>
@@ -148,7 +152,7 @@ export function VideoOptionsModal({
                 {/* Quality selector */}
                 <div className="flex flex-col gap-2">
                   <span className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                    איכות
+                    {t.creation.quality}
                   </span>
                   <div className="flex gap-2">
                     {(["fast", "quality"] as Quality[]).map((q) => (
@@ -164,7 +168,7 @@ export function VideoOptionsModal({
                             : "bg-[var(--color-surface-raised)] text-[var(--color-foreground)] hover:bg-[#28282c]"
                         )}
                       >
-                        {q === "fast" ? "מהיר" : "איכות"}
+                        {q === "fast" ? t.creation.fast : t.creation.highQuality}
                       </button>
                     ))}
                   </div>
@@ -176,9 +180,9 @@ export function VideoOptionsModal({
                     htmlFor={promptId}
                     className="text-sm font-medium text-[var(--color-foreground)] leading-none"
                   >
-                    פרומפט{" "}
+                    {t.creation.prompt}{" "}
                     <span className="text-[var(--color-muted)] font-normal">
-                      (אופציונלי)
+                      ({t.creation.optional})
                     </span>
                   </label>
                   <textarea
@@ -186,7 +190,7 @@ export function VideoOptionsModal({
                     rows={3}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="תאר את תנועת המצלמה... (אופציונלי)"
+                    placeholder={t.creation.videoPromptPlaceholder}
                     className={cn(
                       "w-full px-3 py-2.5 rounded-lg text-sm resize-none",
                       "bg-[var(--color-surface)] border border-[var(--color-border)]",
@@ -217,27 +221,27 @@ export function VideoOptionsModal({
                     >
                       <span
                         className={cn(
-                          "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150",
-                          voiceoverEnabled && "translate-x-5"
+                          "absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150",
+                          voiceoverEnabled && (dir === "rtl" ? "-translate-x-5" : "translate-x-5")
                         )}
                       />
                     </button>
                     <span className="text-sm font-medium text-[var(--color-foreground)]">
-                      הוסף קריינות
+                      {t.creation.voiceoverOff}
                     </span>
                   </label>
 
                   {voiceoverEnabled && (
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                        תסריט קריינות
+                        {t.creation.voiceoverScript}
                       </label>
                       <textarea
                         rows={3}
                         maxLength={500}
                         value={voiceoverText}
                         onChange={(e) => setVoiceoverText(e.target.value)}
-                        placeholder="ברוכים הבאים לבית התלת-חדרי המדהים הזה..."
+                        placeholder={t.creation.voiceoverPlaceholder}
                         className={cn(
                           "w-full px-3 py-2.5 rounded-lg text-sm resize-none",
                           "bg-[var(--color-surface)] border border-[var(--color-border)]",
@@ -248,7 +252,7 @@ export function VideoOptionsModal({
                           "disabled:opacity-50 disabled:cursor-not-allowed"
                         )}
                       />
-                      <span className="text-xs text-[var(--color-muted)] text-left">
+                      <span className="text-xs text-[var(--color-muted)] text-start">
                         {voiceoverText.length}/500
                       </span>
                     </div>
@@ -265,7 +269,7 @@ export function VideoOptionsModal({
                     onClick={onClose}
                     disabled={process.isPending}
                   >
-                    ביטול
+                    {t.common.cancel}
                   </Button>
                   <Button
                     type="submit"
@@ -274,7 +278,7 @@ export function VideoOptionsModal({
                     className="flex-1"
                     disabled={process.isPending}
                   >
-                    {process.isPending ? "יוצר..." : "צור"}
+                    {process.isPending ? t.common.loading : t.creation.create}
                   </Button>
                 </div>
               </form>

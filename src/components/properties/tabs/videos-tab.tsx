@@ -3,6 +3,7 @@
 import { Video, Image as ImageIcon, Share2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
+import { useI18n } from "@/lib/i18n/client";
 
 interface VideoTabAsset {
   id: string;
@@ -25,9 +26,9 @@ interface VideosTabProps {
 }
 
 const STATUS_MAP = {
-  done: { label: "Live", color: "var(--positive)" },
-  processing: { label: "Rendering", color: "var(--gold-hi)" },
-  failed: { label: "Failed", color: "oklch(0.65 0.20 25)" },
+  done: { labelKey: "published", color: "var(--positive)" },
+  processing: { labelKey: "rendering", color: "var(--gold-hi)" },
+  failed: { labelKey: "failed", color: "oklch(0.65 0.20 25)" },
 } as const;
 
 export function VideosTab({
@@ -36,6 +37,7 @@ export function VideosTab({
   onSelect,
   onDelete,
 }: VideosTabProps) {
+  const { t } = useI18n();
   const videos = assets.filter((a) => a.asset_type === "video");
 
   if (videos.length === 0) {
@@ -73,13 +75,13 @@ export function VideosTab({
             margin: 0,
           }}
         >
-          No reels yet
+          {t.videos.empty}
         </p>
         <p
           className="kicker"
           style={{ color: "var(--fg-3)", margin: 0 }}
         >
-          Upload photos and compose your first reel from the bar above
+          {t.videos.emptyHint}
         </p>
       </div>
     );
@@ -155,7 +157,7 @@ export function VideosTab({
                 onSelect?.({ id: video.id, asset_type: "video" })
               }
               disabled={!canSelect}
-              aria-label={isSelected ? "Selected reel" : "Play this reel"}
+              aria-label={isSelected ? t.videos.selected : t.videos.playThis}
               aria-pressed={isSelected}
               className="absolute inset-0 z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
               style={{
@@ -171,7 +173,7 @@ export function VideosTab({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={thumbnailUrl}
-                  alt="Generated reel thumbnail"
+                  alt={t.videos.generatedThumbnail}
                   style={{
                     position: "absolute",
                     inset: 0,
@@ -256,7 +258,7 @@ export function VideosTab({
                         : "none",
                   }}
                 />
-                {statusInfo.label}
+                {t.status[statusInfo.labelKey]}
               </span>
             )}
 
@@ -280,8 +282,8 @@ export function VideosTab({
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
                   "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100",
                 )}
-                aria-label="Delete video"
-                title="Delete"
+                aria-label={t.videos.deleteVideo}
+                title={t.common.delete}
               >
                 <Trash2 size={14} />
               </button>
@@ -317,7 +319,7 @@ export function VideosTab({
                     color: "oklch(0.95 0.02 80 / 0.92)",
                     pointerEvents: "none",
                   }}
-                  title={`${sourceCount} source images`}
+                  title={`${sourceCount} ${t.videos.sourceImages}`}
                 >
                   <ImageIcon size={11} />
                   {sourceCount}
@@ -350,8 +352,8 @@ export function VideosTab({
                     "background-color .15s var(--ease), color .15s var(--ease), transform .15s var(--ease)",
                 }}
                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-                aria-label="Share"
-                title="Share"
+                aria-label={t.common.share}
+                title={t.common.share}
               >
                 <Share2 size={14} />
               </button>

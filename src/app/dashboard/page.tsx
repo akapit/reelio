@@ -9,6 +9,7 @@ import { PropertyCard } from "@/components/properties/property-card";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
 import type { Status } from "@/components/properties/StatusPill";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/lib/i18n/client";
 
 function deriveStatus(seed: string, hasAssets: boolean): Status {
   if (!hasAssets) return "draft";
@@ -20,56 +21,35 @@ function deriveStatus(seed: string, hasAssets: boolean): Status {
   return "draft";
 }
 
-function relativeTime(iso?: string): string {
+function relativeTime(iso: string | undefined, locale: string): string {
   if (!iso) return "—";
   const ms = Date.now() - new Date(iso).getTime();
   if (Number.isNaN(ms) || ms < 0) return "—";
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   const m = Math.floor(ms / 60_000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
+  if (m < 1) return rtf.format(0, "minute");
+  if (m < 60) return rtf.format(-m, "minute");
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return rtf.format(-h, "hour");
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
+  if (d < 7) return rtf.format(-d, "day");
   const w = Math.floor(d / 7);
-  if (w < 4) return `${w}w ago`;
+  if (w < 4) return rtf.format(-w, "week");
   const mo = Math.floor(d / 30);
-  return `${mo}mo ago`;
+  return rtf.format(-mo, "month");
 }
 
 const DURATIONS = ["0:30", "0:45", "0:60"] as const;
 
-const TIME_OF_DAY = (h: number) =>
+type TimeOfDay = "night" | "morning" | "afternoon" | "evening";
+
+const TIME_OF_DAY = (h: number): TimeOfDay =>
   h < 5 ? "night" : h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-function firstName(fullName?: string | null): string {
-  if (!fullName) return "there";
+function firstName(fullName: string | null | undefined, fallback: string): string {
+  if (!fullName) return fallback;
   const trimmed = fullName.trim();
-  if (!trimmed) return "there";
+  if (!trimmed) return fallback;
   return trimmed.split(/\s+/)[0];
 }
 
@@ -77,6 +57,7 @@ export default function DashboardPage() {
   const { data: rows } = useProperties();
   const [modalOpen, setModalOpen] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const { t, locale, dir } = useI18n();
 
   // Fetch the authed profile's full_name for the greeting; fall back to "there".
   useEffect(() => {
@@ -101,8 +82,8 @@ export default function DashboardPage() {
   }, []);
 
   const now = new Date();
-  const dateLabel = `${WEEKDAYS[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
-  const greeting = `Good ${TIME_OF_DAY(now.getHours())}, ${firstName(userName)}.`;
+  const dateLabel = `${t.dashboard.weekdays[now.getDay()]}, ${now.getDate()} ${t.dashboard.months[now.getMonth()]}`;
+  const greeting = `${t.dashboard.greeting[TIME_OF_DAY(now.getHours())]}, ${firstName(userName, t.dashboard.greeting.fallbackName)}.`;
 
   const recent = useMemo(
     () =>
@@ -128,14 +109,14 @@ export default function DashboardPage() {
           address: r.property_address ?? r.name,
           status,
           duration: dur,
-          updated: relativeTime(r.updated_at ?? r.created_at),
+          updated: relativeTime(r.updated_at ?? r.created_at, locale),
           views:
             status === "published"
               ? `${(((Math.abs(h) % 90) + 5) / 10).toFixed(1)}k`
               : "—",
         };
       }),
-    [rows],
+    [locale, rows],
   );
 
   return (
@@ -188,17 +169,17 @@ export default function DashboardPage() {
                 (e.currentTarget.style.background = "transparent")
               }
             >
-              <LayoutGrid size={13} /> Properties
+              <LayoutGrid size={13} /> {t.shell.routes.properties}
             </Link>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
               className="btn-generate"
             >
-              <Sparkles size={13} /> New reel
+              <Sparkles size={13} /> {t.shell.newReel}
               <span
                 className="mono"
-                style={{ opacity: 0.55, fontSize: 12, marginLeft: 4 }}
+                style={{ opacity: 0.55, fontSize: 12, marginInlineStart: 4 }}
               >
                 ⌘N
               </span>
@@ -221,7 +202,7 @@ export default function DashboardPage() {
                 fontWeight: 400,
               }}
             >
-              Recent reels
+              {t.dashboard.recentReels}
             </h2>
             <Link
               href="/dashboard/properties"
@@ -231,7 +212,11 @@ export default function DashboardPage() {
                 color: "var(--fg-2)",
               }}
             >
-              View all <ArrowRight size={12} />
+              {t.dashboard.viewAll}{" "}
+              <ArrowRight
+                size={12}
+                style={{ transform: dir === "rtl" ? "scaleX(-1)" : undefined }}
+              />
             </Link>
           </div>
 
@@ -270,7 +255,7 @@ export default function DashboardPage() {
                   color: "var(--fg-0)",
                 }}
               >
-                No reels yet
+                {t.properties.noReels}
               </p>
               <button
                 type="button"
@@ -278,7 +263,7 @@ export default function DashboardPage() {
                 className="btn-generate"
                 style={{ height: 32, fontSize: 12.5, padding: "0 14px" }}
               >
-                <Sparkles size={12} /> Compose your first reel
+                <Sparkles size={12} /> {t.dashboard.composeFirst}
               </button>
             </div>
           )}

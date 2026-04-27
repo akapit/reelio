@@ -1,6 +1,11 @@
 import Link from "next/link";
+import { dictionaries } from "@/lib/i18n/dictionaries";
+import { getRequestLocale } from "@/lib/i18n/server";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const locale = await getRequestLocale();
+  const t = dictionaries[locale];
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 bg-[var(--color-background)]">
       {/* Ambient glow */}
@@ -29,10 +34,10 @@ export default function NotFound() {
             className="text-3xl font-semibold text-[var(--color-foreground)]"
             style={{ fontFamily: "var(--font-display)" }}
           >
-            הדף לא נמצא
+            {t.errors.notFoundTitle}
           </h1>
           <p className="text-sm text-[var(--color-muted)] leading-relaxed">
-            הדף שחיפשת אינו קיים או שהועבר.
+            {t.errors.notFoundMessage}
           </p>
         </div>
 
@@ -41,7 +46,7 @@ export default function NotFound() {
           href="/dashboard"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/25 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 hover:border-[var(--color-accent)]/40 transition-colors duration-200"
         >
-          חזרה לדף הבית
+          {t.errors.notFoundCta}
         </Link>
       </div>
     </div>

@@ -2,9 +2,13 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Cog, Crown, Check } from "lucide-react";
 import { KpiStrip } from "@/components/profile/KpiStrip";
+import { dictionaries } from "@/lib/i18n/dictionaries";
+import { getRequestLocale } from "@/lib/i18n/server";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
+  const locale = await getRequestLocale();
+  const t = dictionaries[locale];
 
   const {
     data: { user },
@@ -25,20 +29,13 @@ export default async function ProfilePage() {
   const year = profile?.created_at
     ? new Date(profile.created_at).getFullYear()
     : 2024;
-  const planLabel = profile?.plan === "free" ? "Free" : "Atelier";
-
-  const planFeatures = [
-    "Unlimited 4K vertical exports",
-    "All 14 Atelier templates",
-    "Custom logo + lower-third branding",
-    "Priority render queue",
-    "Multi-agent seats (up to 3)",
-  ];
+  const planLabel = profile?.plan === "free" ? t.profile.free : "Atelier";
+  const planFeatures = t.profile.features;
 
   const connectedAccounts = [
     { n: "Instagram", h: "@daniela.reyes", ok: true },
     { n: "TikTok", h: "@reyesandco", ok: true },
-    { n: "YouTube", h: "Not connected", ok: false },
+    { n: "YouTube", h: t.profile.notConnected, ok: false },
     { n: "MLS Sync", h: "CRMLS · 24 listings", ok: true },
   ];
 
@@ -83,7 +80,7 @@ export default async function ProfilePage() {
         {/* Text block */}
         <div style={{ flex: 1 }}>
           <div className="kicker" style={{ marginBottom: 8 }}>
-            Atelier member · since {year}
+            {t.profile.atelierMember} · {t.profile.since} {year}
           </div>
           <h1
             className="serif"
@@ -115,14 +112,14 @@ export default async function ProfilePage() {
               cursor: "pointer",
             }}
           >
-            <Cog size={14} /> Settings
+            <Cog size={14} /> {t.profile.settings}
           </button>
           <button
             type="button"
             className="btn-generate"
             style={{ height: 36 }}
           >
-            <Crown size={14} /> Manage plan
+            <Crown size={14} /> {t.profile.managePlan}
           </button>
         </div>
       </div>
@@ -157,7 +154,7 @@ export default async function ProfilePage() {
         {/* Plan card */}
         <div className="card" style={{ padding: 22 }}>
           <div className="kicker" style={{ marginBottom: 14 }}>
-            Plan · {planLabel}
+            {t.profile.plan} · {planLabel}
           </div>
 
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -168,7 +165,7 @@ export default async function ProfilePage() {
               $48
             </span>
             <span style={{ color: "var(--fg-3)", fontSize: 13 }}>
-              / month · billed annually
+              {t.profile.billedAnnually}
             </span>
           </div>
 
@@ -190,7 +187,7 @@ export default async function ProfilePage() {
                 fontSize: 12,
               }}
             >
-              <span style={{ color: "var(--fg-2)" }}>Credits used</span>
+              <span style={{ color: "var(--fg-2)" }}>{t.profile.creditsUsed}</span>
               <span
                 className="mono"
                 style={{ color: "var(--gold-hi)" }}
@@ -224,14 +221,14 @@ export default async function ProfilePage() {
                 marginTop: 8,
               }}
             >
-              RESETS MAY 1 · 47 LEFT
+              {t.profile.resets}
             </div>
           </div>
 
           <div className="hr" style={{ margin: "18px 0" }} />
 
           <div className="kicker" style={{ marginBottom: 10 }}>
-            Plan includes
+            {t.profile.planIncludes}
           </div>
 
           {planFeatures.map((feature, i) => (
@@ -254,7 +251,7 @@ export default async function ProfilePage() {
         {/* Brand card */}
         <div className="card" style={{ padding: 22 }}>
           <div className="kicker" style={{ marginBottom: 14 }}>
-            Brand
+            {t.profile.brand}
           </div>
 
           {/* Watermark logo field */}
@@ -263,7 +260,7 @@ export default async function ProfilePage() {
               className="kicker"
               style={{ marginBottom: 6, fontSize: 12 }}
             >
-              Watermark logo
+              {t.profile.watermarkLogo}
             </div>
             <div
               style={{
@@ -321,7 +318,7 @@ export default async function ProfilePage() {
                   opacity: 0.6,
                 }}
               >
-                Replace
+                {t.profile.replace}
               </button>
             </div>
           </div>
@@ -332,7 +329,7 @@ export default async function ProfilePage() {
               className="kicker"
               style={{ marginBottom: 6, fontSize: 12 }}
             >
-              Lower-third name
+              {t.profile.lowerThirdName}
             </div>
             <input
               defaultValue={fullName}
@@ -379,7 +376,7 @@ export default async function ProfilePage() {
           <div className="hr" style={{ margin: "12px 0 16px" }} />
 
           <div className="kicker" style={{ marginBottom: 10 }}>
-            Connected
+            {t.profile.connected}
           </div>
 
           {connectedAccounts.map((c, i) => (
@@ -415,7 +412,7 @@ export default async function ProfilePage() {
                   color: c.ok ? "var(--positive)" : "var(--fg-3)",
                 }}
               >
-                {c.ok ? "● linked" : "○ link"}
+                {c.ok ? `● ${t.profile.linked}` : `○ ${t.profile.link}`}
               </span>
             </div>
           ))}

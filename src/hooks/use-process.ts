@@ -2,6 +2,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
+import { useI18n } from "@/lib/i18n/client";
 
 interface ProcessOptions {
   assetId: string;
@@ -29,6 +30,7 @@ interface ProcessOptions {
 
 export function useProcess() {
   const qc = useQueryClient();
+  const { t } = useI18n();
 
   return useMutation({
     mutationFn: async (options: ProcessOptions) => {
@@ -39,17 +41,20 @@ export function useProcess() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Processing failed");
+        throw new Error(data.error ?? t.hooks.processingFailed);
       }
       return res.json();
     },
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: ["assets", variables.projectId] });
-      const label = variables.tool === "enhance" ? "Enhancement" : "Video generation";
-      toast.success(`${label} started`);
+      toast.success(
+        variables.tool === "enhance"
+          ? t.hooks.enhancementStarted
+          : t.hooks.videoGenerationStarted,
+      );
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Processing failed");
+      toast.error(err instanceof Error ? err.message : t.hooks.processingFailed);
     },
   });
 }
