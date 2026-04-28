@@ -5,7 +5,6 @@ export default function PropertyDetailLoading() {
       style={{
         maxWidth: 1024,
         gap: 22,
-        padding: "28px 24px 40px",
         color: "var(--fg-0)",
       }}
     >
@@ -78,9 +77,9 @@ export default function PropertyDetailLoading() {
           z-index: 2;
         }
         .pl-grid {
-          --photos-grid-gap: 12px;
+          --photos-grid-gap: 16px;
           --photos-grid-cap: 5;
-          --photos-grid-max: 1080px;
+          --photos-grid-max: 1024px;
           display: grid;
           grid-template-columns: repeat(
             auto-fill,
@@ -96,15 +95,18 @@ export default function PropertyDetailLoading() {
         }
         @media (max-width: 640px) {
           .pl-grid {
-            --photos-grid-gap: 8px;
-            --photos-grid-cap: 3;
+            --photos-grid-gap: 12px;
+            --photos-grid-cap: 2;
             grid-template-columns: repeat(
               auto-fill,
               minmax(
-                max(96px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
+                max(140px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
                 1fr
               )
             );
+          }
+          .pl-action-rail > :not(:first-child) {
+            display: none;
           }
         }
         .pl-tab-active::after {
@@ -135,12 +137,12 @@ export default function PropertyDetailLoading() {
         className="card"
         style={{ padding: 0, overflow: "hidden", minWidth: 0 }}
       >
-        {/* Tab bar — 4 tabs, second active */}
+        {/* Tab bar — current property detail tabs, photos active */}
         <div
           style={{
             display: "flex",
             borderBottom: "1px solid var(--line-soft)",
-            background: "var(--bg-2)",
+            background: "var(--bg-1)",
           }}
         >
           {Array.from({ length: 4 }).map((_, i) => (
@@ -150,27 +152,51 @@ export default function PropertyDetailLoading() {
               style={{
                 flex: 1,
                 position: "relative",
-                height: 56,
+                height: 68,
                 display: "flex",
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 8,
-                padding: "14px 16px",
-                background: i === 1 ? "var(--bg-1)" : "transparent",
+                gap: 6,
+                padding: "12px 8px 10px",
+                background: i === 1 ? "var(--bg-2)" : "transparent",
               }}
             >
-              <div
-                className="pl-bar"
-                style={{ width: 14, height: 14, borderRadius: 4 }}
-              />
-              <div className="pl-bar" style={{ width: 56, height: 12 }} />
+              <div className="pl-bar" style={{ width: 18, height: 18, borderRadius: 4 }} />
+              <div className="pl-bar" style={{ width: 48, height: 13 }} />
             </div>
           ))}
         </div>
 
-        {/* Heading row */}
+        {/* Photos tab content: upload CTA + toolbar */}
         <div style={{ padding: "20px 22px 12px" }}>
-          <div className="pl-bar" style={{ height: 16, width: 140 }} />
+          <div
+            className="pl-bar"
+            style={{
+              height: 44,
+              width: "100%",
+              borderRadius: 8,
+              border: "1.5px solid var(--gold)",
+              background: "transparent",
+            }}
+          />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginTop: 16,
+            }}
+          >
+            <div className="pl-bar" style={{ height: 16, width: 136 }} />
+            <div className="pl-action-rail" style={{ display: "flex", gap: 8 }}>
+              <div className="pl-bar" style={{ height: 36, width: 64, borderRadius: 8 }} />
+              <div className="pl-bar" style={{ height: 36, width: 76, borderRadius: 8 }} />
+              <div className="pl-bar" style={{ height: 36, width: 76, borderRadius: 8 }} />
+              <div className="pl-bar" style={{ height: 36, width: 66, borderRadius: 8 }} />
+            </div>
+          </div>
         </div>
 
         {/* Photo grid skeleton */}

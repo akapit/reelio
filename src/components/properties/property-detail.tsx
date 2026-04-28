@@ -278,72 +278,73 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
           font-size: clamp(24px, 5vw, 36px);
           line-height: 1.08;
           letter-spacing: -0.022em;
-          font-weight: 400;
+          font-weight: 700;
         }
         .property-tab-btn {
           flex: 1;
           display: flex;
-          flex-direction: row;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 10px;
-          padding: 14px 12px;
+          gap: 6px;
+          padding: 12px 8px 10px;
           background: transparent;
           border: 0;
+          border-bottom: 2px solid transparent;
           cursor: pointer;
-          color: var(--fg-2);
-          transition: color .15s var(--ease);
+          color: var(--fg-1);
+          transition:
+            color .15s var(--ease),
+            background-color .15s var(--ease),
+            border-color .15s var(--ease);
         }
         .property-tab-tile {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background: var(--bg-1);
-          border: 1px solid var(--line-soft);
-          color: var(--fg-2);
+          width: 24px;
+          height: 24px;
+          border-radius: 0;
+          background: transparent;
+          border: 0;
+          color: currentColor;
           transition:
             background-color .15s var(--ease),
-            color .15s var(--ease),
-            border-color .15s var(--ease),
-            box-shadow .15s var(--ease);
+            color .15s var(--ease);
+        }
+        .property-tab-btn[data-active="true"] {
+          color: var(--gold-lo);
+          background: var(--bg-2);
+          border-bottom-color: var(--gold);
         }
         .property-tab-btn[data-active="true"] .property-tab-tile {
-          background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
-          border-color: var(--action-video-lo);
-          color: var(--on-action);
-          box-shadow: 0 4px 12px -4px var(--action-video-glow);
+          color: var(--gold-lo);
         }
         .property-tab-btn[data-active="true"] .property-tab-btn-label {
-          color: var(--action-video-lo);
+          color: var(--gold-lo);
           font-weight: 600;
         }
-        .property-tab-btn:hover .property-tab-tile {
-          border-color: var(--action-video-hi);
+        .property-tab-btn:hover {
+          color: var(--gold-lo);
+          background: var(--bg-2);
         }
         .property-tab-btn-label {
           font-size: 13px;
           letter-spacing: 0;
           text-transform: none;
+          font-weight: 600;
         }
         .property-tab-content { padding: 20px 22px; }
         @media (max-width: 640px) {
           .property-detail { gap: 14px; }
           .property-header { padding-block: 0; }
-          .property-tab-btn {
-            flex-direction: column;
-            gap: 6px;
-            padding: 10px 4px;
-          }
+          .property-tab-btn { padding: 11px 4px 9px; }
           .property-tab-tile {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
+            width: 22px;
+            height: 22px;
           }
           .property-tab-btn-label {
-            font-size: 11.5px;
+            font-size: 12.5px;
           }
           .property-tab-content { padding: 12px; }
         }
@@ -406,7 +407,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
           className="property-header-tagline"
           style={{
             margin: "6px 0 0",
-            fontSize: 13,
+            fontSize: 14,
             lineHeight: 1.45,
             color: "var(--fg-2)",
           }}
@@ -419,7 +420,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
             className="property-header-address"
             style={{
               margin: "4px 0 0",
-              fontSize: 12,
+              fontSize: 13,
               color: "var(--fg-3)",
             }}
           >
@@ -529,7 +530,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
               style={{
                 display: "flex",
                 borderBottom: "1px solid var(--line-soft)",
-                background: "var(--bg-2)",
+                background: "var(--bg-1)",
               }}
             >
               {TABS.map((tab) => {

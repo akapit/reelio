@@ -119,7 +119,6 @@ export function LivePreviewCard({
               fontSize: 28,
               color: "oklch(0.97 0.02 80)",
               lineHeight: 1.1,
-              fontStyle: "italic",
               overflow: "hidden",
               display: "-webkit-box",
               WebkitLineClamp: 1,

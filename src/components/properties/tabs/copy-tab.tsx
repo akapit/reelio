@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles, Copy, Share2, Check } from "lucide-react";
+import { RefreshCcw, Copy, Share2, Check } from "lucide-react";
 import type { PropertyData } from "../property-detail";
 import { useI18n } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -136,7 +136,7 @@ export function CopyTab({ data }: CopyTabProps) {
             }}
           >
             {t.copy.copyTitle}{" "}
-            <span style={{ fontStyle: "italic" }} className="gold-text">
+            <span className="gold-text">
               {t.copy.caption}
             </span>
           </h2>
@@ -147,7 +147,7 @@ export function CopyTab({ data }: CopyTabProps) {
           className="btn-action"
           data-variant="ai"
         >
-          <Sparkles size={13} strokeWidth={2.25} /> {t.copy.createNewCopy}
+          <RefreshCcw size={13} strokeWidth={2.25} /> {t.copy.createNewCopy}
         </button>
       </div>
 
@@ -156,8 +156,8 @@ export function CopyTab({ data }: CopyTabProps) {
         className="copy-tab-card"
         style={{
           borderRadius: 12,
-          background: "oklch(0.66 0.12 75 / 0.06)",
-          border: "1px solid oklch(0.66 0.12 75 / 0.20)",
+          background: "var(--gold-tint)",
+          border: "1px solid var(--gold-tint-2)",
           position: "relative",
         }}
       >

@@ -53,7 +53,6 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
             className="serif"
             style={{
               fontSize: 28,
-              fontStyle: "italic",
               color: "oklch(0.97 0.02 80 / 0.92)",
               letterSpacing: "-0.01em",
             }}

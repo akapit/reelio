@@ -47,7 +47,7 @@ export const VIDEO_EFFECTS: VideoEffect[] = [
     id: "boutique-listing",
     name: "Boutique Listing",
     description: "Elegant dolly-in opener, smooth glides between, wide hero hold",
-    icon: "sparkles",
+    icon: "film",
     models: ["kling"],
     openerPhrase:
       "Elegant slow dolly-in, warm natural light revealing the space",

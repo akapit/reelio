@@ -19,12 +19,19 @@ export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
 
   return (
     <div
-      className="inline-flex items-center gap-1 rounded-md border border-[var(--line-soft)] bg-[var(--bg-1)] p-0.5"
+      className="inline-flex items-center gap-1 rounded-md border p-0.5"
+      style={{
+        background: "var(--language-switch-bg, var(--bg-1))",
+        borderColor: "var(--language-switch-border, var(--line-soft))",
+      }}
       aria-label={t.language.label}
       title={t.language.label}
     >
       {!compact && (
-        <span className="px-1.5 text-[var(--fg-3)]">
+        <span
+          className="px-1.5"
+          style={{ color: "var(--language-switch-fg, var(--fg-3))" }}
+        >
           <Languages size={13} />
         </span>
       )}
@@ -40,7 +47,7 @@ export function LanguageSwitcher({ compact = false }: LanguageSwitcherProps) {
               "h-7 rounded px-2 text-[11px] font-semibold tracking-[0.08em] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
               active
                 ? "bg-[var(--gold)] text-[var(--on-gold)]"
-                : "text-[var(--fg-2)] hover:bg-[var(--bg-2)] hover:text-[var(--fg-0)]",
+                : "text-[var(--language-switch-fg,var(--fg-2))] hover:bg-[var(--language-switch-hover,var(--bg-2))] hover:text-[var(--language-switch-fg,var(--fg-0))]",
             )}
           >
             {t.language[option.key]}

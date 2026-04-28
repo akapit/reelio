@@ -1,7 +1,6 @@
 "use client";
 
-import { Menu, Search, Bell, ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { Menu, Bell } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n/client";
@@ -9,7 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 export interface HeaderProps {
   onNewProject: () => void;
   onMenuToggle?: () => void;
-  /** When set, mobile shows a back link in place of the hamburger. */
+  /** Kept for shell compatibility; mobile always shows the menu toggle. */
   backHref?: string;
 }
 
@@ -36,7 +35,7 @@ function routeLabel(
   return "reelio";
 }
 
-export function Header({ onMenuToggle, backHref }: HeaderProps) {
+export function Header({ onMenuToggle }: HeaderProps) {
   const pathname = usePathname() || "/dashboard";
   const { t } = useI18n();
   const label = routeLabel(pathname, t.shell.routes);
@@ -48,6 +47,10 @@ export function Header({ onMenuToggle, backHref }: HeaderProps) {
         height: 52,
         background: "var(--topbar-bg)",
         borderBottom: "1px solid var(--line-soft)",
+        ["--language-switch-bg" as string]: "#ffffff",
+        ["--language-switch-border" as string]: "rgb(36 48 74 / 0.18)",
+        ["--language-switch-fg" as string]: "#263552",
+        ["--language-switch-hover" as string]: "#f1eee8",
       }}
     >
       <style>{`
@@ -62,44 +65,17 @@ export function Header({ onMenuToggle, backHref }: HeaderProps) {
             letter-spacing: 0.18em;
             text-transform: uppercase;
             font-size: 14px;
-            color: var(--gold-lo);
+            color: var(--fg-0);
           }
-        }
-        .reelio-header-back {
-          display: none;
-          align-items: center;
-          gap: 6px;
-          height: 36px;
-          padding: 0 8px;
-          font-size: 13px;
-          color: var(--fg-1);
-          border-radius: 8px;
-          transition: background-color .15s var(--ease);
-        }
-        .reelio-header-back:hover { background: var(--bg-2); }
-        @media (max-width: 640px) {
-          .reelio-header-back { display: inline-flex; }
         }
       `}</style>
       <div className="relative h-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        {/* Start (left in LTR): back-link OR mobile menu + breadcrumb */}
+        {/* Start (left in LTR): mobile menu + breadcrumb */}
         <div className="flex items-center gap-3">
-          {backHref ? (
-            <Link
-              href={backHref}
-              className="reelio-header-back focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-              aria-label={t.common.back}
-            >
-              <ArrowLeft size={16} className="rtl:rotate-180" />
-              <span>{t.common.back}</span>
-            </Link>
-          ) : null}
           <button
             type="button"
             onClick={onMenuToggle}
-            className={`${
-              backHref ? "hidden lg:flex" : "lg:hidden flex"
-            } items-center justify-center w-9 h-9 rounded-md transition-colors duration-150`}
+            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md transition-colors duration-150"
             style={{ color: "var(--fg-1)" }}
             aria-label={t.shell.toggleNavigation}
           >
@@ -129,37 +105,8 @@ export function Header({ onMenuToggle, backHref }: HeaderProps) {
           {t.common.appName}
         </span>
 
-        {/* End (right in LTR): search + bell */}
+        {/* End (right in LTR): notifications + language */}
         <div className="flex items-center gap-2">
-          <div
-            className="hidden md:flex items-center gap-2"
-            style={{
-              height: 30,
-              padding: "0 10px",
-              borderRadius: 7,
-              border: "1px solid var(--line-soft)",
-              background: "var(--bg-1)",
-              minWidth: 200,
-            }}
-          >
-              <Search size={12} style={{ color: "var(--fg-2)" }} />
-            <span style={{ fontSize: 12, color: "var(--fg-3)", flex: 1 }}>
-              {t.common.search}
-            </span>
-            <span
-              className="mono"
-              style={{
-                fontSize: 11.5,
-                color: "var(--fg-3)",
-                padding: "1px 5px",
-                border: "1px solid var(--line-soft)",
-                borderRadius: 3,
-              }}
-            >
-              ⌘ K
-            </span>
-          </div>
-
           <button
             type="button"
             className="flex items-center justify-center transition-colors duration-150"

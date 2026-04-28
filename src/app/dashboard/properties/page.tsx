@@ -116,7 +116,7 @@ export default function PropertiesPage() {
               }}
             >
               {t.properties.collectionPrefix}{" "}
-              <span style={{ fontStyle: "italic" }} className="gold-text">
+              <span className="gold-text">
                 {t.properties.collectionAccent}
               </span>
             </h1>
@@ -145,6 +145,7 @@ export default function PropertiesPage() {
               type="button"
               onClick={() => setModalOpen(true)}
               className="btn-generate flex-shrink-0"
+              style={{ height: 36 }}
             >
               <Plus size={14} /> {t.common.new}
             </button>

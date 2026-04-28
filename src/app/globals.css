@@ -1,40 +1,40 @@
 @import "tailwindcss";
 
 /*
- * Reelio brand tokens — "Refined minimal tech with gold accents"
+ * Reelio brand tokens — warm white real-estate workspace with burnt-orange actions.
  * Type: Instrument Serif (display) + Geist/Assistant (UI) + JetBrains Mono (utility)
  *
- * Light theme is default — cream + warm gold + dark sidebar.
+ * Light theme is default — ivory + orange + navy text + dark charcoal shell.
  * Dark theme variant is opt-in via [data-theme="dark"] on body.
  */
 
 @theme {
-  --color-bg-0:           oklch(0.975 0.008 80);
-  --color-bg-1:           oklch(0.99 0.006 82);
-  --color-bg-2:           oklch(0.955 0.010 80);
-  --color-bg-3:           oklch(0.92 0.012 78);
-  --color-fg-0:           oklch(0.20 0.010 70);
-  --color-fg-1:           oklch(0.32 0.010 70);
-  --color-fg-2:           oklch(0.46 0.012 70);
-  --color-fg-3:           oklch(0.58 0.014 70);
-  --color-fg-4:           oklch(0.72 0.015 70);
-  --color-gold:           oklch(0.66 0.12 75);
-  --color-gold-hi:        oklch(0.74 0.13 78);
-  --color-gold-lo:        oklch(0.52 0.11 70);
-  --color-line:           oklch(0.55 0.020 70 / 0.30);
-  --color-line-soft:      oklch(0.55 0.020 70 / 0.16);
+  --color-bg-0:           #f8f7f3;
+  --color-bg-1:           #ffffff;
+  --color-bg-2:           #fbfaf7;
+  --color-bg-3:           #f1eee8;
+  --color-fg-0:           #182238;
+  --color-fg-1:           #263552;
+  --color-fg-2:           #41506b;
+  --color-fg-3:           #778198;
+  --color-fg-4:           #a5acba;
+  --color-gold:           #df6f00;
+  --color-gold-hi:        #f18700;
+  --color-gold-lo:        #b94d00;
+  --color-line:           rgb(36 48 74 / 0.20);
+  --color-line-soft:      rgb(36 48 74 / 0.12);
 
   /* Legacy aliases (keep components that still reference --color-accent etc. compiling) */
-  --color-background:     oklch(0.975 0.008 80);
-  --color-surface:        oklch(0.99 0.006 82);
-  --color-surface-raised: oklch(0.955 0.010 80);
-  --color-border:         oklch(0.55 0.020 70 / 0.30);
-  --color-foreground:     oklch(0.20 0.010 70);
-  --color-muted:          oklch(0.46 0.012 70);
-  --color-accent:         oklch(0.66 0.12 75);
-  --color-accent-warm:    oklch(0.74 0.13 78);
-  --color-accent-dim:     oklch(0.52 0.11 70);
-  --color-cream:          oklch(0.975 0.008 80);
+  --color-background:     #f8f7f3;
+  --color-surface:        #ffffff;
+  --color-surface-raised: #fbfaf7;
+  --color-border:         rgb(36 48 74 / 0.20);
+  --color-foreground:     #182238;
+  --color-muted:          #41506b;
+  --color-accent:         #df6f00;
+  --color-accent-warm:    #f18700;
+  --color-accent-dim:     #b94d00;
+  --color-cream:          #f8f7f3;
 
   --font-display:         var(--font-heebo), "Heebo", ui-sans-serif, system-ui, sans-serif;
   --font-sans:            var(--font-heebo), "Heebo", ui-sans-serif, system-ui, sans-serif;
@@ -43,57 +43,54 @@
 
 :root {
   /* Surfaces (raw values — duplicated outside @theme so var() works in inline styles) */
-  --bg-0: oklch(0.975 0.008 80);
-  --bg-1: oklch(0.99 0.006 82);
-  --bg-2: oklch(0.955 0.010 80);
-  --bg-3: oklch(0.92 0.012 78);
-  --line: oklch(0.55 0.020 70 / 0.30);
-  --line-soft: oklch(0.55 0.020 70 / 0.16);
+  --bg-0: #f8f7f3;
+  --bg-1: #ffffff;
+  --bg-2: #fbfaf7;
+  --bg-3: #f1eee8;
+  --line: rgb(36 48 74 / 0.20);
+  --line-soft: rgb(36 48 74 / 0.12);
 
   /* Foreground */
-  --fg-0: oklch(0.20 0.010 70);
-  --fg-1: oklch(0.32 0.010 70);
-  --fg-2: oklch(0.46 0.012 70);
-  --fg-3: oklch(0.58 0.014 70);
-  --fg-4: oklch(0.72 0.015 70);
+  --fg-0: #182238;
+  --fg-1: #263552;
+  --fg-2: #41506b;
+  --fg-3: #778198;
+  --fg-4: #a5acba;
 
-  /* Gold — light-theme defaults (deeper for legibility on cream) */
-  --gold: oklch(0.66 0.12 75);
-  --gold-hi: oklch(0.74 0.13 78);
-  --gold-lo: oklch(0.52 0.11 70);
-  --gold-tint: oklch(0.66 0.12 75 / 0.10);
-  --gold-tint-2: oklch(0.66 0.12 75 / 0.20);
+  /* Orange action color. Keep legacy --gold aliases for older components. */
+  --gold: #df6f00;
+  --gold-hi: #f18700;
+  --gold-lo: #b94d00;
+  --gold-tint: rgb(223 111 0 / 0.09);
+  --gold-tint-2: rgb(223 111 0 / 0.18);
 
-  --positive: oklch(0.55 0.12 145);
+  --positive: #4b8b52;
 
-  /* Action accent gradients — used by photo-tab "Video / AI / Share" pills.
-     Each variant ships a hi/lo pair so the gradient direction can flip in
-     hover/active states without redefining the whole stack. */
-  --action-video-hi:  oklch(0.72 0.17 55);
-  --action-video-lo:  oklch(0.60 0.20 45);
-  --action-video-glow: oklch(0.60 0.20 45 / 0.30);
-  --action-ai-hi:     oklch(0.55 0.22 300);
-  --action-ai-lo:     oklch(0.40 0.22 295);
-  --action-ai-glow:   oklch(0.40 0.22 295 / 0.32);
-  --action-share-hi:  oklch(0.55 0.18 245);
-  --action-share-lo:  oklch(0.38 0.20 245);
-  --action-share-glow: oklch(0.38 0.20 245 / 0.32);
-  --on-action:        oklch(0.99 0.005 80);
+  --action-video-hi:  #f18700;
+  --action-video-lo:  #c65400;
+  --action-video-glow: rgb(198 84 0 / 0.28);
+  --action-ai-hi:     #f18700;
+  --action-ai-lo:     #c65400;
+  --action-ai-glow:   rgb(198 84 0 / 0.26);
+  --action-share-hi:  #f18700;
+  --action-share-lo:  #c65400;
+  --action-share-glow: rgb(198 84 0 / 0.26);
+  --on-action:        #ffffff;
 
   /* Shell-specific (dark sidebar even in light theme) */
-  --sidebar-bg: oklch(0.18 0.008 72);
-  --topbar-bg: oklch(0.975 0.008 80 / 0.82);
-  --rail-bg: oklch(0.90 0.012 78);
-  --on-gold: oklch(0.99 0.005 80);
+  --sidebar-bg: #202126;
+  --topbar-bg: rgb(248 247 243 / 0.88);
+  --rail-bg: #eee9df;
+  --on-gold: #ffffff;
 
   --shadow-card:
-    0 1px 0 rgba(255, 255, 255, 0.7) inset,
-    0 1px 2px rgba(60, 40, 10, 0.04),
-    0 6px 18px -10px rgba(60, 40, 10, 0.10);
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 1px 2px rgba(24, 34, 56, 0.04),
+    0 8px 22px -14px rgba(24, 34, 56, 0.18);
   --shadow-gold:
-    0 0 0 1px oklch(0.66 0.12 75 / 0.25),
-    0 12px 32px -8px oklch(0.66 0.12 75 / 0.30),
-    0 0 0 6px oklch(0.66 0.12 75 / 0.05);
+    0 0 0 1px rgb(223 111 0 / 0.25),
+    0 12px 28px -12px rgb(198 84 0 / 0.45),
+    0 0 0 5px rgb(223 111 0 / 0.06);
 
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
@@ -145,7 +142,7 @@ body {
 .card {
   background: var(--bg-1);
   border: 1px solid var(--line-soft);
-  border-radius: 14px;
+  border-radius: 10px;
   box-shadow: var(--shadow-card);
 }
 
@@ -263,26 +260,37 @@ body {
   display: inline-flex;
   background: var(--bg-1);
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 3px;
+  border-radius: 10px;
+  padding: 0;
   font-size: 12px;
+  overflow: hidden;
 }
 
 .seg button {
+  position: relative;
   appearance: none;
   background: transparent;
   border: 0;
-  color: var(--fg-2);
-  padding: 5px 10px;
-  border-radius: 6px;
+  color: var(--fg-1);
+  padding: 10px 14px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
+  font-weight: 600;
 }
 
 .seg button[aria-pressed="true"] {
-  background: var(--bg-3);
-  color: var(--fg-0);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--bg-2);
+  color: var(--gold-lo);
+  box-shadow: inset 0 -2px 0 var(--gold);
+}
+
+button:not(:disabled):hover,
+a.btn-generate:hover,
+a.btn-action:hover,
+a.btn-cta:hover,
+a.btn-link:hover {
+  color: #000 !important;
 }
 
 /* ─── Scroll style ─────────────────────────────────────────── */
@@ -290,7 +298,7 @@ body {
 .scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
 .scroll::-webkit-scrollbar-track { background: transparent; }
 
-/* ─── Generate / primary gold button ───────────────────────── */
+/* ─── Generate / primary orange button ─────────────────────── */
 .btn-generate {
   display: inline-flex;
   align-items: center;
@@ -298,16 +306,16 @@ body {
   height: 38px;
   padding: 0 18px;
   border-radius: 8px;
-  font-weight: 500;
+  font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.005em;
-  color: oklch(0.18 0.02 70);
+  color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold-hi), var(--gold-lo));
   border: 1px solid var(--gold-lo);
   box-shadow:
-    inset 0 1px 0 oklch(0.95 0.06 88 / 0.6),
-    inset 0 -1px 0 oklch(0.45 0.06 70 / 0.4),
-    0 4px 12px -2px oklch(0.66 0.12 75 / 0.35);
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 0 rgb(95 35 0 / 0.26),
+    0 8px 18px -10px rgb(198 84 0 / 0.55);
   transition: background-color 0.15s var(--ease), filter 0.15s var(--ease), box-shadow 0.15s var(--ease);
   cursor: pointer;
   white-space: nowrap;
@@ -317,37 +325,83 @@ body {
 .btn-generate:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
 .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.btn-link {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-link:hover {
+  color: #000 !important;
+}
+.btn-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ─── Action accent pills (Video / AI / Share) ─────────────── */
 .btn-action {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.005em;
   color: var(--on-action);
-  border: 0;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
   white-space: nowrap;
 }
-.btn-action:hover { transform: scale(1.05); filter: brightness(1.05); }
+.btn-action:hover { transform: translateY(-1px); filter: brightness(1.04); }
 .btn-action:active { transform: scale(0.97); }
 .btn-action:focus-visible { outline: 2px solid var(--on-action); outline-offset: 2px; }
 .btn-action:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
 .btn-action[data-variant="video"] {
-  background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
-  box-shadow: 0 4px 12px -2px var(--action-video-glow);
+  color: #fff;
+  background: linear-gradient(180deg, #2e3038, #17181f);
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    0 8px 18px -12px rgb(23 24 31 / 0.75);
+}
+.btn-action[data-variant="video"]:hover {
+  background: linear-gradient(180deg, #ffffff, #f8f7f3);
+  border-color: var(--gold);
+  filter: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    0 8px 18px -12px rgb(198 84 0 / 0.42);
+}
+.btn-action[data-variant="video"]:focus-visible {
+  outline-color: var(--gold);
 }
 .btn-action[data-variant="ai"] {
-  background: linear-gradient(135deg, var(--action-ai-hi), var(--action-ai-lo));
+  background: linear-gradient(180deg, var(--action-ai-hi), var(--action-ai-lo));
   box-shadow: 0 4px 12px -2px var(--action-ai-glow);
 }
 .btn-action[data-variant="share"] {
-  background: linear-gradient(135deg, var(--action-share-hi), var(--action-share-lo));
+  background: linear-gradient(180deg, var(--action-share-hi), var(--action-share-lo));
   box-shadow: 0 4px 12px -2px var(--action-share-glow);
 }
 
@@ -359,12 +413,12 @@ body {
   gap: 8px;
   height: 44px;
   padding: 0 18px;
-  border-radius: 12px;
-  font-weight: 600;
+  border-radius: 8px;
+  font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.005em;
   color: var(--on-action, white);
-  background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
+  background: linear-gradient(180deg, var(--action-video-hi), var(--action-video-lo));
   border: 0;
   box-shadow: 0 6px 16px -4px var(--action-video-glow);
   cursor: pointer;
@@ -383,7 +437,7 @@ body {
   box-shadow: none;
 }
 .btn-cta[data-variant="outline"]:hover {
-  background: oklch(0.72 0.17 55 / 0.08);
+  background: rgb(223 111 0 / 0.08);
   filter: none;
 }
 

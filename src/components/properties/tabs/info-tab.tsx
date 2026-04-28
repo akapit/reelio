@@ -331,10 +331,10 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
                           ? "1px solid var(--gold)"
                           : "1px solid var(--line-soft)",
                         background: isActive
-                          ? "oklch(0.66 0.12 75 / 0.10)"
+                          ? "var(--gold-tint)"
                           : "var(--bg-1)",
                         color: isActive
-                          ? "var(--gold-hi)"
+                          ? "var(--gold-lo)"
                           : "var(--fg-1)",
                         cursor: "pointer",
                         transition: "all .15s var(--ease)",
@@ -419,7 +419,7 @@ export function InfoTab({ data, onChange }: InfoTabProps) {
         .info-tab-grid-3 select:focus,
         .info-tab-grid-3 input:focus,
         .info-tab-grid-2 input:focus {
-          border-color: oklch(0.66 0.12 75 / 0.5);
+          border-color: rgb(223 111 0 / 0.5);
           background: var(--bg-1);
         }
         @media (max-width: 768px) {

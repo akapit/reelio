@@ -239,7 +239,7 @@ export default function GeneratePage() {
           }}
         >
           Composing your{" "}
-          <span className="gold-text" style={{ fontStyle: "italic" }}>
+          <span className="gold-text">
             reel
           </span>
         </h1>

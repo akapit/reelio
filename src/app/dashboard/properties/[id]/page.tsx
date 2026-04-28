@@ -55,74 +55,166 @@ export default function PropertyDetailPage() {
   if (isLoading) {
     return (
       <div
-        className="mx-auto flex flex-col"
-        style={{ maxWidth: 1024, gap: 22 }}
+        className="property-loading mx-auto flex flex-col"
+        style={{ maxWidth: 1024, gap: 22, color: "var(--fg-0)" }}
       >
-        {/* Header skeleton */}
-        <div style={{ paddingBlock: 4 }}>
-          <div
-            className="h-3 w-32 rounded animate-pulse"
-            style={{ background: "var(--bg-2)" }}
-          />
-          <div
-            className="h-10 w-96 rounded animate-pulse"
-            style={{ background: "var(--bg-2)", marginTop: 10 }}
-          />
-          <div
-            className="h-3 w-64 rounded animate-pulse"
-            style={{ background: "var(--bg-2)", marginTop: 12 }}
-          />
-        </div>
+        <style>{`
+          @keyframes property-loading-shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+          }
+          .pl-bar {
+            background: var(--bg-2);
+            border-radius: 6px;
+            position: relative;
+            overflow: hidden;
+          }
+          .pl-bar::after,
+          .pl-tile::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.44), transparent);
+            animation: property-loading-shimmer 1.8s var(--ease) infinite;
+          }
+          .pl-tile {
+            aspect-ratio: 1 / 1;
+            border-radius: 10px;
+            border: 1px solid var(--line-soft);
+            position: relative;
+            overflow: hidden;
+          }
+          .pl-grid {
+            --photos-grid-gap: 16px;
+            --photos-grid-cap: 5;
+            display: grid;
+            grid-template-columns: repeat(
+              auto-fill,
+              minmax(
+                max(120px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
+                1fr
+              )
+            );
+            gap: var(--photos-grid-gap);
+          }
+          .pl-pill {
+            height: 18px;
+            width: 64px;
+            margin-inline: auto;
+            margin-top: 6px;
+            border-radius: 999px;
+            background: var(--bg-2);
+            border: 1px solid var(--line-soft);
+          }
+          .pl-index {
+            position: absolute;
+            inset-block-start: 8px;
+            inset-inline-start: 8px;
+            width: 24px;
+            height: 22px;
+            border-radius: 6px;
+            background: rgb(23 24 31 / 0.78);
+            z-index: 2;
+          }
+          .pl-tab-active::after {
+            content: "";
+            position: absolute;
+            inset-inline: 0;
+            inset-block-end: 0;
+            height: 2px;
+            background: var(--gold);
+          }
+          @media (max-width: 640px) {
+            .pl-grid {
+              --photos-grid-gap: 12px;
+              --photos-grid-cap: 2;
+            }
+            .pl-action-rail > :not(:first-child) {
+              display: none;
+            }
+          }
+        `}</style>
 
-        {/* Two-card skeleton */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)",
-            gap: 16,
-          }}
-        >
-          <div className="card" style={{ padding: 18 }}>
+        <section style={{ paddingBlock: 4 }}>
+          <div className="pl-bar" style={{ height: 38, width: "60%" }} />
+          <div className="pl-bar" style={{ height: 14, width: "75%", marginTop: 12, maxWidth: 460 }} />
+          <div className="pl-bar" style={{ height: 13, width: "45%", marginTop: 6, maxWidth: 360 }} />
+        </section>
+
+        <section className="card" style={{ padding: 0, overflow: "hidden", minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              borderBottom: "1px solid var(--line-soft)",
+              background: "var(--bg-1)",
+            }}
+          >
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className={i === 1 ? "pl-tab-active" : ""}
+                style={{
+                  flex: 1,
+                  position: "relative",
+                  height: 68,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  padding: "12px 8px 10px",
+                  background: i === 1 ? "var(--bg-2)" : "transparent",
+                }}
+              >
+                <div className="pl-bar" style={{ width: 18, height: 18, borderRadius: 4 }} />
+                <div className="pl-bar" style={{ width: 48, height: 13 }} />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: "20px 22px 12px" }}>
             <div
-              className="prop-img animate-pulse"
-              data-tone="warm"
-              style={{ aspectRatio: "5 / 4", borderRadius: 12 }}
+              className="pl-bar"
+              style={{
+                height: 44,
+                width: "100%",
+                borderRadius: 8,
+                border: "1.5px solid var(--gold)",
+                background: "transparent",
+              }}
             />
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 8,
-                marginTop: 18,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginTop: 16,
               }}
             >
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="prop-img animate-pulse"
-                  data-tone="warm"
-                  style={{
-                    aspectRatio: "1 / 1",
-                    borderRadius: 6,
-                    border: "1px solid var(--line-soft)",
-                  }}
-                />
+              <div className="pl-bar" style={{ height: 16, width: 136 }} />
+              <div className="pl-action-rail" style={{ display: "flex", gap: 8 }}>
+                <div className="pl-bar" style={{ height: 36, width: 64, borderRadius: 8 }} />
+                <div className="pl-bar" style={{ height: 36, width: 76, borderRadius: 8 }} />
+                <div className="pl-bar" style={{ height: 36, width: 76, borderRadius: 8 }} />
+                <div className="pl-bar" style={{ height: 36, width: 66, borderRadius: 8 }} />
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: "0 22px 24px" }}>
+            <div className="pl-grid">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} style={{ display: "flex", flexDirection: "column" }}>
+                  <div className="pl-tile prop-img" data-tone="warm" aria-hidden="true">
+                    <div className="pl-index" />
+                  </div>
+                  <div className="pl-pill" />
+                </div>
               ))}
             </div>
           </div>
-          <div className="card" style={{ padding: 22 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-9 w-full rounded animate-pulse"
-                style={{
-                  background: "var(--bg-2)",
-                  marginBottom: 10,
-                }}
-              />
-            ))}
-          </div>
-        </div>
+        </section>
       </div>
     );
   }

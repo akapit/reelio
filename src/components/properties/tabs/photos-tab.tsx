@@ -8,9 +8,9 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  PenLine,
   Plus,
   Share2,
-  Sparkles,
   Trash2,
   Video,
   Wand2,
@@ -355,6 +355,8 @@ export function PhotosTab({
     onShare?.(Array.from(selectedIds));
   };
 
+  const clearSelection = () => setSelectedIds(new Set());
+
   if (photos.length === 0) {
     return (
       <div className="flex flex-col gap-4">
@@ -476,6 +478,13 @@ export function PhotosTab({
         <div className="flex items-center gap-2">
           {hasSelection && (
             <>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="btn-link"
+              >
+                {t.photos.clearSelection}
+              </button>
               <ActionPill
                 onClick={handleCreateVideo}
                 variant="video"
@@ -544,7 +553,7 @@ export function PhotosTab({
       >
         <style>{`
           .photos-tab-grid {
-            --photos-grid-gap: 12px;
+            --photos-grid-gap: 16px;
             --photos-grid-cap: 5;
             --photos-grid-max: 1024px;
             display: grid;
@@ -565,7 +574,7 @@ export function PhotosTab({
           }
           @media (max-width: 640px) {
             .photos-tab-grid {
-              --photos-grid-gap: 10px;
+              --photos-grid-gap: 12px;
               --photos-grid-cap: 2;
               grid-template-columns: repeat(
                 auto-fill,
@@ -868,11 +877,11 @@ function AiCopyTipCard({ onActivate }: { onActivate: () => void }) {
         style={{
           background: "white",
           color: "var(--gold-lo)",
-          boxShadow: "inset 0 1px 0 oklch(1 0 0 / 0.5)",
+          boxShadow: "inset 0 1px 0 rgb(255 255 255 / 0.5)",
         }}
         aria-hidden="true"
       >
-        <Sparkles size={18} />
+        <ImageIcon size={18} />
       </span>
       <div className="min-w-0 flex-1">
         <div
@@ -894,7 +903,7 @@ function AiCopyTipCard({ onActivate }: { onActivate: () => void }) {
         className="btn-action shrink-0"
         data-variant="ai"
       >
-        <Sparkles size={13} strokeWidth={2.25} />
+        <PenLine size={13} strokeWidth={2.25} />
         <span>{t.photos.aiCopyTipCta}</span>
       </button>
     </div>

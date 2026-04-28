@@ -180,7 +180,7 @@ export default function UploadPage() {
           }}
         >
           Drop your{" "}
-          <span style={{ fontStyle: "italic" }} className="gold-text">
+          <span className="gold-text">
             listing photos
           </span>
         </h1>

@@ -56,7 +56,7 @@ export default function TemplatesPage() {
           }}
         >
           {t.templates.headingPrefix}{" "}
-          <span style={{ fontStyle: "italic" }} className="gold-text">
+          <span className="gold-text">
             {t.templates.headingAccent}
           </span>
         </h1>

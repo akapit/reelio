@@ -139,7 +139,18 @@ export function readImageDims(buf: Buffer): { width: number; height: number } {
 
 let cachedClient: ImageAnnotatorClient | null = null;
 function getClient(): ImageAnnotatorClient {
-  if (!cachedClient) {
+  if (cachedClient) return cachedClient;
+  const credsJson = process.env.GOOGLE_CREDENTIALS_JSON;
+  if (credsJson) {
+    const creds = JSON.parse(credsJson);
+    cachedClient = new ImageAnnotatorClient({
+      projectId: creds.project_id,
+      credentials: {
+        client_email: creds.client_email,
+        private_key: creds.private_key,
+      },
+    });
+  } else {
     cachedClient = new ImageAnnotatorClient();
   }
   return cachedClient;

@@ -21,7 +21,7 @@ function resolveBackHref(pathname: string | null | undefined): string | undefine
 }
 
 const SIDEBAR_COLLAPSED_KEY = "reelio:sidebarCollapsed";
-const SIDEBAR_WIDTH_OPEN = 260;
+const SIDEBAR_WIDTH_OPEN = 240;
 const SIDEBAR_WIDTH_COLLAPSED = 64;
 
 /**

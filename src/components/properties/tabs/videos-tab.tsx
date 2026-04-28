@@ -159,7 +159,7 @@ export function VideosTab({
                 ? "1.5px solid var(--gold)"
                 : "1px solid var(--line-soft)",
               boxShadow: isSelected
-                ? "0 0 0 3px oklch(0.66 0.12 75 / 0.18)"
+                ? "0 0 0 3px var(--gold-tint-2)"
                 : undefined,
               position: "relative",
               overflow: "hidden",

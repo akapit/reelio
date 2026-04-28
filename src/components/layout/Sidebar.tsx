@@ -64,7 +64,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { data: rows } = useProperties();
-  const { t } = useI18n();
+  const { t, dir } = useI18n();
   const recent = (rows ?? []).slice(0, 3) as Array<{
     id: string;
     name: string;
@@ -73,6 +73,8 @@ export function Sidebar({
 
   const [profile, setProfile] = useState<{
     full_name: string | null;
+    avatar_url: string | null;
+    email: string | null;
     plan: string | null;
   } | null>(null);
 
@@ -86,12 +88,28 @@ export function Sidebar({
       if (!user || cancelled) return;
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, plan")
+        .select("full_name, avatar_url, plan")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled) return;
+      const metadata = user.user_metadata as {
+        full_name?: string;
+        name?: string;
+        avatar_url?: string;
+        picture?: string;
+      };
       setProfile({
-        full_name: (data?.full_name as string | null) ?? null,
+        full_name:
+          (data?.full_name as string | null) ??
+          metadata.full_name ??
+          metadata.name ??
+          null,
+        avatar_url:
+          (data?.avatar_url as string | null) ??
+          metadata.avatar_url ??
+          metadata.picture ??
+          null,
+        email: user.email ?? null,
         plan: (data?.plan as string | null) ?? null,
       });
     })();
@@ -123,20 +141,30 @@ export function Sidebar({
   // Locally redefine token vars so child elements using var(--bg-2)/var(--fg-2)
   // resolve to dark equivalents inside the sidebar.
   const sidebarStyle: React.CSSProperties = {
-    background: "oklch(0.18 0.008 72)",
-    borderRight: "1px solid oklch(0.30 0.010 70 / 0.5)",
-    color: "oklch(0.96 0.010 80)",
-    ["--bg-1" as string]: "oklch(0.20 0.008 72)",
-    ["--bg-2" as string]: "oklch(0.24 0.010 72)",
-    ["--bg-3" as string]: "oklch(0.28 0.012 72)",
-    ["--fg-0" as string]: "oklch(0.96 0.010 80)",
-    ["--fg-1" as string]: "oklch(0.86 0.010 80)",
-    ["--fg-2" as string]: "oklch(0.74 0.010 80)",
-    ["--fg-3" as string]: "oklch(0.58 0.010 80)",
-    ["--line" as string]: "oklch(0.45 0.010 70 / 0.5)",
-    ["--line-soft" as string]: "oklch(0.45 0.010 70 / 0.28)",
-    ["--rail-bg" as string]: "oklch(0.30 0.010 72)",
+    background: "var(--sidebar-bg)",
+    borderRight: "1px solid rgb(255 255 255 / 0.10)",
+    color: "#f8f7f3",
+    ["--bg-1" as string]: "#272830",
+    ["--bg-2" as string]: "#30313a",
+    ["--bg-3" as string]: "#3a3b45",
+    ["--fg-0" as string]: "#ffffff",
+    ["--fg-1" as string]: "#f8f7f3",
+    ["--fg-2" as string]: "#d6d1c8",
+    ["--fg-3" as string]: "#a8a399",
+    ["--line" as string]: "rgb(255 255 255 / 0.22)",
+    ["--line-soft" as string]: "rgb(255 255 255 / 0.12)",
+    ["--rail-bg" as string]: "#34353e",
   };
+  const profileName =
+    profile?.full_name?.trim() || profile?.email?.trim() || t.shell.profile;
+  const profileAvatarUrl = profile?.avatar_url?.trim() || null;
+  const CollapseIcon = desktopCollapsed
+    ? dir === "rtl"
+      ? ChevronLeft
+      : ChevronRight
+    : dir === "rtl"
+      ? ChevronRight
+      : ChevronLeft;
 
   // `collapsed` only applies to the desktop rail (the mobile drawer always
   // shows full content since it's a slide-over). We render the same component
@@ -155,11 +183,11 @@ export function Sidebar({
           <Image
             src={reelioDesignSystem.assets.logo.forDark}
             alt="Reelio"
-            width={196}
-            height={56}
+            width={176}
+            height={50}
             priority
             style={{
-              width: 196,
+              width: 176,
               height: "auto",
               display: "block",
             }}
@@ -176,7 +204,7 @@ export function Sidebar({
               width: 36,
               height: "auto",
               display: "block",
-              filter: "drop-shadow(0 8px 18px oklch(0.72 0.15 80 / 0.24))",
+              filter: "drop-shadow(0 8px 18px rgb(223 111 0 / 0.24))",
             }}
           />
         )}
@@ -197,12 +225,12 @@ export function Sidebar({
             aria-label={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
             title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
           >
-            {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+            <CollapseIcon size={14} />
           </button>
         )}
       </div>
 
-      {/* New reel CTA — gold gradient */}
+      {/* New reel CTA — orange gradient */}
       <div className={cn(collapsed ? "px-2 pb-3" : "px-4 pb-4")}>
         <button
           type="button"
@@ -261,10 +289,10 @@ export function Sidebar({
                   size={15}
                   style={{
                     color: disabled
-                      ? "oklch(0.58 0.010 80)"
+                      ? "var(--fg-3)"
                       : active
-                        ? "oklch(0.96 0.010 80)"
-                        : "oklch(0.74 0.010 80)",
+                        ? "var(--fg-0)"
+                        : "var(--fg-2)",
                   }}
                 />
                 {!collapsed && (
@@ -274,9 +302,9 @@ export function Sidebar({
                       <span
                         className="mono shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase"
                         style={{
-                          borderColor: "oklch(0.74 0.13 78 / 0.35)",
-                          color: "oklch(0.86 0.14 82)",
-                          background: "oklch(0.74 0.13 78 / 0.14)",
+                          borderColor: "rgb(223 111 0 / 0.35)",
+                          color: "var(--gold-hi)",
+                          background: "rgb(223 111 0 / 0.14)",
                           letterSpacing: "0.08em",
                         }}
                       >
@@ -303,7 +331,7 @@ export function Sidebar({
                         : "gap-2.5 px-2.5 py-2",
                     )}
                     style={{
-                      color: "oklch(0.58 0.010 80)",
+                      color: "var(--fg-3)",
                       background: "transparent",
                       cursor: "not-allowed",
                       opacity: 0.75,
@@ -326,14 +354,14 @@ export function Sidebar({
                   )}
                   style={{
                     color: active
-                      ? "oklch(0.96 0.010 80)"
-                      : "oklch(0.74 0.010 80)",
-                    background: active ? "oklch(0.28 0.012 72)" : "transparent",
+                      ? "var(--fg-0)"
+                      : "var(--fg-2)",
+                    background: active ? "var(--bg-2)" : "transparent",
                   }}
                   onMouseEnter={(e) => {
                     if (!active)
                       e.currentTarget.style.background =
-                        "oklch(0.24 0.010 72)";
+                        "var(--bg-1)";
                   }}
                   onMouseLeave={(e) => {
                     if (!active)
@@ -366,13 +394,13 @@ export function Sidebar({
                     onClick={onClose}
                     className="flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors duration-150"
                     style={{
-                      color: "oklch(0.74 0.010 80)",
+                      color: "var(--fg-2)",
                       fontSize: 12.5,
                       background: "transparent",
                     }}
                     onMouseEnter={(e) =>
                       (e.currentTarget.style.background =
-                        "oklch(0.24 0.010 72)")
+                        "var(--bg-1)")
                     }
                     onMouseLeave={(e) =>
                       (e.currentTarget.style.background = "transparent")
@@ -412,8 +440,8 @@ export function Sidebar({
             style={{
               padding: 12,
               borderRadius: 10,
-              background: "oklch(0.74 0.13 78 / 0.08)",
-              border: "1px solid oklch(0.74 0.13 78 / 0.20)",
+              background: "rgb(223 111 0 / 0.08)",
+              border: "1px solid rgb(223 111 0 / 0.20)",
             }}
           >
             <div
@@ -473,15 +501,15 @@ export function Sidebar({
         <Link
           href="/dashboard/profile"
           onClick={onClose}
-          aria-label={t.shell.profile}
-          title={collapsed ? t.shell.profile : undefined}
+          aria-label={profileName}
+          title={collapsed ? profileName : undefined}
           className={cn(
             "flex items-center w-full rounded-lg transition-colors duration-150",
             collapsed ? "justify-center p-1.5" : "gap-2.5 p-1.5",
           )}
           style={{ background: "transparent" }}
           onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "oklch(0.24 0.010 72)")
+            (e.currentTarget.style.background = "var(--bg-1)")
           }
           onMouseLeave={(e) =>
             (e.currentTarget.style.background = "transparent")
@@ -492,18 +520,20 @@ export function Sidebar({
               width: 28,
               height: 28,
               borderRadius: 999,
-              background:
-                "linear-gradient(135deg, oklch(0.86 0.14 82), oklch(0.55 0.10 72))",
+              background: profileAvatarUrl
+                ? `center / cover no-repeat url("${profileAvatarUrl}")`
+                : "linear-gradient(180deg, var(--gold-hi), var(--gold-lo))",
+              border: profileAvatarUrl ? "1px solid var(--line-soft)" : "none",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontFamily: "var(--font-display)",
               fontSize: 14,
-              color: "oklch(0.16 0.02 70)",
+              color: "var(--on-gold)",
               flexShrink: 0,
             }}
           >
-            <User size={13} />
+            {!profileAvatarUrl && <User size={13} />}
           </div>
           {!collapsed && (
             <div
@@ -517,13 +547,13 @@ export function Sidebar({
               <div
                 style={{
                   fontSize: 12.5,
-                  color: "oklch(0.96 0.010 80)",
+                  color: "var(--fg-0)",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                 }}
               >
-                {profile?.full_name ?? t.shell.profile}
+                {profileName}
               </div>
               <div
                 className="mono"
@@ -544,7 +574,7 @@ export function Sidebar({
 
   return (
     <>
-      {/* Desktop sidebar — width animates between 260 (open) and 64 (collapsed) */}
+      {/* Desktop sidebar — width animates between 240 (open) and 64 (collapsed) */}
       <aside
         className={cn(
           "hidden lg:flex fixed top-0 z-40 h-screen flex-col shadow-xl overflow-hidden",
@@ -553,7 +583,7 @@ export function Sidebar({
         style={{
           ...sidebarStyle,
           insetInlineStart: 0,
-          width: desktopCollapsed ? 64 : 260,
+          width: desktopCollapsed ? 64 : 240,
           contain: "layout paint style",
           willChange: "width",
         }}
@@ -583,7 +613,7 @@ export function Sidebar({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
-              className="fixed top-0 z-50 lg:hidden h-screen w-[260px] flex flex-col shadow-xl"
+              className="fixed top-0 z-50 lg:hidden h-screen w-[240px] flex flex-col shadow-xl"
               style={{ ...sidebarStyle, insetInlineStart: 0 }}
               role="dialog"
               aria-modal="true"
