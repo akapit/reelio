@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Building2, Plus, Sparkles, Search } from "lucide-react";
+import { Building2, Plus, Search } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/properties/property-card";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
@@ -96,23 +96,23 @@ export default function PropertiesPage() {
 
   return (
     <>
-      <div className="mx-auto" style={{ maxWidth: 1024, color: "var(--fg-0)" }}>
+      <div className="mx-auto w-full min-w-0" style={{ maxWidth: 1024, color: "var(--fg-0)" }}>
         <section
           className="flex flex-wrap items-end justify-between gap-4"
           style={{ marginBottom: 22 }}
         >
-          <div>
+          <div className="min-w-0">
             <div className="kicker" style={{ marginBottom: 8 }}>
               {t.properties.propertiesCount} · {properties.length} {t.properties.reels}
             </div>
             <h1
-              className="serif"
+              className="serif properties-title"
               style={{
-                fontSize: 44,
                 margin: 0,
                 lineHeight: 1.05,
                 letterSpacing: "-0.025em",
                 fontWeight: 400,
+                overflowWrap: "break-word",
               }}
             >
               {t.properties.collectionPrefix}{" "}
@@ -121,36 +121,40 @@ export default function PropertiesPage() {
               </span>
             </h1>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <div
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 flex-1 sm:flex-none min-w-0"
               style={{
                 height: 36,
                 padding: "0 12px",
                 borderRadius: 8,
                 border: "1px solid var(--line-soft)",
                 background: "var(--bg-1)",
-                width: 220,
               }}
             >
-              <Search size={14} style={{ color: "var(--fg-2)" }} />
+              <Search size={14} style={{ color: "var(--fg-2)", flexShrink: 0 }} />
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.properties.searchPlaceholder}
-                className="w-full bg-transparent outline-none border-0"
+                className="w-full bg-transparent outline-none border-0 min-w-0 sm:w-[220px]"
                 style={{ fontSize: 13, color: "var(--fg-1)" }}
               />
             </div>
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              className="btn-generate"
+              className="btn-generate flex-shrink-0"
             >
               <Plus size={14} /> {t.common.new}
             </button>
           </div>
         </section>
+        <style>{`
+          .properties-title { font-size: 32px; }
+          @media (min-width: 640px) { .properties-title { font-size: 38px; } }
+          @media (min-width: 1024px) { .properties-title { font-size: 44px; } }
+        `}</style>
 
         <div
           className="flex items-center gap-3 flex-wrap"
@@ -264,7 +268,7 @@ export default function PropertiesPage() {
                 size="sm"
                 onClick={() => setModalOpen(true)}
               >
-                <Sparkles size={14} />
+                <Plus size={14} />
                 {t.shell.newReel}
               </Button>
             )}

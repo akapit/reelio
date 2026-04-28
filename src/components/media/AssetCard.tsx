@@ -6,10 +6,10 @@ import {
   Image as ImageIcon,
   Loader2,
   SlidersHorizontal,
-  Sparkles,
   Square,
   Trash2,
   Video,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/client";
@@ -299,7 +299,7 @@ export function AssetCard({
                     "text-[var(--color-muted)] hover:text-[var(--color-accent)]"
                   )}
                 >
-                  <Sparkles size={14} />
+                  <Wand2 size={14} />
                 </button>
                 <button
                   type="button"

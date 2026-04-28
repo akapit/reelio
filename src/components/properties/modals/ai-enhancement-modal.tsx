@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   X as XIcon,
-  Sparkles,
   Image as ImageIcon,
   Wand2,
   PenLine,
@@ -17,10 +16,10 @@ import {
 } from "@/lib/ai/enhancement-presets";
 
 const PRESET_ICONS: Record<PresetKey, React.ComponentType<{ className?: string }>> = {
-  quality: Sparkles,
+  quality: Wand2,
   expand: ImageIcon,
   rearrange: Wand2,
-  clean: Sparkles,
+  clean: Wand2,
   refurnish: Wand2,
 };
 
