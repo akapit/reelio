@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { RefreshCw, Copy, Share2, Check } from "lucide-react";
+import { Sparkles, Copy, Share2, Check } from "lucide-react";
 import type { PropertyData } from "../property-detail";
 import { useI18n } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -103,7 +103,15 @@ export function CopyTab({ data }: CopyTabProps) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="copy-tab" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <style>{`
+        .copy-tab-card { padding: 18px; }
+        .copy-tab-textarea { font-size: 13px; }
+        @media (max-width: 640px) {
+          .copy-tab-card { padding: 12px; }
+          .copy-tab-textarea { font-size: 12.5px; }
+        }
+      `}</style>
       {/* Header */}
       <div
         style={{
@@ -136,17 +144,17 @@ export function CopyTab({ data }: CopyTabProps) {
         <button
           type="button"
           onClick={regenerate}
-          className="btn-generate"
-          style={{ height: 36 }}
+          className="btn-action"
+          data-variant="ai"
         >
-          <RefreshCw size={13} /> {t.copy.regenerate}
+          <Sparkles size={13} strokeWidth={2.25} /> {t.copy.createNewCopy}
         </button>
       </div>
 
       {/* Copy card */}
       <div
+        className="copy-tab-card"
         style={{
-          padding: 18,
           borderRadius: 12,
           background: "oklch(0.66 0.12 75 / 0.06)",
           border: "1px solid oklch(0.66 0.12 75 / 0.20)",
@@ -216,12 +224,12 @@ export function CopyTab({ data }: CopyTabProps) {
         <textarea
           value={copyText}
           onChange={(e) => setCopyText(e.target.value)}
-          rows={18}
+          rows={14}
+          className="copy-tab-textarea"
           style={{
             width: "100%",
             background: "transparent",
             color: "var(--fg-0)",
-            fontSize: 13,
             lineHeight: 1.55,
             border: 0,
             outline: 0,
@@ -236,13 +244,8 @@ export function CopyTab({ data }: CopyTabProps) {
       <button
         type="button"
         onClick={() => console.log("TODO: share copy text", copyText)}
-        className="btn-generate"
-        style={{
-          width: "100%",
-          height: 44,
-          justifyContent: "center",
-          fontSize: 14,
-        }}
+        className="btn-cta"
+        style={{ width: "100%" }}
       >
         <Share2 size={15} /> {t.copy.shareCaption}
       </button>

@@ -14,6 +14,8 @@ import {
   PRESET_KEYS,
   type PresetKey,
 } from "@/lib/ai/enhancement-presets";
+import { useIsMobile } from "@/hooks/use-is-mobile";
+import { Sheet } from "@/components/ui/sheet";
 
 const PRESET_ICONS: Record<PresetKey, React.ComponentType<{ className?: string }>> = {
   quality: Wand2,
@@ -89,32 +91,14 @@ export function AIEnhancementModal({
     onClose();
   };
 
+  const isMobile = useIsMobile();
+
   if (!open) return null;
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t.modals.aiEnhancement}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 16, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 8, scale: 0.97 }}
-        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-md overflow-hidden rounded-2xl"
-        style={{
-          background:
-            "linear-gradient(180deg, oklch(0.99 0.006 82) 0%, oklch(0.975 0.008 80) 100%)",
-          border: "1px solid var(--line-soft)",
-          boxShadow: "var(--shadow-card), 0 24px 48px -12px oklch(0.20 0.01 70 / 0.18)",
-        }}
-      >
-        {/* Subtle gold ribbon at the very top of the dialog */}
+  const body = (
+    <>
+      {/* Subtle gold ribbon at the very top of the dialog */}
+      {!isMobile && (
         <div
           aria-hidden="true"
           style={{
@@ -124,9 +108,10 @@ export function AIEnhancementModal({
             opacity: 0.55,
           }}
         />
+      )}
 
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-4">
+      {/* Header */}
+      <div className="flex items-start justify-between px-6 pt-5 pb-4">
           <div>
             <div
               className="kicker"
@@ -317,6 +302,45 @@ export function AIEnhancementModal({
             </motion.li>
           </ul>
         </div>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet
+        open={open}
+        onClose={handleClose}
+        ariaLabel={t.modals.aiEnhancement}
+      >
+        {body}
+      </Sheet>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t.modals.aiEnhancement}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        className="relative w-full max-w-md overflow-hidden rounded-2xl"
+        style={{
+          background:
+            "linear-gradient(180deg, oklch(0.99 0.006 82) 0%, oklch(0.975 0.008 80) 100%)",
+          border: "1px solid var(--line-soft)",
+          boxShadow: "var(--shadow-card), 0 24px 48px -12px oklch(0.20 0.01 70 / 0.18)",
+        }}
+      >
+        {body}
       </motion.div>
     </div>
   );

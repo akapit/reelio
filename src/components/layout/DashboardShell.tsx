@@ -1,9 +1,24 @@
 "use client";
 
 import { useState, useCallback, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
+
+/**
+ * Returns the back href to surface in the mobile header for the current
+ * route, or undefined when the route is a top-level page.
+ */
+function resolveBackHref(pathname: string | null | undefined): string | undefined {
+  if (!pathname) return undefined;
+  // Property detail: /dashboard/properties/<id> (but NOT the index)
+  const propertyDetail = pathname.match(
+    /^\/dashboard\/properties\/[^/]+(\/.*)?$/,
+  );
+  if (propertyDetail) return "/dashboard/properties";
+  return undefined;
+}
 
 const SIDEBAR_COLLAPSED_KEY = "reelio:sidebarCollapsed";
 const SIDEBAR_WIDTH_OPEN = 260;
@@ -57,10 +72,17 @@ function useSidebarCollapsedStore(): [boolean, (next: boolean) => void] {
   return [value, setValue];
 }
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+interface DashboardShellProps {
+  children: React.ReactNode;
+  backHref?: string;
+}
+
+export function DashboardShell({ children, backHref }: DashboardShellProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useSidebarCollapsedStore();
+  const pathname = usePathname();
+  const resolvedBackHref = backHref ?? resolveBackHref(pathname);
 
   const handleSidebarClose = useCallback(() => setSidebarOpen(false), []);
   const handleToggleCollapse = useCallback(
@@ -111,6 +133,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <Header
           onNewProject={() => setModalOpen(true)}
           onMenuToggle={handleMenuToggle}
+          backHref={resolvedBackHref}
         />
 
         <main className="flex-1 overflow-y-auto overflow-x-hidden scroll p-4 sm:p-6 lg:p-8">

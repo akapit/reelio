@@ -80,7 +80,7 @@ const defaultPropertyData: PropertyData = {
   features: [],
 };
 
-type TabId = "info" | "photos" | "videos" | "copy";
+export type TabId = "info" | "photos" | "videos" | "copy";
 
 interface Tab {
   id: TabId;
@@ -283,29 +283,67 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
         .property-tab-btn {
           flex: 1;
           display: flex;
+          flex-direction: row;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 14px 16px;
-          font-size: 12px;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
+          gap: 10px;
+          padding: 14px 12px;
+          background: transparent;
           border: 0;
           cursor: pointer;
+          color: var(--fg-2);
+          transition: color .15s var(--ease);
+        }
+        .property-tab-tile {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          background: var(--bg-1);
+          border: 1px solid var(--line-soft);
+          color: var(--fg-2);
           transition:
             background-color .15s var(--ease),
             color .15s var(--ease),
-            border-color .15s var(--ease);
+            border-color .15s var(--ease),
+            box-shadow .15s var(--ease);
+        }
+        .property-tab-btn[data-active="true"] .property-tab-tile {
+          background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
+          border-color: var(--action-video-lo);
+          color: var(--on-action);
+          box-shadow: 0 4px 12px -4px var(--action-video-glow);
+        }
+        .property-tab-btn[data-active="true"] .property-tab-btn-label {
+          color: var(--action-video-lo);
+          font-weight: 600;
+        }
+        .property-tab-btn:hover .property-tab-tile {
+          border-color: var(--action-video-hi);
+        }
+        .property-tab-btn-label {
+          font-size: 13px;
+          letter-spacing: 0;
+          text-transform: none;
         }
         .property-tab-content { padding: 20px 22px; }
         @media (max-width: 640px) {
           .property-detail { gap: 14px; }
           .property-header { padding-block: 0; }
           .property-tab-btn {
-            padding: 11px 4px;
-            gap: 5px;
-            letter-spacing: 0.06em;
-            font-size: 10.5px;
+            flex-direction: column;
+            gap: 6px;
+            padding: 10px 4px;
+          }
+          .property-tab-tile {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+          }
+          .property-tab-btn-label {
+            font-size: 11.5px;
           }
           .property-tab-content { padding: 12px; }
         }
@@ -503,16 +541,13 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
                     aria-label={label}
-                    className="mono property-tab-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] focus-visible:ring-inset"
-                    style={{
-                      background: isActive ? "var(--bg-1)" : "transparent",
-                      color: isActive ? "var(--gold-hi)" : "var(--fg-2)",
-                      borderBottom: isActive
-                        ? "2px solid var(--gold)"
-                        : "2px solid transparent",
-                    }}
+                    aria-pressed={isActive}
+                    data-active={isActive}
+                    className="property-tab-btn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--action-video-hi)] focus-visible:ring-inset"
                   >
-                    <tab.Icon size={14} />
+                    <span className="property-tab-tile" aria-hidden="true">
+                      <tab.Icon size={18} />
+                    </span>
                     <span className="property-tab-btn-label">{label}</span>
                   </button>
                 );
@@ -541,6 +576,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                   onCreateVideo={(picked) =>
                     handleCreateVideo(picked.map((p) => p.id))
                   }
+                  onSwitchTab={(id) => setActiveTab(id)}
                 />
               )}
               {activeTab === "videos" && (
