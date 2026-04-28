@@ -351,6 +351,42 @@ body {
   box-shadow: 0 4px 12px -2px var(--action-share-glow);
 }
 
+/* ─── Primary CTA (orange) — used for upload + share-on-social */
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.005em;
+  color: var(--on-action, white);
+  background: linear-gradient(135deg, var(--action-video-hi), var(--action-video-lo));
+  border: 0;
+  box-shadow: 0 6px 16px -4px var(--action-video-glow);
+  cursor: pointer;
+  transition: filter 0.15s var(--ease), transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  white-space: nowrap;
+}
+.btn-cta:hover { filter: brightness(1.05); }
+.btn-cta:active { transform: scale(0.99); }
+.btn-cta:focus-visible { outline: 2px solid var(--action-video-hi); outline-offset: 2px; }
+.btn-cta:disabled { opacity: 0.5; cursor: not-allowed; filter: none; transform: none; }
+
+.btn-cta[data-variant="outline"] {
+  background: transparent;
+  color: var(--action-video-lo);
+  border: 1.5px solid var(--action-video-hi);
+  box-shadow: none;
+}
+.btn-cta[data-variant="outline"]:hover {
+  background: oklch(0.72 0.17 55 / 0.08);
+  filter: none;
+}
+
 /* ─── Status dot pulse helper ──────────────────────────────── */
 .pulse-dot {
   animation: pulse-dot 1.4s ease-in-out infinite;

@@ -5,16 +5,18 @@ import {
   Check,
   Eye,
   Image as ImageIcon,
+  LayoutGrid,
+  List,
   Loader2,
   Plus,
   Share2,
+  Sparkles,
   Trash2,
-  Upload,
   Video,
   Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { SelectableAsset } from "@/components/properties/property-detail";
+import type { SelectableAsset, TabId } from "@/components/properties/property-detail";
 import { useI18n } from "@/lib/i18n/client";
 import { useUpload } from "@/hooks/use-upload";
 import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
@@ -29,6 +31,7 @@ interface PhotoTabAsset {
   original_url?: string | null;
   thumbnail_url?: string | null;
   metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
 }
 
 export interface CreatorPhotoAsset {
@@ -36,6 +39,8 @@ export interface CreatorPhotoAsset {
   originalUrl: string;
   thumbnailUrl: string;
 }
+
+type ViewMode = "grid" | "list";
 
 interface PhotosTabProps {
   projectId: string;
@@ -52,6 +57,32 @@ interface PhotosTabProps {
   onShare?: (assetIds: string[]) => void;
   /** Dispatches video generation for the selected photos. */
   onCreateVideo?: (assets: CreatorPhotoAsset[]) => void;
+  /** Switches the parent's active tab — used by the AI Copy tip card. */
+  onSwitchTab?: (id: TabId) => void;
+}
+
+function readMetaString(asset: PhotoTabAsset, key: string): string | null {
+  const meta = asset.metadata;
+  if (!meta || typeof meta !== "object") return null;
+  const value = (meta as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function readMetaNumber(asset: PhotoTabAsset, key: string): number | null {
+  const meta = asset.metadata;
+  if (!meta || typeof meta !== "object") return null;
+  const value = (meta as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatPhotoDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
 }
 
 type ActionVariant = "video" | "ai" | "share";
@@ -185,8 +216,10 @@ export function PhotosTab({
   onAiEnhance,
   onShare,
   onCreateVideo,
+  onSwitchTab,
 }: PhotosTabProps) {
   const { t } = useI18n();
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   // Silently fire a server-side thumbnail backfill the first time we mount
   // and detect images missing thumbnails. The endpoint is idempotent (it
   // selects WHERE thumbnail_url IS NULL), and Supabase Realtime will refresh
@@ -324,16 +357,7 @@ export function PhotosTab({
 
   if (photos.length === 0) {
     return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 14,
-          padding: "56px 0",
-        }}
-      >
+      <div className="flex flex-col gap-4">
         <input
           ref={uploadInputRef}
           type="file"
@@ -343,56 +367,64 @@ export function PhotosTab({
           onChange={handleFilesPicked}
           disabled={isUploading}
         />
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 999,
-            background: "var(--gold-tint)",
-            border: "1px solid var(--gold-tint-2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <ImageIcon size={22} style={{ color: "var(--gold-hi)" }} />
-        </div>
-        <p
-          className="serif"
-          style={{
-            fontSize: 20,
-            letterSpacing: "-0.015em",
-            color: "var(--fg-0)",
-            margin: 0,
-          }}
-        >
-          {t.photos.empty}
-        </p>
-        <p
-          className="kicker"
-          style={{ color: "var(--fg-3)", margin: 0 }}
-        >
-          {t.photos.emptyHint}
-        </p>
         <button
           type="button"
           onClick={openFilePicker}
           disabled={isUploading}
-          className="btn-generate"
-          style={{ marginTop: 4 }}
+          className="btn-cta"
+          style={{ width: "100%" }}
         >
           {isUploading ? (
             <>
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={16} className="animate-spin" />
               {t.photos.uploading}
             </>
           ) : (
             <>
-              <Upload size={14} />
+              <Plus size={16} strokeWidth={2.5} />
               {t.photos.uploadPhotos}
             </>
           )}
         </button>
+
+        <div
+          className="flex flex-col items-center text-center"
+          style={{ gap: 8, padding: "24px 0 8px" }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 999,
+              background: "var(--gold-tint)",
+              border: "1px solid var(--gold-tint-2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ImageIcon size={22} style={{ color: "var(--gold-hi)" }} />
+          </div>
+          <p
+            className="serif"
+            style={{
+              fontSize: 20,
+              letterSpacing: "-0.015em",
+              color: "var(--fg-0)",
+              margin: 0,
+            }}
+          >
+            {t.photos.empty}
+          </p>
+          <p
+            className="kicker"
+            style={{ color: "var(--fg-3)", margin: 0 }}
+          >
+            {t.photos.emptyHint}
+          </p>
+        </div>
+
+        <AiCopyTipCard onActivate={() => onSwitchTab?.("copy")} />
       </div>
     );
   }
@@ -410,6 +442,27 @@ export function PhotosTab({
         onChange={handleFilesPicked}
         disabled={isUploading}
       />
+      <button
+        type="button"
+        onClick={openFilePicker}
+        disabled={isUploading}
+        className="btn-cta"
+        data-variant="outline"
+        style={{ width: "100%" }}
+      >
+        {isUploading ? (
+          <>
+            <Loader2 size={16} className="animate-spin" />
+            {t.photos.uploading}
+          </>
+        ) : (
+          <>
+            <Plus size={16} strokeWidth={2.5} />
+            {t.photos.uploadPhotos}
+          </>
+        )}
+      </button>
+
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-1 py-1"
         role="toolbar"
@@ -419,55 +472,66 @@ export function PhotosTab({
           <h3 className="text-sm font-semibold text-[var(--fg-0)]">
             {t.photos.uploadedHeading}
           </h3>
-          <button
-            type="button"
-            onClick={openFilePicker}
-            disabled={isUploading}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border border-[var(--line-soft)]",
-              "bg-[var(--bg-1)] px-2.5 py-1 text-[12px] text-[var(--fg-1)]",
-              "transition-colors duration-150",
-              "hover:border-[var(--gold)]/60 hover:text-[var(--fg-0)]",
-              "disabled:opacity-60 disabled:cursor-not-allowed",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
-            )}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 size={12} className="animate-spin" />
-                <span>{t.photos.uploading}</span>
-              </>
-            ) : (
-              <>
-                <Plus size={12} />
-                <span>{t.photos.addMorePhotos}</span>
-              </>
-            )}
-          </button>
         </div>
-        {hasSelection && (
-          <div className="flex items-center gap-2">
-            <ActionPill
-              onClick={handleCreateVideo}
-              variant="video"
-              icon={<Video size={14} strokeWidth={2.25} />}
-              label={t.photos.actionVideo}
-            />
-            <ActionPill
-              onClick={handleAiEnhance}
-              variant="ai"
-              icon={<Wand2 size={14} strokeWidth={2.25} />}
-              label={t.photos.actionAi}
-            />
-            <ActionPill
-              onClick={handleShare}
-              variant="share"
-              icon={<Share2 size={14} strokeWidth={2.25} />}
-              label={t.photos.actionShare}
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {hasSelection && (
+            <>
+              <ActionPill
+                onClick={handleCreateVideo}
+                variant="video"
+                icon={<Video size={14} strokeWidth={2.25} />}
+                label={t.photos.actionVideo}
+              />
+              <ActionPill
+                onClick={handleAiEnhance}
+                variant="ai"
+                icon={<Wand2 size={14} strokeWidth={2.25} />}
+                label={t.photos.actionAi}
+              />
+              <ActionPill
+                onClick={handleShare}
+                variant="share"
+                icon={<Share2 size={14} strokeWidth={2.25} />}
+                label={t.photos.actionShare}
+              />
+            </>
+          )}
+          <ViewModeToggle
+            mode={viewMode}
+            onChange={setViewMode}
+            gridLabel={t.photos.viewGrid}
+            listLabel={t.photos.viewList}
+          />
+        </div>
       </div>
+
+      {viewMode === "list" && (
+        <PhotoListView
+          photos={photos}
+          isReady={isReady}
+          selectedIds={selectedIds}
+          selectedAssetId={selectedAssetId}
+          onTap={(photo) => {
+            if (!isReady(photo)) return;
+            const willSelect = !selectedIds.has(photo.id);
+            toggleSelected(photo.id);
+            if (willSelect) onSelect?.({ id: photo.id, asset_type: "image" });
+          }}
+          onPreview={(photo) =>
+            setPreviewUrl(photo.original_url ?? null)
+          }
+          onDelete={onDelete}
+          deleteLabel={t.photos.deletePhoto}
+          previewLabel={t.photos.preview}
+          deleteShortLabel={t.common.delete}
+          optimisticRoomTypes={optimisticRoomTypes}
+          getRoomType={getRoomType}
+          onRoomTypeChange={handleRoomTypeChange}
+          roomTypeLabels={t.photos.roomTypes}
+          detectingRoomLabel={t.photos.detectingRoom}
+          fallbackRoomLabel={t.photos.roomTag}
+        />
+      )}
 
       <div
         // auto-fill packs as many cells as fit with a sensible min width,
@@ -476,6 +540,7 @@ export function PhotosTab({
         // mobile media query below tightens min-width + gap so we don't waste
         // gutter space on narrow screens.
         className="photos-tab-grid"
+        hidden={viewMode !== "grid"}
       >
         <style>{`
           .photos-tab-grid {
@@ -500,12 +565,12 @@ export function PhotosTab({
           }
           @media (max-width: 640px) {
             .photos-tab-grid {
-              --photos-grid-gap: 8px;
-              --photos-grid-cap: 3;
+              --photos-grid-gap: 10px;
+              --photos-grid-cap: 2;
               grid-template-columns: repeat(
                 auto-fill,
                 minmax(
-                  max(96px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
+                  max(140px, calc((100% - (var(--photos-grid-cap) - 1) * var(--photos-grid-gap)) / var(--photos-grid-cap))),
                   1fr
                 )
               );
@@ -555,10 +620,10 @@ export function PhotosTab({
                   aspectRatio: "1 / 1",
                   borderRadius: 10,
                   border: showRing
-                    ? "2px solid var(--gold)"
+                    ? "2px solid var(--action-video-hi)"
                     : "1px solid var(--line-soft)",
                   boxShadow: showRing
-                    ? "0 0 0 3px oklch(0.66 0.12 75 / 0.18)"
+                    ? "0 0 0 3px var(--action-video-glow)"
                     : undefined,
                   padding: 0,
                   cursor: canAdd ? "pointer" : "default",
@@ -658,7 +723,8 @@ export function PhotosTab({
 
                 {isPicked && (
                   <div
-                    className="pointer-events-none absolute bottom-2 end-2 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--gold)] text-[var(--on-gold)] shadow-md ring-2 ring-white/80"
+                    className="pointer-events-none absolute bottom-2 end-2 z-30 flex h-7 w-7 items-center justify-center rounded-full text-white shadow-md ring-2 ring-white/80"
+                    style={{ background: "var(--action-video-hi)" }}
                     aria-hidden="true"
                   >
                     <Check size={14} strokeWidth={3} />
@@ -731,5 +797,308 @@ export function PhotosTab({
         onClose={() => setPreviewUrl(null)}
       />
     </div>
+  );
+}
+
+function ViewModeToggle({
+  mode,
+  onChange,
+  gridLabel,
+  listLabel,
+}: {
+  mode: ViewMode;
+  onChange: (next: ViewMode) => void;
+  gridLabel: string;
+  listLabel: string;
+}) {
+  const baseBtn =
+    "flex h-7 w-7 items-center justify-center rounded-md transition-colors";
+  return (
+    <div
+      className="flex items-center gap-0.5 rounded-md border border-[var(--line-soft)] bg-[var(--bg-1)] p-0.5"
+      role="group"
+      aria-label="View mode"
+    >
+      <button
+        type="button"
+        onClick={() => onChange("grid")}
+        aria-pressed={mode === "grid"}
+        aria-label={gridLabel}
+        title={gridLabel}
+        className={cn(
+          baseBtn,
+          mode === "grid"
+            ? "bg-[var(--bg-2)] text-[var(--fg-0)]"
+            : "text-[var(--fg-3)] hover:text-[var(--fg-1)]",
+        )}
+      >
+        <LayoutGrid size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("list")}
+        aria-pressed={mode === "list"}
+        aria-label={listLabel}
+        title={listLabel}
+        className={cn(
+          baseBtn,
+          mode === "list"
+            ? "bg-[var(--bg-2)] text-[var(--fg-0)]"
+            : "text-[var(--fg-3)] hover:text-[var(--fg-1)]",
+        )}
+      >
+        <List size={14} />
+      </button>
+    </div>
+  );
+}
+
+function AiCopyTipCard({ onActivate }: { onActivate: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div
+      className="flex items-center gap-3 rounded-2xl px-4 py-3"
+      style={{
+        background: "var(--gold-tint)",
+        border: "1px solid var(--gold-tint-2)",
+      }}
+    >
+      <span
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+        style={{
+          background: "white",
+          color: "var(--gold-lo)",
+          boxShadow: "inset 0 1px 0 oklch(1 0 0 / 0.5)",
+        }}
+        aria-hidden="true"
+      >
+        <Sparkles size={18} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div
+          className="text-[13.5px] font-semibold leading-tight"
+          style={{ color: "var(--fg-0)" }}
+        >
+          {t.photos.aiCopyTipTitle}
+        </div>
+        <div
+          className="mt-0.5 text-[12px] leading-snug"
+          style={{ color: "var(--fg-2)" }}
+        >
+          {t.photos.aiCopyTipBody}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onActivate}
+        className="btn-action shrink-0"
+        data-variant="ai"
+      >
+        <Sparkles size={13} strokeWidth={2.25} />
+        <span>{t.photos.aiCopyTipCta}</span>
+      </button>
+    </div>
+  );
+}
+
+interface PhotoListViewProps {
+  photos: PhotoTabAsset[];
+  isReady: (photo: PhotoTabAsset) => boolean;
+  selectedIds: Set<string>;
+  selectedAssetId?: string | null;
+  onTap: (photo: PhotoTabAsset) => void;
+  onPreview: (photo: PhotoTabAsset) => void;
+  onDelete?: (assetId: string) => void;
+  deleteLabel: string;
+  previewLabel: string;
+  deleteShortLabel: string;
+  optimisticRoomTypes: Record<string, RoomType>;
+  getRoomType: (asset: PhotoTabAsset) => RoomType | null;
+  onRoomTypeChange: (assetId: string, next: RoomType) => void;
+  roomTypeLabels: Record<RoomType, string>;
+  detectingRoomLabel: string;
+  fallbackRoomLabel: string;
+}
+
+function PhotoListView({
+  photos,
+  isReady,
+  selectedIds,
+  selectedAssetId,
+  onTap,
+  onPreview,
+  onDelete,
+  deleteLabel,
+  previewLabel,
+  deleteShortLabel,
+  optimisticRoomTypes,
+  getRoomType,
+  onRoomTypeChange,
+  roomTypeLabels,
+  detectingRoomLabel,
+  fallbackRoomLabel,
+}: PhotoListViewProps) {
+  return (
+    <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+      {photos.map((photo, index) => {
+        const thumbnailUrl =
+          photo.thumbnail_url ?? photo.original_url ?? undefined;
+        const canAdd = isReady(photo);
+        const isPicked = selectedIds.has(photo.id);
+        const isPreview = selectedAssetId === photo.id;
+        const showRing = isPicked || isPreview;
+        const filename =
+          readMetaString(photo, "filename") ??
+          readMetaString(photo, "originalName");
+        const width = readMetaNumber(photo, "width");
+        const height = readMetaNumber(photo, "height");
+        const dimensions =
+          width && height ? `${width}x${height}` : null;
+        const dateText = formatPhotoDate(photo.created_at);
+
+        return (
+          <li key={photo.id}>
+            <div
+              role="button"
+              tabIndex={canAdd ? 0 : -1}
+              aria-pressed={isPicked}
+              onClick={() => onTap(photo)}
+              onKeyDown={(e) => {
+                if (!canAdd) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onTap(photo);
+                }
+              }}
+              className={cn(
+                "flex items-center gap-3 rounded-xl p-2.5",
+                "border bg-[var(--bg-1)] transition-all duration-150",
+                canAdd ? "cursor-pointer" : "cursor-default",
+              )}
+              style={{
+                borderColor: showRing
+                  ? "var(--action-video-hi)"
+                  : "var(--line-soft)",
+                boxShadow: showRing
+                  ? "0 0 0 3px var(--action-video-glow)"
+                  : undefined,
+              }}
+            >
+              <div
+                className="relative shrink-0 overflow-hidden rounded-lg"
+                style={{
+                  width: 64,
+                  height: 64,
+                  background: "var(--bg-2)",
+                }}
+              >
+                {thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={thumbnailUrl}
+                    alt=""
+                    draggable={false}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[var(--fg-3)]">
+                    <ImageIcon size={20} />
+                  </div>
+                )}
+                <div
+                  className="pointer-events-none absolute start-1 top-1 inline-flex h-5 min-w-5 items-center justify-center rounded bg-slate-900/80 px-1 text-[10px] font-semibold text-white shadow-sm backdrop-blur"
+                  aria-hidden="true"
+                >
+                  {index + 1}
+                </div>
+                {isPicked && (
+                  <div
+                    className="pointer-events-none absolute bottom-1 end-1 flex h-5 w-5 items-center justify-center rounded-full text-white shadow-md ring-2 ring-white/80"
+                    style={{ background: "var(--action-video-hi)" }}
+                    aria-hidden="true"
+                  >
+                    <Check size={11} strokeWidth={3} />
+                  </div>
+                )}
+                {photo.status === "processing" && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center"
+                    style={{ background: "rgba(0,0,0,0.45)" }}
+                  >
+                    <Loader2 size={16} className="animate-spin text-white" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div
+                  className="truncate text-[13px] font-medium"
+                  style={{ color: "var(--fg-0)" }}
+                >
+                  <RoomTypePill
+                    current={
+                      optimisticRoomTypes[photo.id] ?? getRoomType(photo)
+                    }
+                    loading={photo.status === "uploaded"}
+                    onChange={(next) => onRoomTypeChange(photo.id, next)}
+                    labels={roomTypeLabels}
+                    detectingLabel={detectingRoomLabel}
+                    fallbackLabel={fallbackRoomLabel}
+                  />
+                </div>
+                {filename && (
+                  <div
+                    className="mt-0.5 truncate text-[11.5px]"
+                    style={{ color: "var(--fg-2)" }}
+                  >
+                    {filename}
+                  </div>
+                )}
+                <div
+                  className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px]"
+                  style={{ color: "var(--fg-3)" }}
+                >
+                  {dateText && <span>{dateText}</span>}
+                  {dimensions && <span className="mono">{dimensions}</span>}
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPreview(photo);
+                  }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--fg-2)] transition-colors hover:bg-[var(--bg-2)] hover:text-[var(--fg-0)]"
+                  aria-label={previewLabel}
+                  title={previewLabel}
+                >
+                  <Eye size={15} />
+                </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(photo.id);
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--fg-3)] transition-colors hover:bg-[oklch(0.55_0.18_25/0.10)] hover:text-[oklch(0.55_0.18_25)]"
+                    aria-label={deleteLabel}
+                    title={deleteShortLabel}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -4,6 +4,7 @@ export const dictionaries = {
   en: {
       common: {
       appName: "reelio",
+      back: "Back",
       cancel: "Cancel",
       close: "Close",
       create: "Create",
@@ -216,6 +217,7 @@ export const dictionaries = {
       placeholder: "Click 'Regenerate' to compose marketing copy...",
       ready: "ready to share",
       regenerate: "Regenerate",
+      createNewCopy: "Create New Copy",
       rooms: "rooms",
       shareCaption: "Share caption",
       stunning: "Stunning",
@@ -342,6 +344,12 @@ export const dictionaries = {
       roomTag: "Room",
       preview: "Preview",
       detectingRoom: "…",
+      viewGrid: "Grid view",
+      viewList: "List view",
+      photosCount: "photos",
+      aiCopyTipTitle: "Want to save time?",
+      aiCopyTipBody: "Use AI Copy to write a description and details in one tap.",
+      aiCopyTipCta: "Create AI Copy",
       roomTypes: {
         bedroom: "Bedroom",
         living_room: "Living room",
@@ -545,6 +553,7 @@ export const dictionaries = {
   he: {
       common: {
       appName: "reelio",
+      back: "חזרה",
       cancel: "ביטול",
       close: "סגור",
       create: "צור",
@@ -757,6 +766,7 @@ export const dictionaries = {
       placeholder: "לחץ על יצירה מחדש כדי לחבר קופי שיווקי...",
       ready: "מוכן לשיתוף",
       regenerate: "צור מחדש",
+      createNewCopy: "צור קופי מחדש",
       rooms: "חדרים",
       shareCaption: "שתף קופי",
       stunning: "נכס מרשים",
@@ -883,6 +893,12 @@ export const dictionaries = {
       roomTag: "חדר",
       preview: "תצוגה",
       detectingRoom: "…",
+      viewGrid: "תצוגת רשת",
+      viewList: "תצוגת רשימה",
+      photosCount: "תמונות",
+      aiCopyTipTitle: "?רוצים לחסוך זמן",
+      aiCopyTipBody: "השתמשו בקופי AI ליצירת תיאור, ופרטים בלחיצה אחת",
+      aiCopyTipCta: "צור קופי AI",
       roomTypes: {
         bedroom: "חדר שינה",
         living_room: "סלון",

@@ -1,13 +1,16 @@
 "use client";
 
-import { Menu, Search, Bell } from "lucide-react";
+import { Menu, Search, Bell, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n/client";
 
-interface HeaderProps {
+export interface HeaderProps {
   onNewProject: () => void;
   onMenuToggle?: () => void;
+  /** When set, mobile shows a back link in place of the hamburger. */
+  backHref?: string;
 }
 
 const ROUTE_KEYS = {
@@ -33,27 +36,70 @@ function routeLabel(
   return "reelio";
 }
 
-export function Header({ onMenuToggle }: HeaderProps) {
+export function Header({ onMenuToggle, backHref }: HeaderProps) {
   const pathname = usePathname() || "/dashboard";
   const { t } = useI18n();
   const label = routeLabel(pathname, t.shell.routes);
 
   return (
     <header
-      className="shrink-0 sticky top-0 z-10 backdrop-blur"
+      className="reelio-header shrink-0 sticky top-0 z-10 backdrop-blur"
       style={{
         height: 52,
         background: "var(--topbar-bg)",
         borderBottom: "1px solid var(--line-soft)",
       }}
     >
-      <div className="h-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        {/* Start (left in LTR): mobile menu + breadcrumb */}
+      <style>{`
+        .reelio-header-wordmark { display: none; }
+        @media (max-width: 640px) {
+          .reelio-header-wordmark {
+            display: inline-flex;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            font-size: 14px;
+            color: var(--gold-lo);
+          }
+        }
+        .reelio-header-back {
+          display: none;
+          align-items: center;
+          gap: 6px;
+          height: 36px;
+          padding: 0 8px;
+          font-size: 13px;
+          color: var(--fg-1);
+          border-radius: 8px;
+          transition: background-color .15s var(--ease);
+        }
+        .reelio-header-back:hover { background: var(--bg-2); }
+        @media (max-width: 640px) {
+          .reelio-header-back { display: inline-flex; }
+        }
+      `}</style>
+      <div className="relative h-full flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+        {/* Start (left in LTR): back-link OR mobile menu + breadcrumb */}
         <div className="flex items-center gap-3">
+          {backHref ? (
+            <Link
+              href={backHref}
+              className="reelio-header-back focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+              aria-label={t.common.back}
+            >
+              <ArrowLeft size={16} className="rtl:rotate-180" />
+              <span>{t.common.back}</span>
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={onMenuToggle}
-            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-md transition-colors duration-150"
+            className={`${
+              backHref ? "hidden lg:flex" : "lg:hidden flex"
+            } items-center justify-center w-9 h-9 rounded-md transition-colors duration-150`}
             style={{ color: "var(--fg-1)" }}
             aria-label={t.shell.toggleNavigation}
           >
@@ -74,6 +120,14 @@ export function Header({ onMenuToggle }: HeaderProps) {
             <span style={{ color: "var(--fg-1)" }}>{label}</span>
           </div>
         </div>
+
+        {/* Centered REELIO wordmark on mobile only */}
+        <span
+          className="reelio-header-wordmark"
+          aria-hidden="true"
+        >
+          {t.common.appName}
+        </span>
 
         {/* End (right in LTR): search + bell */}
         <div className="flex items-center gap-2">
