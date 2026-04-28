@@ -78,19 +78,6 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--bg-0)] px-4 py-8 text-[var(--fg-0)]">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.55]"
-        style={{
-          backgroundImage:
-            "linear-gradient(var(--line-soft) 1px, transparent 1px), linear-gradient(90deg, var(--line-soft) 1px, transparent 1px)",
-          backgroundSize: "56px 56px",
-          maskImage:
-            "linear-gradient(180deg, transparent 0%, black 14%, black 78%, transparent 100%)",
-          WebkitMaskImage:
-            "linear-gradient(180deg, transparent 0%, black 14%, black 78%, transparent 100%)",
-        }}
-      />
-
       <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full min-w-0 max-w-6xl flex-col">
         <header className="flex min-w-0 items-center justify-between gap-4">
           <Link
@@ -101,10 +88,10 @@ export default function LoginPage() {
             <Image
               src="/brand/reelio-logo-for-light.png"
               alt={t.common.appName}
-              width={177}
-              height={50}
+              width={221}
+              height={62}
               priority
-              className="h-auto w-[116px] sm:w-[156px]"
+              className="h-auto w-[148px] sm:w-[190px]"
             />
           </Link>
           <div className="shrink-0">
