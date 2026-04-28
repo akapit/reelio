@@ -147,7 +147,7 @@ export default function PropertiesPage() {
               className="btn-generate flex-shrink-0"
               style={{ height: 36 }}
             >
-              <Plus size={14} /> {t.common.new}
+              {t.common.new}
             </button>
           </div>
         </section>
@@ -266,12 +266,11 @@ export default function PropertiesPage() {
             {!searchQuery && (
               <Button
                 variant="primary"
-                size="sm"
-                onClick={() => setModalOpen(true)}
-              >
-                <Plus size={14} />
-                {t.shell.newReel}
-              </Button>
+              size="sm"
+              onClick={() => setModalOpen(true)}
+            >
+              {t.shell.newReel}
+            </Button>
             )}
           </motion.div>
         )}

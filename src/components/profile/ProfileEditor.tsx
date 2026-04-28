@@ -34,6 +34,7 @@ const FIELD_KEYS: (keyof ProfileFields)[] = [
 ];
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+const PROFILE_UPDATED_EVENT = "reelio:profile-updated";
 
 async function uploadFile(file: File): Promise<string> {
   const presignRes = await fetch("/api/upload-url", {
@@ -59,6 +60,7 @@ export function ProfileEditor({ email, initial, plan }: Props) {
   const { t, dir } = useI18n();
   const router = useRouter();
   const [fields, setFields] = useState<ProfileFields>(initial);
+  const [baseline, setBaseline] = useState<ProfileFields>(initial);
   const [save, setSave] = useState<SaveState>("idle");
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [watermarkBusy, setWatermarkBusy] = useState(false);
@@ -67,8 +69,8 @@ export function ProfileEditor({ email, initial, plan }: Props) {
   const watermarkInputRef = useRef<HTMLInputElement>(null);
 
   const isDirty = useMemo(
-    () => FIELD_KEYS.some((k) => (fields[k] ?? "") !== (initial[k] ?? "")),
-    [fields, initial],
+    () => FIELD_KEYS.some((k) => (fields[k] ?? "") !== (baseline[k] ?? "")),
+    [fields, baseline],
   );
 
   const planLabel = !plan || plan === "free" ? t.profile.free : plan;
@@ -90,6 +92,31 @@ export function ProfileEditor({ email, initial, plan }: Props) {
         body: JSON.stringify(fields),
       });
       if (!res.ok) throw new Error("save failed");
+      const json = (await res.json()) as { profile: Partial<ProfileFields> | null };
+      const persisted: ProfileFields = {
+        full_name: json.profile?.full_name ?? "",
+        headline: json.profile?.headline ?? "",
+        tagline: json.profile?.tagline ?? "",
+        avatar_url: json.profile?.avatar_url ?? "",
+        watermark_url: json.profile?.watermark_url ?? "",
+        instagram_handle: json.profile?.instagram_handle ?? "",
+        tiktok_handle: json.profile?.tiktok_handle ?? "",
+        youtube_handle: json.profile?.youtube_handle ?? "",
+      };
+      setFields(persisted);
+      setBaseline(persisted);
+      window.dispatchEvent(
+        new CustomEvent(PROFILE_UPDATED_EVENT, {
+          detail: {
+            profile: {
+              full_name: persisted.full_name || null,
+              avatar_url: persisted.avatar_url || null,
+              email,
+              plan,
+            },
+          },
+        }),
+      );
       setSave("saved");
       router.refresh();
     } catch {

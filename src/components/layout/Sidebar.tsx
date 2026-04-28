@@ -21,6 +21,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { createClient } from "@/lib/supabase/client";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+const PROFILE_UPDATED_EVENT = "reelio:profile-updated";
 
 const navItems = [
   { labelKey: "home", href: "/dashboard", icon: HomeIcon, exact: true, disabled: false },
@@ -78,20 +79,19 @@ export function Sidebar({
     plan: string | null;
   } | null>(null);
 
-  useEffect(() => {
-    const supabase = createClient();
-    let cancelled = false;
-    (async () => {
+  const loadProfile = useCallback(
+    async (cancelled?: () => boolean) => {
+      const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      if (!user || cancelled?.()) return;
       const { data } = await supabase
         .from("profiles")
         .select("full_name, avatar_url, plan")
         .eq("id", user.id)
         .maybeSingle();
-      if (cancelled) return;
+      if (cancelled?.()) return;
       const metadata = user.user_metadata as {
         full_name?: string;
         name?: string;
@@ -112,11 +112,47 @@ export function Sidebar({
         email: user.email ?? null,
         plan: (data?.plan as string | null) ?? null,
       });
-    })();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    loadProfile(() => cancelled);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadProfile]);
+
+  useEffect(() => {
+    const handleProfileUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        profile?: {
+          full_name?: string | null;
+          avatar_url?: string | null;
+          email?: string | null;
+          plan?: string | null;
+        };
+      }>).detail;
+
+      if (detail?.profile) {
+        setProfile((prev) => ({
+          full_name: detail.profile?.full_name ?? null,
+          avatar_url: detail.profile?.avatar_url ?? null,
+          email: detail.profile?.email ?? prev?.email ?? null,
+          plan: detail.profile?.plan ?? null,
+        }));
+        return;
+      }
+
+      loadProfile();
+    };
+
+    window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileUpdated);
+    };
+  }, [loadProfile]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -435,7 +471,7 @@ export function Sidebar({
 
       {/* Credits widget — hidden in collapsed mode */}
       {!collapsed && (
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-6">
           <div
             style={{
               padding: 12,
@@ -517,8 +553,8 @@ export function Sidebar({
         >
           <div
             style={{
-              width: 28,
-              height: 28,
+              width: collapsed ? 30 : 34,
+              height: collapsed ? 30 : 34,
               borderRadius: 999,
               background: profileAvatarUrl
                 ? `center / cover no-repeat url("${profileAvatarUrl}")`
@@ -528,12 +564,12 @@ export function Sidebar({
               alignItems: "center",
               justifyContent: "center",
               fontFamily: "var(--font-display)",
-              fontSize: 14,
+              fontSize: collapsed ? 14 : 16,
               color: "var(--on-gold)",
               flexShrink: 0,
             }}
           >
-            {!profileAvatarUrl && <User size={13} />}
+            {!profileAvatarUrl && <User size={collapsed ? 13 : 15} />}
           </div>
           {!collapsed && (
             <div

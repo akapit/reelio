@@ -176,13 +176,7 @@ export default function DashboardPage() {
               onClick={() => setModalOpen(true)}
               className="btn-generate"
             >
-              <Plus size={13} /> {t.shell.newReel}
-              <span
-                className="mono"
-                style={{ opacity: 0.55, fontSize: 12, marginInlineStart: 4 }}
-              >
-                ⌘N
-              </span>
+              {t.shell.newReel}
             </button>
           </div>
         </section>

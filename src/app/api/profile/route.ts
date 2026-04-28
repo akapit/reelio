@@ -49,8 +49,7 @@ export async function PATCH(request: Request) {
 
   const { data, error } = await supabase
     .from("profiles")
-    .update(patch)
-    .eq("id", auth.user.id)
+    .upsert({ id: auth.user.id, ...patch }, { onConflict: "id" })
     .select(
       "id, full_name, avatar_url, plan, created_at, language, headline, tagline, watermark_url, instagram_handle, tiktok_handle, youtube_handle",
     )
@@ -58,6 +57,13 @@ export async function PATCH(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    return NextResponse.json(
+      { error: "Profile row was not persisted" },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ profile: data });
