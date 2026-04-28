@@ -47,9 +47,11 @@ export const dictionaries = {
     },
     shell: {
       collapseSidebar: "Collapse sidebar",
+      billing: "Billing",
       comingSoon: "Coming soon",
       credits: "credits",
       expandSidebar: "Expand sidebar",
+      logout: "Log out",
       navigation: "Navigation",
       newReel: "New property",
       notifications: "Notifications",
@@ -57,6 +59,7 @@ export const dictionaries = {
       primary: "Primary",
       profile: "Profile",
       recent: "Recent",
+      settings: "Settings",
       toggleNavigation: "Toggle navigation",
       workspace: "Workspace",
       routes: {
@@ -597,9 +600,11 @@ export const dictionaries = {
     },
     shell: {
       collapseSidebar: "כווץ תפריט",
+      billing: "מנוי",
       comingSoon: "בקרוב",
       credits: "קרדיטים",
       expandSidebar: "פתח תפריט",
+      logout: "התנתק",
       navigation: "ניווט",
       newReel: "נכס חדש",
       notifications: "התראות",
@@ -607,6 +612,7 @@ export const dictionaries = {
       primary: "ראשי",
       profile: "פרופיל",
       recent: "אחרונים",
+      settings: "הגדרות",
       toggleNavigation: "פתח ניווט",
       workspace: "סביבת עבודה",
       routes: {

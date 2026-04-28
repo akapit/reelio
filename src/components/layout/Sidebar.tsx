@@ -3,12 +3,15 @@
 import { useEffect, useCallback, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  CreditCard,
   Home as HomeIcon,
   LayoutGrid,
   LayoutTemplate,
+  LogOut,
+  Settings,
   X,
   User,
   ChevronLeft,
@@ -64,6 +67,7 @@ export function Sidebar({
   onNewProject,
 }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: rows } = useProperties();
   const { t, dir } = useI18n();
   const recent = (rows ?? []).slice(0, 3) as Array<{
@@ -78,6 +82,7 @@ export function Sidebar({
     email: string | null;
     plan: string | null;
   } | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   const loadProfile = useCallback(
     async (cancelled?: () => boolean) => {
@@ -118,7 +123,7 @@ export function Sidebar({
 
   useEffect(() => {
     let cancelled = false;
-    loadProfile(() => cancelled);
+    void Promise.resolve().then(() => loadProfile(() => cancelled));
     return () => {
       cancelled = true;
     };
@@ -156,21 +161,50 @@ export function Sidebar({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (accountMenuOpen) {
+        setAccountMenuOpen(false);
+        return;
+      }
+      onClose();
     },
-    [onClose],
+    [accountMenuOpen, onClose],
   );
 
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
+    if (!isOpen && !accountMenuOpen) return;
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [accountMenuOpen, isOpen, handleKeyDown]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-account-menu-root]")
+      ) {
+        return;
+      }
+      setAccountMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [accountMenuOpen]);
 
   function isActive(href: string, exact: boolean) {
     if (exact) return pathname === href;
     return pathname.startsWith(href);
+  }
+
+  async function handleSignOut() {
+    setAccountMenuOpen(false);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    onClose();
+    router.push("/login");
+    router.refresh();
   }
 
   // Sidebar uses dark warm-charcoal even in light theme — mirrors the design.
@@ -201,6 +235,7 @@ export function Sidebar({
     : dir === "rtl"
       ? ChevronRight
       : ChevronLeft;
+  const mobileDrawerClosedX = dir === "rtl" ? "100%" : "-100%";
 
   // `collapsed` only applies to the desktop rail (the mobile drawer always
   // shows full content since it's a slide-over). We render the same component
@@ -532,11 +567,96 @@ export function Sidebar({
         </div>
       )}
 
-      {/* User pill — links to /dashboard/profile */}
-      <div className={cn("shrink-0", collapsed ? "px-2 pb-3" : "px-3 pb-3")}>
-        <Link
-          href="/dashboard/profile"
-          onClick={onClose}
+      {/* User pill */}
+      <div
+        className={cn("relative shrink-0", collapsed ? "px-2 pb-3" : "px-3 pb-3")}
+        data-account-menu-root
+      >
+        <AnimatePresence>
+          {accountMenuOpen && (
+            <motion.div
+              key="account-menu"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.14, ease: EASE_OUT }}
+              className={cn(
+                "z-[70] w-[216px] overflow-hidden rounded-lg border p-1 shadow-2xl",
+                collapsed ? "fixed" : "absolute",
+              )}
+              style={{
+                insetInlineStart: collapsed ? 72 : 12,
+                bottom: collapsed ? 58 : "calc(100% + 8px)",
+                background: "var(--bg-1)",
+                borderColor: "var(--line-soft)",
+                boxShadow:
+                  "0 18px 50px -22px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(255 255 255 / 0.05)",
+              }}
+              role="menu"
+              aria-label={profileName}
+            >
+              <Link
+                href="/dashboard/profile"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onClose();
+                }}
+                className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-150 hover:bg-[var(--bg-2)]"
+                style={{ color: "var(--fg-1)" }}
+                role="menuitem"
+              >
+                <User size={14} />
+                <span>{t.shell.profile}</span>
+              </Link>
+              <Link
+                href="#"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onClose();
+                }}
+                className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-150 hover:bg-[var(--bg-2)]"
+                style={{ color: "var(--fg-1)" }}
+                role="menuitem"
+              >
+                <CreditCard size={14} />
+                <span>{t.shell.billing}</span>
+              </Link>
+              <Link
+                href="#"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  onClose();
+                }}
+                className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-150 hover:bg-[var(--bg-2)]"
+                style={{ color: "var(--fg-1)" }}
+                role="menuitem"
+              >
+                <Settings size={14} />
+                <span>{t.shell.settings}</span>
+              </Link>
+              <div
+                className="my-1 h-px"
+                style={{ background: "var(--line-soft)" }}
+              />
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-start text-[13px] transition-colors duration-150 hover:bg-[var(--bg-2)]"
+                style={{ color: "var(--fg-1)" }}
+                role="menuitem"
+              >
+                <LogOut size={14} />
+                <span>{t.shell.logout}</span>
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <button
+          type="button"
+          onClick={() => setAccountMenuOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={accountMenuOpen}
           aria-label={profileName}
           title={collapsed ? profileName : undefined}
           className={cn(
@@ -603,7 +723,7 @@ export function Sidebar({
               </div>
             </div>
           )}
-        </Link>
+        </button>
       </div>
     </>
   );
@@ -645,9 +765,9 @@ export function Sidebar({
 
             <motion.aside
               key="sidebar-drawer"
-              initial={{ x: "-100%" }}
+              initial={{ x: mobileDrawerClosedX }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              exit={{ x: mobileDrawerClosedX }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
               className="fixed top-0 z-50 lg:hidden h-screen w-[240px] flex flex-col shadow-xl"
               style={{ ...sidebarStyle, insetInlineStart: 0 }}
