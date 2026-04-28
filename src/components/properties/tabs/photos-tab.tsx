@@ -5,16 +5,22 @@ import {
   Check,
   Eye,
   Image as ImageIcon,
+  Loader2,
+  Plus,
   Share2,
   Trash2,
+  Upload,
   Video,
   Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
 import { useI18n } from "@/lib/i18n/client";
+import { useUpload } from "@/hooks/use-upload";
 import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
 import { ImagePreviewModal } from "@/components/properties/modals/image-preview-modal";
+
+const ACCEPTED_FILE_TYPES = "image/*,video/*";
 
 interface PhotoTabAsset {
   id: string;
@@ -236,6 +242,19 @@ export function PhotosTab({
     Record<string, RoomType>
   >({});
 
+  const upload = useUpload(projectId);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const isUploading = upload.isPending;
+
+  const openFilePicker = () => uploadInputRef.current?.click();
+
+  const handleFilesPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => upload.mutate(file));
+    e.target.value = "";
+  };
+
   const handleRoomTypeChange = (assetId: string, next: RoomType) => {
     setOptimisticRoomTypes((prev) => ({ ...prev, [assetId]: next }));
     fetch("/api/assets/room-type", {
@@ -315,6 +334,15 @@ export function PhotosTab({
           padding: "56px 0",
         }}
       >
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept={ACCEPTED_FILE_TYPES}
+          multiple
+          className="sr-only"
+          onChange={handleFilesPicked}
+          disabled={isUploading}
+        />
         <div
           style={{
             width: 56,
@@ -346,6 +374,25 @@ export function PhotosTab({
         >
           {t.photos.emptyHint}
         </p>
+        <button
+          type="button"
+          onClick={openFilePicker}
+          disabled={isUploading}
+          className="btn-generate"
+          style={{ marginTop: 4 }}
+        >
+          {isUploading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              {t.photos.uploading}
+            </>
+          ) : (
+            <>
+              <Upload size={14} />
+              {t.photos.uploadPhotos}
+            </>
+          )}
+        </button>
       </div>
     );
   }
@@ -354,14 +401,50 @@ export function PhotosTab({
 
   return (
     <div className="space-y-3">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept={ACCEPTED_FILE_TYPES}
+        multiple
+        className="sr-only"
+        onChange={handleFilesPicked}
+        disabled={isUploading}
+      />
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-1 py-1"
         role="toolbar"
         aria-label={t.photos.sourceActions}
       >
-        <h3 className="text-sm font-semibold text-[var(--fg-0)]">
-          {t.photos.uploadedHeading}
-        </h3>
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="text-sm font-semibold text-[var(--fg-0)]">
+            {t.photos.uploadedHeading}
+          </h3>
+          <button
+            type="button"
+            onClick={openFilePicker}
+            disabled={isUploading}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border border-[var(--line-soft)]",
+              "bg-[var(--bg-1)] px-2.5 py-1 text-[12px] text-[var(--fg-1)]",
+              "transition-colors duration-150",
+              "hover:border-[var(--gold)]/60 hover:text-[var(--fg-0)]",
+              "disabled:opacity-60 disabled:cursor-not-allowed",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+            )}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 size={12} className="animate-spin" />
+                <span>{t.photos.uploading}</span>
+              </>
+            ) : (
+              <>
+                <Plus size={12} />
+                <span>{t.photos.addMorePhotos}</span>
+              </>
+            )}
+          </button>
+        </div>
         {hasSelection && (
           <div className="flex items-center gap-2">
             <ActionPill
