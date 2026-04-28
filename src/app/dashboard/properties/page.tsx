@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Building2, Plus, Search } from "lucide-react";
+import { Building2, Search } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/properties/property-card";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
