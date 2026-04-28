@@ -58,6 +58,26 @@ export const dictionaries = {
       resetLinkInvalid: "Reset link expired or invalid. Try again.",
       backToSignIn: "Back to sign in",
     },
+    legal: {
+      privacyTitle: "Privacy Policy",
+      privacyLink: "Privacy Policy",
+      termsTitle: "Terms of Use",
+      termsLink: "Terms of Use",
+      lastUpdated: "Last updated",
+      version: "Version",
+      loginDisclosure: "By signing in, you agree to our {terms} and {privacy}.",
+      signupDisclosure: "By creating an account, you agree to our {terms} and {privacy}.",
+      notLegalAdvice:
+        "This document is provided for transparency and is not legal advice. For specific questions, consult a qualified attorney.",
+      cookieTitle: "Cookies on reelio",
+      cookieMessage:
+        "We use cookies to keep you signed in, remember your language, and understand how the service is used. You can accept or decline non-essential cookies.",
+      cookieAccept: "Accept",
+      cookieDecline: "Decline",
+      cookieLearnMore: "Learn more",
+      termsAcceptLabel: "I have read and agree to the {terms} and the {privacy}.",
+      termsRequired: "You must agree to the Terms and Privacy Policy to create an account.",
+    },
     shell: {
       collapseSidebar: "Collapse sidebar",
       billing: "Billing",
@@ -623,6 +643,26 @@ export const dictionaries = {
       passwordUpdated: "הסיסמה עודכנה",
       resetLinkInvalid: "קישור האיפוס פג תוקף או אינו תקין. נסה שוב.",
       backToSignIn: "חזרה להתחברות",
+    },
+    legal: {
+      privacyTitle: "מדיניות פרטיות",
+      privacyLink: "מדיניות הפרטיות",
+      termsTitle: "תנאי שימוש",
+      termsLink: "תנאי השימוש",
+      lastUpdated: "עודכן לאחרונה",
+      version: "גרסה",
+      loginDisclosure: "בהתחברות, אתה מסכים/ה ל{terms} ול{privacy} שלנו.",
+      signupDisclosure: "ביצירת חשבון, אתה מסכים/ה ל{terms} ול{privacy} שלנו.",
+      notLegalAdvice:
+        "מסמך זה מסופק לצורך שקיפות ואינו מהווה ייעוץ משפטי. לשאלות פרטניות יש להתייעץ עם עורך/ת דין מוסמך/ת.",
+      cookieTitle: "עוגיות ב-reelio",
+      cookieMessage:
+        "אנו משתמשים בעוגיות כדי לשמור על הסשן שלך, לזכור את העדפת השפה ולהבין כיצד השירות נמצא בשימוש. ניתן לאשר או לדחות עוגיות שאינן הכרחיות.",
+      cookieAccept: "אישור",
+      cookieDecline: "דחייה",
+      cookieLearnMore: "מידע נוסף",
+      termsAcceptLabel: "קראתי ואני מסכים/ה ל{terms} ול{privacy}.",
+      termsRequired: "יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי ליצור חשבון.",
     },
     shell: {
       collapseSidebar: "כווץ תפריט",

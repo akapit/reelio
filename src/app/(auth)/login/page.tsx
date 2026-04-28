@@ -209,6 +209,36 @@ export default function LoginPage() {
                 {t.auth.signupCta}
               </Link>
             </p>
+
+            <p className="mt-3 text-center text-xs text-[var(--color-muted)]">
+              {t.legal.loginDisclosure
+                .split(/(\{terms\}|\{privacy\})/)
+                .map((part, i) => {
+                  if (part === "{terms}") {
+                    return (
+                      <Link
+                        key={i}
+                        href="/terms"
+                        className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                      >
+                        {t.legal.termsLink}
+                      </Link>
+                    );
+                  }
+                  if (part === "{privacy}") {
+                    return (
+                      <Link
+                        key={i}
+                        href="/privacy"
+                        className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                      >
+                        {t.legal.privacyLink}
+                      </Link>
+                    );
+                  }
+                  return <span key={i}>{part}</span>;
+                })}
+            </p>
           </motion.div>
         </main>
       </div>

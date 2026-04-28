@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { CookieConsent } from "@/components/legal/CookieConsent";
 import { dirForLocale } from "@/lib/i18n/config";
 import { getRequestLocale } from "@/lib/i18n/server";
 
@@ -32,7 +33,10 @@ async function RootLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <html lang={locale} dir={dir} className={heebo.variable}>
       <body className="min-h-screen antialiased font-heebo">
-        <Providers initialLocale={locale}>{children}</Providers>
+        <Providers initialLocale={locale}>
+          {children}
+          <CookieConsent />
+        </Providers>
       </body>
     </html>
   );

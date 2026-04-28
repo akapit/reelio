@@ -17,12 +17,14 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const { t } = useI18n();
   const [errors, setErrors] = useState<{
     fullName?: string;
     email?: string;
     password?: string;
+    terms?: string;
   }>({});
 
   function validate() {
@@ -34,6 +36,7 @@ export default function SignupPage() {
     if (!password) next.password = t.auth.required;
     else if (password.length < 8)
       next.password = t.auth.passwordTooShort;
+    if (!termsAccepted) next.terms = t.legal.termsRequired;
     return next;
   }
 
@@ -131,6 +134,65 @@ export default function SignupPage() {
               disabled={loading}
             />
 
+            <div className="flex flex-col gap-1.5">
+              <label className="flex items-start gap-2.5 cursor-pointer text-sm leading-snug text-[var(--color-foreground)]">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => {
+                    setTermsAccepted(e.target.checked);
+                    if (e.target.checked && errors.terms) {
+                      setErrors((prev) => ({ ...prev, terms: undefined }));
+                    }
+                  }}
+                  disabled={loading}
+                  aria-invalid={errors.terms ? true : undefined}
+                  aria-describedby={errors.terms ? "terms-error" : undefined}
+                  className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+                <span>
+                  {t.legal.termsAcceptLabel
+                    .split(/(\{terms\}|\{privacy\})/)
+                    .map((part, i) => {
+                      if (part === "{terms}") {
+                        return (
+                          <Link
+                            key={i}
+                            href="/terms"
+                            target="_blank"
+                            className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                          >
+                            {t.legal.termsLink}
+                          </Link>
+                        );
+                      }
+                      if (part === "{privacy}") {
+                        return (
+                          <Link
+                            key={i}
+                            href="/privacy"
+                            target="_blank"
+                            className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                          >
+                            {t.legal.privacyLink}
+                          </Link>
+                        );
+                      }
+                      return <span key={i}>{part}</span>;
+                    })}
+                </span>
+              </label>
+              {errors.terms && (
+                <p
+                  id="terms-error"
+                  role="alert"
+                  className="text-xs text-red-400 leading-snug"
+                >
+                  {errors.terms}
+                </p>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="primary"
@@ -159,6 +221,36 @@ export default function SignupPage() {
           >
             {t.auth.loginCta}
           </Link>
+        </p>
+
+        <p className="mt-3 text-center text-xs text-[var(--color-muted)]">
+          {t.legal.signupDisclosure
+            .split(/(\{terms\}|\{privacy\})/)
+            .map((part, i) => {
+              if (part === "{terms}") {
+                return (
+                  <Link
+                    key={i}
+                    href="/terms"
+                    className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                  >
+                    {t.legal.termsLink}
+                  </Link>
+                );
+              }
+              if (part === "{privacy}") {
+                return (
+                  <Link
+                    key={i}
+                    href="/privacy"
+                    className="text-[var(--color-foreground)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                  >
+                    {t.legal.privacyLink}
+                  </Link>
+                );
+              }
+              return <span key={i}>{part}</span>;
+            })}
         </p>
       </motion.div>
     </div>
