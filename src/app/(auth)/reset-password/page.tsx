@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -12,35 +11,39 @@ import { Input } from "@/components/ui/input";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n/client";
 
-export default function LoginPage() {
+export default function ResetPasswordPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const { t } = useI18n();
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
-    {}
-  );
+  const [errors, setErrors] = useState<{
+    password?: string;
+    confirmPassword?: string;
+  }>({});
 
-  // Surface one-shot messages from query params (e.g. when /auth/callback
-  // bounces a tampered or expired reset link back here).
-  const handledMessage = useRef<string | null>(null);
+  // Anyone reaching this page directly (without going through the email link
+  // → /auth/callback) won't have a session — there's nothing to update, so
+  // bounce them to /forgot-password.
   useEffect(() => {
-    const message = searchParams.get("message");
-    if (!message || handledMessage.current === message) return;
-    handledMessage.current = message;
-    if (message === "reset-link-invalid") {
-      toast.error(t.auth.resetLinkInvalid);
-    }
-  }, [searchParams, t]);
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        router.replace("/forgot-password");
+        return;
+      }
+      setCheckingSession(false);
+    });
+  }, [router]);
 
   function validate() {
     const next: typeof errors = {};
-    if (!email.trim()) next.email = t.auth.required;
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = t.auth.invalidEmail;
     if (!password) next.password = t.auth.required;
+    else if (password.length < 8) next.password = t.auth.passwordTooShort;
+    if (!confirmPassword) next.confirmPassword = t.auth.required;
+    else if (password && confirmPassword !== password)
+      next.confirmPassword = t.auth.passwordMismatch;
     return next;
   }
 
@@ -56,16 +59,14 @@ export default function LoginPage() {
 
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
         toast.error(error.message);
         return;
       }
 
+      toast.success(t.auth.passwordUpdated);
       router.push("/dashboard/properties");
       router.refresh();
     } catch {
@@ -73,6 +74,17 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-16 bg-[var(--color-background)]">
+        <Loader2
+          size={24}
+          className="animate-spin text-[var(--color-muted)]"
+        />
+      </div>
+    );
   }
 
   return (
@@ -95,7 +107,7 @@ export default function LoginPage() {
             reelio
           </span>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            {t.auth.loginPrompt}
+            {t.auth.resetPasswordPrompt}
           </p>
         </div>
 
@@ -103,35 +115,26 @@ export default function LoginPage() {
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
-              label={t.auth.email}
-              type="email"
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={errors.email}
-              disabled={loading}
-            />
-
-            <Input
-              label={t.auth.password}
+              label={t.auth.newPassword}
               type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
+              autoComplete="new-password"
+              placeholder={t.auth.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={errors.password}
               disabled={loading}
             />
 
-            <div className="-mt-2 text-end">
-              <Link
-                href="/forgot-password"
-                className="text-xs text-[var(--color-muted)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
-              >
-                {t.auth.forgotPassword}
-              </Link>
-            </div>
+            <Input
+              label={t.auth.confirmPassword}
+              type="password"
+              autoComplete="new-password"
+              placeholder={t.auth.passwordPlaceholder}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              error={errors.confirmPassword}
+              disabled={loading}
+            />
 
             <Button
               type="submit"
@@ -146,22 +149,11 @@ export default function LoginPage() {
                   {t.common.loading}
                 </>
               ) : (
-                t.auth.loginCta
+                t.auth.updatePassword
               )}
             </Button>
           </form>
         </div>
-
-        {/* Footer link */}
-        <p className="text-center text-sm text-[var(--color-muted)] mt-6">
-          {t.auth.loginFooter}{" "}
-          <Link
-            href="/signup"
-            className="text-[var(--color-foreground)] hover:text-[var(--color-accent)] transition-colors duration-150 underline underline-offset-2"
-          >
-            {t.auth.signupCta}
-          </Link>
-        </p>
       </motion.div>
     </div>
   );
