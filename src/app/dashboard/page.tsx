@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { Sparkles, ArrowRight, LayoutGrid } from "lucide-react";
+import { ArrowRight, Building2, LayoutGrid, Plus } from "lucide-react";
 import { useProperties } from "@/hooks/use-properties";
 import { PropertyCard } from "@/components/properties/property-card";
 import { CreatePropertyModal } from "@/components/properties/CreatePropertyModal";
@@ -176,7 +176,7 @@ export default function DashboardPage() {
               onClick={() => setModalOpen(true)}
               className="btn-generate"
             >
-              <Sparkles size={13} /> {t.shell.newReel}
+              <Plus size={13} /> {t.shell.newReel}
               <span
                 className="mono"
                 style={{ opacity: 0.55, fontSize: 12, marginInlineStart: 4 }}
@@ -245,7 +245,7 @@ export default function DashboardPage() {
                   border: "1px solid var(--gold-tint-2)",
                 }}
               >
-                <Sparkles size={18} style={{ color: "var(--gold-hi)" }} />
+                <Building2 size={18} style={{ color: "var(--gold-hi)" }} />
               </div>
               <p
                 className="serif"
@@ -263,7 +263,7 @@ export default function DashboardPage() {
                 className="btn-generate"
                 style={{ height: 32, fontSize: 12.5, padding: "0 14px" }}
               >
-                <Sparkles size={12} /> {t.dashboard.composeFirst}
+                <Plus size={12} /> {t.dashboard.composeFirst}
               </button>
             </div>
           )}

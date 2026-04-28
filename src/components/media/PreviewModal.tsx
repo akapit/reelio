@@ -10,9 +10,9 @@ import {
   Mic,
   Music,
   RotateCcw,
-  Sparkles,
   Upload,
   Video,
+  Wand2,
   X,
   XCircle,
 } from "lucide-react";
@@ -437,7 +437,7 @@ export function PreviewModal({
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-[var(--color-muted)]">
                     {modelLabel && (
                       <div className="inline-flex items-center gap-1.5">
-                        <Sparkles size={12} className="text-[var(--color-accent)]" />
+                        <Video size={12} className="text-[var(--color-accent)]" />
                         <span className="text-[var(--color-foreground)] font-medium">
                           {modelLabel}
                         </span>
@@ -481,7 +481,7 @@ export function PreviewModal({
                         className="inline-flex items-center gap-1.5"
                         title={effectTitle}
                       >
-                        <Sparkles size={12} />
+                        <Wand2 size={12} />
                         <span className="text-[var(--color-foreground)] font-medium">
                           {previewText.effect}: {effectName}
                         </span>

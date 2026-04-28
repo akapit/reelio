@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, DragEvent, ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Upload, Sparkles, ArrowRight, Plus } from "lucide-react";
+import { Upload, ArrowRight, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useCreateProperty } from "@/hooks/use-properties";
@@ -543,7 +543,6 @@ export default function UploadPage() {
               gap: 8,
             }}
           >
-            <Sparkles size={15} />
             {submitting ? "Generating…" : "Generate reel"}
             <ArrowRight size={14} />
           </button>

@@ -6,9 +6,9 @@ import {
   Eye,
   Image as ImageIcon,
   Share2,
-  Sparkles,
   Trash2,
   Video,
+  Wand2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset } from "@/components/properties/property-detail";
@@ -373,7 +373,7 @@ export function PhotosTab({
             <ActionPill
               onClick={handleAiEnhance}
               variant="ai"
-              icon={<Sparkles size={14} strokeWidth={2.25} />}
+              icon={<Wand2 size={14} strokeWidth={2.25} />}
               label={t.photos.actionAi}
             />
             <ActionPill

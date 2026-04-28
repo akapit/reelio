@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles, Copy, Share2, Check } from "lucide-react";
+import { RefreshCw, Copy, Share2, Check } from "lucide-react";
 import type { PropertyData } from "../property-detail";
 import { useI18n } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
@@ -139,7 +139,7 @@ export function CopyTab({ data }: CopyTabProps) {
           className="btn-generate"
           style={{ height: 36 }}
         >
-          <Sparkles size={13} /> {t.copy.regenerate}
+          <RefreshCw size={13} /> {t.copy.regenerate}
         </button>
       </div>
 
