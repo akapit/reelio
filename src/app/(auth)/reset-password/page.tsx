@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { toast } from "sonner";
@@ -95,23 +96,20 @@ export default function ResetPasswordPage() {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="w-full max-w-sm"
       >
-        {/* Wordmark */}
         <div className="text-center mb-8">
-          <div className="mb-5 flex justify-center">
-            <LanguageSwitcher />
-          </div>
-          <span
-            className="text-4xl font-medium tracking-[0.06em] text-[var(--color-accent)]"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            reelio
-          </span>
-          <p className="mt-2 text-sm text-[var(--color-muted)]">
+          <Image
+            src="/brand/reelio-logo-for-light.png"
+            alt={t.common.appName}
+            width={221}
+            height={62}
+            priority
+            className="mx-auto h-auto w-[190px]"
+          />
+          <p className="mt-4 text-sm text-[var(--color-muted)]">
             {t.auth.resetPasswordPrompt}
           </p>
         </div>
 
-        {/* Card */}
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)]">
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
@@ -153,6 +151,10 @@ export default function ResetPasswordPage() {
               )}
             </Button>
           </form>
+        </div>
+
+        <div className="mt-5 flex justify-center">
+          <LanguageSwitcher />
         </div>
       </motion.div>
     </div>
