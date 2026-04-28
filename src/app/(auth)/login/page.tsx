@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { useI18n } from "@/lib/i18n/client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,6 +23,18 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {}
   );
+
+  // Surface one-shot messages from query params (e.g. when /auth/callback
+  // bounces a tampered or expired reset link back here).
+  const handledMessage = useRef<string | null>(null);
+  useEffect(() => {
+    const message = searchParams.get("message");
+    if (!message || handledMessage.current === message) return;
+    handledMessage.current = message;
+    if (message === "reset-link-invalid") {
+      toast.error(t.auth.resetLinkInvalid);
+    }
+  }, [searchParams, t]);
 
   function validate() {
     const next: typeof errors = {};
@@ -171,6 +184,15 @@ export default function LoginPage() {
                   error={errors.password}
                   disabled={loading}
                 />
+
+                <div className="-mt-2 text-end">
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-[var(--color-muted)] underline underline-offset-2 transition-colors duration-150 hover:text-[var(--color-accent)]"
+                  >
+                    {t.auth.forgotPassword}
+                  </Link>
+                </div>
 
                 <Button
                   type="submit"
