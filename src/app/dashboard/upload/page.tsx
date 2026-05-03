@@ -611,6 +611,13 @@ export default function UploadPage() {
       <VideoGenerationOptionsModal
         isOpen={videoOptionsOpen}
         imageCount={files.length}
+        imageLabels={files.map((file) => file.label)}
+        propertyContext={{
+          title: meta.title,
+          address: meta.addr,
+          price: meta.price,
+          template: meta.template,
+        }}
         onClose={() => {
           if (!submitting) setVideoOptionsOpen(false);
         }}

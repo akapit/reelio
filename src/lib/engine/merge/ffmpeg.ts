@@ -20,10 +20,15 @@ export interface MergeScenesInput {
   outputPath: string;
   /** Optional ElevenLabs TTS audio buffer. */
   voiceoverBuffer?: Buffer;
-  /** Optional ElevenLabs music audio buffer. */
+  /** Optional music audio buffer. */
   musicBuffer?: Buffer;
   /** Music volume 0..1 (default 0.2). */
   musicVolume?: number;
+  /**
+   * Hard cap for the muxed output. Defaults to the probed visual concat
+   * duration when audio is present, so long music beds cannot extend the MP4.
+   */
+  maxDurationSec?: number;
   /** Scratch dir for intermediates. Defaults to os.tmpdir(). */
   tmpDir?: string;
 }
@@ -232,11 +237,14 @@ export async function mergeScenes(
       // No audio — concat output is the final output.
       await fsp.copyFile(concatPath, outputPath);
     } else {
+      const concatProbe = await runFfprobe(concatPath);
+      const maxDurationSec = input.maxDurationSec ?? concatProbe.durationSec;
       const audioStart = Date.now();
       log("audio.start", {
         hasVoiceover: Boolean(voiceoverBuffer),
         hasMusic: Boolean(musicBuffer),
         musicVolume,
+        maxDurationSec,
       });
 
       // Read the concat video back as a buffer so we can pass it to the
@@ -251,6 +259,7 @@ export async function mergeScenes(
           voiceoverBuffer,
           musicBuffer,
           musicVolume,
+          maxDurationSec,
         });
       } catch (err) {
         throw new Error(

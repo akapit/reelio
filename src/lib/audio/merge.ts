@@ -3,6 +3,8 @@ import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
+const MUSIC_FADE_OUT_SECONDS = 1.5;
+
 interface MergeOptions {
   videoBuffer: Buffer;
   voiceoverBuffer?: Buffer;
@@ -16,6 +18,10 @@ interface MergeOptions {
    * trim was needed).
    */
   maxDurationSec?: number;
+}
+
+function fmtSeconds(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
 export function mergeAudioWithVideo(options: MergeOptions): Buffer {
@@ -43,7 +49,18 @@ export function mergeAudioWithVideo(options: MergeOptions): Buffer {
       writeFileSync(bgPath, options.musicBuffer);
       inputs.push(`-i "${bgPath}"`);
       const vol = options.musicVolume ?? 0.2;
-      filterParts.push(`[${audioIndex}:a]volume=${vol}[bg]`);
+      if (options.maxDurationSec && options.maxDurationSec > 0) {
+        const fadeDuration = Math.min(
+          MUSIC_FADE_OUT_SECONDS,
+          Math.max(0.25, options.maxDurationSec / 4),
+        );
+        const fadeStart = Math.max(0, options.maxDurationSec - fadeDuration);
+        filterParts.push(
+          `[${audioIndex}:a]atrim=duration=${fmtSeconds(options.maxDurationSec)},asetpts=PTS-STARTPTS,volume=${vol},afade=t=out:st=${fmtSeconds(fadeStart)}:d=${fmtSeconds(fadeDuration)}[bg]`,
+        );
+      } else {
+        filterParts.push(`[${audioIndex}:a]volume=${vol}[bg]`);
+      }
       audioIndex++;
     }
 

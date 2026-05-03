@@ -64,7 +64,9 @@ interface PhotosTabProps {
   onCreateVideo?: (
     assets: CreatorPhotoAsset[],
     options: VideoGenerationOptions,
-  ) => Promise<void> | void;
+  ) => Promise<boolean> | boolean;
+  /** Listing details used to ground AI-generated voiceover copy. */
+  videoScriptContext?: Record<string, string | number | null | undefined>;
   /** Switches the parent's active tab — used by the AI Copy tip card. */
   onSwitchTab?: (id: TabId) => void;
 }
@@ -224,6 +226,7 @@ export function PhotosTab({
   onAiEnhance,
   onShare,
   onCreateVideo,
+  videoScriptContext,
   onSwitchTab,
 }: PhotosTabProps) {
   const { t } = useI18n();
@@ -364,8 +367,10 @@ export function PhotosTab({
   const handleVideoOptionsConfirm = async (options: VideoGenerationOptions) => {
     const picked = pickedCreatorPhotos();
     if (picked.length < 6 || picked.length > 20) return;
-    await onCreateVideo?.(picked, options);
-    setSelectedIds(new Set());
+    const didDispatch = await onCreateVideo?.(picked, options);
+    if (didDispatch) {
+      setSelectedIds(new Set());
+    }
     setVideoOptionsOpen(false);
   };
 
@@ -832,6 +837,8 @@ export function PhotosTab({
       <VideoGenerationOptionsModal
         isOpen={videoOptionsOpen}
         imageCount={pickedCreatorPhotos().length}
+        imageAssetIds={pickedCreatorPhotos().map((photo) => photo.id)}
+        propertyContext={videoScriptContext}
         onClose={() => setVideoOptionsOpen(false)}
         onConfirm={handleVideoOptionsConfirm}
       />

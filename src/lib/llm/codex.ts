@@ -92,7 +92,8 @@ function logCodexError(event: string, data: Record<string, unknown>): void {
  */
 interface ResponsesOutputItem {
   type?: string;
-  content?: Array<{ type?: string; text?: string }>;
+  content?: Array<{ type?: string; text?: string }> | string;
+  text?: string;
 }
 interface ResponsesApiBody {
   output?: ResponsesOutputItem[];
@@ -110,29 +111,41 @@ interface ResponsesApiBody {
  *   3. Fall back to top-level `data.text`.
  */
 function extractResponseText(data: ResponsesApiBody): string | null {
+  const seen = new Set<unknown>();
+  const findText = (value: unknown): string | null => {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed || null;
+    }
+    if (!value || typeof value !== "object" || seen.has(value)) return null;
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const hit = findText(item);
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const key of ["output_text", "text", "content"]) {
+      const hit = findText(record[key]);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
   if (Array.isArray(data.output)) {
     for (const item of data.output) {
-      if (item?.type !== "message" || !Array.isArray(item.content)) continue;
-      for (const content of item.content) {
-        if (
-          content?.type === "output_text" &&
-          typeof content.text === "string"
-        ) {
-          const trimmed = content.text.trim();
-          if (trimmed) return trimmed;
-        }
+      if (item?.type && !["message", "output_text"].includes(item.type)) {
+        continue;
       }
+      const hit = findText(item);
+      if (hit) return hit;
     }
   }
-  if (typeof data.output_text === "string") {
-    const trimmed = data.output_text.trim();
-    if (trimmed) return trimmed;
-  }
-  if (typeof data.text === "string") {
-    const trimmed = data.text.trim();
-    if (trimmed) return trimmed;
-  }
-  return null;
+  return findText(data);
 }
 
 /**

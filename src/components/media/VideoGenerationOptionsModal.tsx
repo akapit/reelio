@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, Mic, Music, X } from "lucide-react";
+import { Loader2, Mic, Music, Wand2, X } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  estimateVoiceoverSeconds,
+  maxVoiceoverSeconds,
+} from "@/lib/voiceover-duration";
 
 export interface VideoGenerationOptions {
   durationSec: number;
@@ -17,6 +22,9 @@ export interface VideoGenerationOptions {
 interface VideoGenerationOptionsModalProps {
   isOpen: boolean;
   imageCount: number;
+  imageAssetIds?: string[];
+  imageLabels?: string[];
+  propertyContext?: Record<string, string | number | null | undefined>;
   minImages?: number;
   maxImages?: number;
   onClose: () => void;
@@ -44,6 +52,9 @@ function durationDefaults(imageCount: number) {
 export function VideoGenerationOptionsModal({
   isOpen,
   imageCount,
+  imageAssetIds,
+  imageLabels,
+  propertyContext,
   minImages = 6,
   maxImages = 20,
   onClose,
@@ -60,11 +71,23 @@ export function VideoGenerationOptionsModal({
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState(DEFAULT_MUSIC_PROMPT);
   const [musicVolume, setMusicVolume] = useState(DEFAULT_MUSIC_VOLUME);
+  const [generatingScript, setGeneratingScript] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const hasEnoughImages = imageCount >= minImages;
   const withinImageLimit = imageCount <= maxImages;
-  const canConfirm = hasEnoughImages && withinImageLimit && !submitting;
+  const maxVoiceoverSec = maxVoiceoverSeconds(durationSec);
+  const estimatedVoiceoverSec = estimateVoiceoverSeconds(voiceoverText);
+  const voiceoverTooLong =
+    voiceoverEnabled &&
+    voiceoverText.trim().length > 0 &&
+    estimatedVoiceoverSec > maxVoiceoverSec;
+  const canConfirm =
+    hasEnoughImages &&
+    withinImageLimit &&
+    !voiceoverTooLong &&
+    !generatingScript &&
+    !submitting;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -75,6 +98,7 @@ export function VideoGenerationOptionsModal({
     setMusicEnabled(false);
     setMusicPrompt(DEFAULT_MUSIC_PROMPT);
     setMusicVolume(DEFAULT_MUSIC_VOLUME);
+    setGeneratingScript(false);
     setSubmitting(false);
   }, [imageCount, isOpen]);
 
@@ -107,6 +131,47 @@ export function VideoGenerationOptionsModal({
       console.warn("[video-options] confirm failed", err);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleGenerateScript() {
+    setGeneratingScript(true);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoDurationSec: durationSec,
+          maxVoiceoverSec,
+          imageAssetIds,
+          imageLabels,
+          propertyContext,
+          notes: voiceoverText.trim() || undefined,
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        script?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        if (res.status === 503 && body.code === "auth_fetch_failed") {
+          toast.error(t.creation.sessionAuthError);
+        } else {
+          toast.error(body.error ?? t.creation.scriptError);
+        }
+        return;
+      }
+      if (typeof body.script === "string" && body.script.trim().length > 0) {
+        setVoiceoverText(body.script.trim());
+        toast.success(t.creation.scriptGenerated);
+      } else {
+        toast.error(t.creation.scriptEmpty);
+      }
+    } catch {
+      toast.error(t.creation.scriptError);
+    } finally {
+      setGeneratingScript(false);
     }
   }
 
@@ -283,14 +348,53 @@ export function VideoGenerationOptionsModal({
                     dir={dir}
                   />
                   {voiceoverEnabled && (
-                    <textarea
-                      rows={4}
-                      maxLength={2000}
-                      value={voiceoverText}
-                      onChange={(event) => setVoiceoverText(event.target.value)}
-                      placeholder={t.creation.voiceoverPlaceholder}
-                      className="w-full resize-none rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2.5 text-sm text-[var(--fg-0)] placeholder:text-[var(--fg-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
-                    />
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="mono text-xs text-[var(--fg-2)]">
+                          {t.creation.voiceoverEstimatedDuration
+                            .replace("{estimated}", String(estimatedVoiceoverSec))
+                            .replace("{max}", String(maxVoiceoverSec))}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleGenerateScript}
+                          disabled={generatingScript}
+                          className={cn(
+                            "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+                            generatingScript
+                              ? "cursor-not-allowed border-[var(--line-soft)] bg-[var(--bg-2)] text-[var(--fg-3)]"
+                              : "border-[var(--gold)]/50 bg-[var(--gold-tint)] text-[var(--gold-lo)] hover:border-[var(--gold)]",
+                          )}
+                        >
+                          {generatingScript ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Wand2 size={13} />
+                          )}
+                          {t.creation.createScriptAi}
+                        </button>
+                      </div>
+                      <textarea
+                        rows={4}
+                        maxLength={2000}
+                        value={voiceoverText}
+                        onChange={(event) => setVoiceoverText(event.target.value)}
+                        placeholder={t.creation.voiceoverPlaceholder}
+                        className={cn(
+                          "w-full resize-none rounded-lg border bg-[var(--bg-2)] px-3 py-2.5 text-sm text-[var(--fg-0)] placeholder:text-[var(--fg-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+                          voiceoverTooLong
+                            ? "border-red-400/80"
+                            : "border-[var(--line-soft)]",
+                        )}
+                      />
+                      {voiceoverTooLong && (
+                        <p className="text-xs leading-relaxed text-red-300">
+                          {t.creation.voiceoverTooLong
+                            .replace("{estimated}", String(estimatedVoiceoverSec))
+                            .replace("{max}", String(maxVoiceoverSec))}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </section>
               </div>

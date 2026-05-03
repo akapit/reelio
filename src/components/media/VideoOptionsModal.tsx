@@ -2,11 +2,16 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { X } from "lucide-react";
+import { Loader2, Wand2, X } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useProcess } from "@/hooks/use-process";
 import { useI18n } from "@/lib/i18n/client";
+import {
+  estimateVoiceoverSeconds,
+  maxVoiceoverSeconds,
+} from "@/lib/voiceover-duration";
 
 interface VideoOptionsModalProps {
   isOpen: boolean;
@@ -29,6 +34,7 @@ export function VideoOptionsModal({
   const [prompt, setPrompt] = useState("");
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
   const [voiceoverText, setVoiceoverText] = useState("");
+  const [generatingScript, setGeneratingScript] = useState(false);
   const promptId = useId();
   const { t, dir } = useI18n();
   const firstFocusRef = useRef<HTMLButtonElement>(null);
@@ -43,6 +49,7 @@ export function VideoOptionsModal({
       setPrompt("");
       setVoiceoverEnabled(false);
       setVoiceoverText("");
+      setGeneratingScript(false);
       firstFocusRef.current?.focus();
     }, 50);
     return () => window.clearTimeout(timer);
@@ -60,6 +67,7 @@ export function VideoOptionsModal({
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
+    if (voiceoverTooLong) return;
     process.mutate(
       {
         assetId,
@@ -72,6 +80,52 @@ export function VideoOptionsModal({
       },
       { onSuccess: onClose }
     );
+  }
+
+  const maxVoiceoverSec = maxVoiceoverSeconds(duration);
+  const estimatedVoiceoverSec = estimateVoiceoverSeconds(voiceoverText);
+  const voiceoverTooLong =
+    voiceoverEnabled &&
+    voiceoverText.trim().length > 0 &&
+    estimatedVoiceoverSec > maxVoiceoverSec;
+
+  async function handleGenerateScript() {
+    setGeneratingScript(true);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: prompt.trim() || undefined,
+          videoDurationSec: duration,
+          maxVoiceoverSec,
+          imageAssetIds: [assetId],
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        script?: string;
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        if (res.status === 503 && body.code === "auth_fetch_failed") {
+          toast.error(t.creation.sessionAuthError);
+        } else {
+          toast.error(body.error ?? t.creation.scriptError);
+        }
+        return;
+      }
+      if (typeof body.script === "string" && body.script.trim().length > 0) {
+        setVoiceoverText(body.script.trim());
+        toast.success(t.creation.scriptGenerated);
+      } else {
+        toast.error(t.creation.scriptEmpty);
+      }
+    } catch {
+      toast.error(t.creation.scriptError);
+    } finally {
+      setGeneratingScript(false);
+    }
   }
 
   return (
@@ -233,9 +287,24 @@ export function VideoOptionsModal({
 
                   {voiceoverEnabled && (
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-sm font-medium text-[var(--color-foreground)] leading-none">
-                        {t.creation.voiceoverScript}
-                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-sm font-medium text-[var(--color-foreground)] leading-none">
+                          {t.creation.voiceoverScript}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleGenerateScript}
+                          disabled={generatingScript}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--color-accent)]/50 px-2.5 text-xs font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {generatingScript ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Wand2 size={13} />
+                          )}
+                          {t.creation.createScriptAi}
+                        </button>
+                      </div>
                       <textarea
                         rows={3}
                         maxLength={500}
@@ -253,8 +322,17 @@ export function VideoOptionsModal({
                         )}
                       />
                       <span className="text-xs text-[var(--color-muted)] text-start">
-                        {voiceoverText.length}/500
+                        {t.creation.voiceoverEstimatedDuration
+                          .replace("{estimated}", String(estimatedVoiceoverSec))
+                          .replace("{max}", String(maxVoiceoverSec))}
                       </span>
+                      {voiceoverTooLong && (
+                        <span className="text-xs text-red-300">
+                          {t.creation.voiceoverTooLong
+                            .replace("{estimated}", String(estimatedVoiceoverSec))
+                            .replace("{max}", String(maxVoiceoverSec))}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -276,7 +354,7 @@ export function VideoOptionsModal({
                     variant="primary"
                     size="md"
                     className="flex-1"
-                    disabled={process.isPending}
+                    disabled={process.isPending || voiceoverTooLong || generatingScript}
                   >
                     {process.isPending ? t.common.loading : t.creation.create}
                   </Button>

@@ -26,6 +26,10 @@ import {
   AspectRatioWarningModal,
   type AspectRatioMismatch,
 } from "@/components/media/AspectRatioWarningModal";
+import {
+  estimateVoiceoverSeconds,
+  maxVoiceoverSeconds,
+} from "@/lib/voiceover-duration";
 
 /**
  * Minimum source-image count required to kick off a video generation. Matches
@@ -38,6 +42,7 @@ const MIN_IMAGES_FOR_VIDEO = 6;
 
 /** The only template surfaced in the UI today. See engine/templates/luxury_30s.json. */
 const ENGINE_TEMPLATE = "luxury_30s" as const;
+const LEGACY_VIDEO_DURATION_SEC = 30;
 
 export interface RerunAssetRef {
   id: string;
@@ -318,7 +323,7 @@ export function CreationBar({
   const addFiles = useCallback(
     (files: FileList | File[]) => {
       const all = Array.from(files);
-      let accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
+      const accepted = all.filter((f) => ACCEPTED_EXTENSIONS.test(f.name));
       if (accepted.length === 0) {
         if (all.length > 0) {
           toast.error(t.creation.imageFilesOnly);
@@ -547,6 +552,20 @@ export function CreationBar({
   // for the pre-flight check without making the modal callback awkward.
   const submitVideoGeneration = useCallback(() => {
     if (uploadedAssetIds.length === 0) return;
+    const maxSec = maxVoiceoverSeconds(LEGACY_VIDEO_DURATION_SEC);
+    const estimatedSec = estimateVoiceoverSeconds(voiceoverText);
+    if (
+      voiceoverEnabled &&
+      voiceoverText.trim().length > 0 &&
+      estimatedSec > maxSec
+    ) {
+      toast.error(
+        t.creation.voiceoverTooLong
+          .replace("{estimated}", String(estimatedSec))
+          .replace("{max}", String(maxSec)),
+      );
+      return;
+    }
     engine.mutate({
       projectId,
       imageAssetIds: uploadedAssetIds,
@@ -570,6 +589,7 @@ export function CreationBar({
     musicPrompt,
     musicVolume,
     clearAll,
+    t,
   ]);
 
   // Submit
@@ -1012,15 +1032,16 @@ export function CreationBar({
                     onClick={async () => {
                       setGeneratingScript(true);
                       try {
-                        // luxury_30s target is 30s; pass that through to the
-                        // narration generator so it sizes the script correctly.
-                        const totalSec = 30;
                         const res = await fetch("/api/generate-script", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
-                            prompt: voiceoverSubject.trim(),
-                            duration: totalSec,
+                            notes: voiceoverSubject.trim(),
+                            videoDurationSec: LEGACY_VIDEO_DURATION_SEC,
+                            maxVoiceoverSec: maxVoiceoverSeconds(
+                              LEGACY_VIDEO_DURATION_SEC,
+                            ),
+                            imageAssetIds: uploadedAssetIds,
                           }),
                         });
                         if (!res.ok) {

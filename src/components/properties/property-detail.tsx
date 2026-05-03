@@ -268,7 +268,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     assetIds: string[],
     options: VideoGenerationOptions,
   ) => {
-    if (assetIds.length === 0) return;
+    if (assetIds.length === 0) return false;
 
     const targetAspectRatio = TEMPLATE_ASPECT_RATIO.luxury_30s;
     const res = await fetch("/api/assets/check-aspect-ratio", {
@@ -290,7 +290,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
           mismatches: data.mismatches,
           targetAspectRatio,
         });
-        return;
+        return false;
       }
     } else {
       console.warn(
@@ -301,6 +301,7 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     }
 
     await dispatchVideoGeneration(assetIds, options);
+    return true;
   };
 
   const handleAiSelect = (selection: PresetSelection) => {
@@ -640,6 +641,21 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                       options,
                     )
                   }
+                  videoScriptContext={{
+                    propertyName,
+                    street: propertyData.street,
+                    streetNumber: propertyData.streetNumber,
+                    neighborhood: propertyData.neighborhood,
+                    city: propertyData.city,
+                    propertyType: propertyData.propertyType,
+                    rooms: propertyData.rooms,
+                    floor: propertyData.floor,
+                    totalFloors: propertyData.totalFloors,
+                    price: propertyData.price,
+                    size: propertyData.size,
+                    description: propertyData.description,
+                    features: propertyData.features.join(", "),
+                  }}
                   onSwitchTab={(id) => setActiveTab(id)}
                 />
               )}

@@ -4,7 +4,12 @@ import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
 import { TEMPLATE_NAMES } from "@/lib/engine/models";
+import { loadTemplate } from "@/lib/engine/templates/loader";
 import { SEEDANCE_MULTIREF_MAX_IMAGES } from "@/lib/engine/prompt-writer/seedance-multiref";
+import {
+  estimateVoiceoverSeconds,
+  maxVoiceoverSeconds,
+} from "@/lib/voiceover-duration";
 import type { engineGenerateTask } from "../../../../../trigger/engine-generate";
 import type { engineGenerateSeedanceTask } from "../../../../../trigger/engine-generate-seedance";
 
@@ -107,6 +112,25 @@ export async function POST(req: NextRequest) {
       { error: "Seedance mode accepts durationSec from 4 to 15 seconds" },
       { status: 400 },
     );
+  }
+  const effectiveDurationSec =
+    durationSec ??
+    (mode === "seedance"
+      ? Math.min(15, Math.max(4, Math.round(imageAssetIds.length * 3)))
+      : loadTemplate(templateName).targetDurationSec);
+  if (voiceoverText) {
+    const estimatedSec = estimateVoiceoverSeconds(voiceoverText);
+    const maxSec = maxVoiceoverSeconds(effectiveDurationSec);
+    if (estimatedSec > maxSec) {
+      return NextResponse.json(
+        {
+          error: `Voiceover is too long for this video. Keep it under ${maxSec} seconds or shorten it with AI.`,
+          estimatedSec,
+          maxVoiceoverSec: maxSec,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const { data: project, error: projectErr } = await supabase

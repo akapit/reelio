@@ -565,6 +565,9 @@ export const dictionaries = {
       videoMode: "Video",
       voiceoverOff: "Add voiceover",
       voiceoverOn: "Voiceover enabled",
+      voiceoverEstimatedDuration: "Estimated voiceover: {estimated}s / {max}s max",
+      voiceoverTooLong:
+        "This voiceover is estimated at {estimated}s. Shorten it or use AI so it fits within {max}s.",
       voiceoverSubject: "What to mention (optional), e.g. 4 rooms, sea view, rooftop",
       voiceoverText: "Write the voiceover script...",
       quality: "Quality",
@@ -586,7 +589,7 @@ export const dictionaries = {
       videoMinImagesRequired: "Select at least {count} photos to create a video.",
       videoMaxImagesAllowed: "Select up to {count} photos for one video.",
       voiceoverScript: "Voiceover script",
-      voiceoverPlaceholder: "Welcome to this beautiful three-room home...",
+      voiceoverPlaceholder: "ברוכים הבאים לבית היפה הזה...",
       arWarningTitle: "Aspect ratio mismatch",
       arWarningBodyLandscape:
         "Your template produces a landscape video, but the photos below are portrait. They may be cropped or rotated unexpectedly and can cut off the subject.",
@@ -1170,6 +1173,9 @@ export const dictionaries = {
       videoMode: "סרטון",
       voiceoverOff: "הוסף קריינות",
       voiceoverOn: "קריינות מופעלת",
+      voiceoverEstimatedDuration: "משך קריינות משוער: {estimated} שנ׳ / עד {max} שנ׳",
+      voiceoverTooLong:
+        "הקריינות הזו מוערכת ב-{estimated} שנ׳. קצר אותה או השתמש ב-AI כדי שתתאים ל-{max} שנ׳.",
       voiceoverSubject: "מה לציין (אופציונלי), למשל: 4 חדרים, נוף לים, גג",
       voiceoverText: "כתוב את תסריט הקריינות...",
       quality: "איכות",
