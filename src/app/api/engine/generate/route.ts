@@ -30,7 +30,9 @@ const BodySchema = z.object({
    * the motion prompt, but doesn't get to pick the model. Omit to let the LLM
    * pick per scene. Only applies to mode="scenes".
    */
-  modelChoice: z.enum(["kling", "seedance", "seedance-fast"]).optional(),
+  modelChoice: z
+    .enum(["kling", "seedance", "seedance-fast", "seedance-1-fast"])
+    .optional(),
   /** Seedance mode only: target video duration 4-15s. Default 15. */
   durationSec: z.number().int().min(4).max(15).optional(),
   /** Seedance mode only: output aspect ratio. Default 16:9. */

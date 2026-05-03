@@ -13,6 +13,7 @@
  *   PRICE_CLAUDE_SONNET_IN_PER_M   (default 3.00)
  *   PRICE_CLAUDE_SONNET_OUT_PER_M  (default 15.00)
  *   PRICE_KLING_25_TURBO_PER_CLIP  (default 0.35)
+ *   PRICE_SEEDANCE_1_FAST_PER_CLIP (default 0.25)
  *   PRICE_SEEDANCE_2_PER_CLIP      (default 0.45)
  *   PRICE_SEEDANCE_2_FAST_PER_CLIP (default 0.25)
  *   PRICE_ELEVENLABS_TTS_PER_K     (default 0.15)
@@ -91,6 +92,9 @@ export function kieaiClipCost(modelSlug: string): number {
   if (modelSlug === "bytedance/seedance-2-fast") {
     return envNum("PRICE_SEEDANCE_2_FAST_PER_CLIP", 0.25);
   }
+  if (modelSlug === "bytedance/v1-pro-fast-image-to-video") {
+    return envNum("PRICE_SEEDANCE_1_FAST_PER_CLIP", 0.25);
+  }
   if (modelSlug.startsWith("bytedance/seedance-2")) {
     return envNum("PRICE_SEEDANCE_2_PER_CLIP", 0.45);
   }
@@ -101,12 +105,12 @@ export function kieaiClipCost(modelSlug: string): number {
 
 /**
  * Clip cost for a logical video model + provider. The scene generator works
- * in logical ids ("kling" / "seedance" / "seedance-fast"); this helper hides
- * the provider-specific slug mapping.
+ * in logical ids ("kling" / "seedance" / "seedance-fast" /
+ * "seedance-1-fast"); this helper hides the provider-specific slug mapping.
  */
 export function sceneClipCost(
   providerName: "kieai" | "piapi" | "test-override",
-  logicalModel: "kling" | "seedance" | "seedance-fast",
+  logicalModel: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast",
 ): number {
   if (providerName === "test-override") return 0;
   if (providerName === "kieai") {
@@ -115,9 +119,12 @@ export function sceneClipCost(
         ? "kling-2.6/image-to-video"
         : logicalModel === "seedance"
           ? "bytedance/seedance-2"
-          : "bytedance/seedance-2-fast";
+          : logicalModel === "seedance-fast"
+            ? "bytedance/seedance-2-fast"
+            : "bytedance/v1-pro-fast-image-to-video";
     return kieaiClipCost(slug);
   }
+  if (logicalModel === "seedance-1-fast") return 0;
   // piapi
   const taskType =
     logicalModel === "kling"

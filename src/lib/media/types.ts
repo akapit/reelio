@@ -7,7 +7,11 @@ export type MediaProvider = "kieai" | "piapi";
  * `bytedance/seedance-2`). Adding a new provider (e.g. piapi.ai) should NOT
  * require changing this union — only adding a new provider-internal map.
  */
-export type VideoModel = "kling" | "seedance" | "seedance-fast";
+export type VideoModel =
+  | "kling"
+  | "seedance"
+  | "seedance-fast"
+  | "seedance-1-fast";
 
 /**
  * Optional callback invoked by a provider the moment it gets an external task
@@ -48,11 +52,11 @@ export interface VideoGenerationOptions {
   quality?: "fast" | "quality";
   /**
    * Output resolution for Seedance. kie.ai's Seedance 2 supports "480p" and
-   * "720p". Lower resolution = faster generation + cheaper. Ignored by
-   * Kling (which has its own resolution handling). Defaults to "720p" at
-   * the provider boundary.
+   * "720p"; Seedance 1 Pro Fast supports "720p" and "1080p". Lower
+   * resolution = faster generation + cheaper. Ignored by Kling.
+   * Defaults to "720p" at the provider boundary.
    */
-  resolution?: "480p" | "720p";
+  resolution?: "480p" | "720p" | "1080p";
   /**
    * Logical video-model id (provider-agnostic). Each `IMediaProvider`
    * implementation resolves this to its own upstream slug internally — do

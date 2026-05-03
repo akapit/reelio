@@ -40,7 +40,7 @@ function buildRetryPrompt(
   prompt: {
     sceneId: string;
     prompt: string;
-    modelChoice: "kling" | "seedance" | "seedance-fast";
+    modelChoice: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
     modelReason?: string;
     modelParams?: { mode?: "std" | "pro"; cameraMovement?: string };
   },
@@ -82,7 +82,7 @@ export const engineGenerateTask = task({
     videoProvider?: "piapi" | "kieai";
     /** User-selected model. When set, every scene's modelChoice is overridden
      *  after the prompt writer returns. See "hard override" logic below. */
-    modelChoice?: "kling" | "seedance" | "seedance-fast";
+    modelChoice?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
   }) => {
     const runStart = Date.now();
     let trackedRunId: string | undefined;

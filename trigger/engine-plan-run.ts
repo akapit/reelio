@@ -14,7 +14,7 @@ export const enginePlanRunTask = task({
     templateName: string;
     /** Pre-resolved effective video model (user override OR env default).
      *  Drives the writer's model-specific SYSTEM_PROMPT. */
-    targetModel?: "kling" | "seedance" | "seedance-fast";
+    targetModel?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
   }) => {
     await tags.add(`run_${payload.runId}`);
     await tags.add(`asset_${payload.assetId}`);

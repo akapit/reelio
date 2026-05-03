@@ -185,7 +185,7 @@ export interface PlanStageInput {
    * Threaded here so the prompt writer can pick the right model-specific
    * SYSTEM_PROMPT (Kling terse motion-only vs Seedance richer atmospheric).
    */
-  targetModel?: "kling" | "seedance" | "seedance-fast";
+  targetModel?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
 }
 
 export interface PlanStageOutput {
@@ -503,8 +503,8 @@ export async function runSceneStage(
       const attemptId = sceneAttemptIdByAttemptKey.get(attemptKey);
       if (!stepId) return;
       // Clip cost — one generation per scene. Priced per the logical model
-      // (kling/seedance/seedance-fast) + provider (kieai/piapi). Zero when
-      // providerName is "test-override".
+      // (kling/seedance/seedance-fast/seedance-1-fast) + provider
+      // (kieai/piapi). Zero when providerName is "test-override".
       const clipCostUsd = sceneClipCost(
         resolvedVideoProvider,
         context.prompt.modelChoice,
