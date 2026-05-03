@@ -33,7 +33,7 @@ function logError(event: string, data: Record<string, unknown>): void {
 }
 
 function buildSystemPrompt(
-  videoModel: "kling" | "seedance" | "seedance-fast",
+  videoModel: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast",
   imageCount: number,
   totalDuration: number,
 ): string {
@@ -61,8 +61,8 @@ function buildSystemPrompt(
     );
   }
 
-  // Seedance 2.0 / Fast: single clip at `totalDuration`. Rich prose, @imageN
-  // tokens inline for per-image roles.
+  // Seedance-family models: single clip at `totalDuration`. Rich prose,
+  // @imageN tokens inline for per-image roles.
   const wordsGuide = totalDuration >= 10 ? "50–60 words" : "25–35 words";
   const imageRoleNote = imageCount === 1
     ? ` Reference the image with @image1 to assign its role (e.g. "@image1 as the hero subject").`
@@ -72,7 +72,7 @@ function buildSystemPrompt(
       `. Use each @imageN token exactly — they are reference anchors the model relies on.`;
 
   return (
-    `You generate rich scene-description prompts for the ByteDance Seedance 2.0 text-to-video model. ` +
+    `You generate rich scene-description prompts for the ByteDance ${videoModel === "seedance-1-fast" ? "Seedance 1.0 Pro Fast" : "Seedance 2.0"} video model. ` +
     `Write ONE paragraph of ${wordsGuide} describing the scene for a ${totalDuration}-second real estate clip. ` +
     `Include subjects, setting, motion, lighting, and atmosphere — not just cinematography commands. ` +
     imageRoleNote +
@@ -137,14 +137,22 @@ export async function POST(req: NextRequest) {
     duration?: unknown;
   };
 
-  const VALID_MODELS = ["kling", "seedance", "seedance-fast"] as const;
+  const VALID_MODELS = [
+    "kling",
+    "seedance",
+    "seedance-fast",
+    "seedance-1-fast",
+  ] as const;
   if (!videoModel || !(VALID_MODELS as readonly string[]).includes(videoModel)) {
     return NextResponse.json(
-      { error: "videoModel must be one of: kling, seedance, seedance-fast" },
+      {
+        error:
+          "videoModel must be one of: kling, seedance, seedance-fast, seedance-1-fast",
+      },
       { status: 400 },
     );
   }
-  const resolvedModel = videoModel as "kling" | "seedance" | "seedance-fast";
+  const resolvedModel = videoModel as (typeof VALID_MODELS)[number];
 
   if (!Array.isArray(imageAssetIds) || imageAssetIds.length === 0) {
     return NextResponse.json(

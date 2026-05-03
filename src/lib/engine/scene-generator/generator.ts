@@ -156,7 +156,8 @@ function clampDuration(
     // Kling: always 5s. See KLING_FIXED_DURATION note above.
     return KLING_FIXED_DURATION;
   }
-  // seedance / seedance-fast
+  // Seedance-family models. The provider maps logical ids to each upstream
+  // model's native duration schema.
   const rounded = Math.max(GLOBAL_MIN_DURATION, Math.round(rawSec));
   return Math.min(SEEDANCE_MAX_DURATION, Math.max(SEEDANCE_MIN_DURATION, rounded));
 }

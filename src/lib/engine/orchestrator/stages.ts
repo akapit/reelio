@@ -4,10 +4,7 @@ import { readFile, unlink } from "node:fs/promises";
 
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-import {
-  generateBackgroundMusic,
-  generateVoiceover,
-} from "@/lib/audio/elevenlabs";
+import { generateVoiceover } from "@/lib/audio/elevenlabs";
 import { mergeScenes, type MergeScenesResult } from "@/lib/engine/merge/ffmpeg";
 import {
   FailureReason,
@@ -46,6 +43,11 @@ import {
   sceneClipCost,
 } from "@/lib/engine/cost/pricing";
 import { getPublicUrl, r2 } from "@/lib/r2";
+
+const HARDCODED_BACKGROUND_MUSIC_PATH = path.join(
+  process.cwd(),
+  "background-music-library/upbeat/miromaxmusic-music-promotion-no-copyright-513944.mp3",
+);
 
 function makeError(
   reason: FailureReason,
@@ -180,12 +182,14 @@ export interface PlanStageInput {
   runId: string;
   imagePaths: string[];
   templateName: string;
+  /** Optional requested total duration for the scene planner. */
+  durationSec?: number;
   /**
    * The video model every scene will run on after the orchestrator override.
    * Threaded here so the prompt writer can pick the right model-specific
    * SYSTEM_PROMPT (Kling terse motion-only vs Seedance richer atmospheric).
    */
-  targetModel?: "kling" | "seedance" | "seedance-fast";
+  targetModel?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
 }
 
 export interface PlanStageOutput {
@@ -197,7 +201,13 @@ export interface PlanStageOutput {
 export async function runPlanStage(
   input: PlanStageInput,
 ): Promise<PlanStageOutput> {
-  const { runId, imagePaths, templateName, targetModel = "kling" } = input;
+  const {
+    runId,
+    imagePaths,
+    templateName,
+    durationSec,
+    targetModel = "kling",
+  } = input;
 
   const dataset = await withStep(
     {
@@ -259,9 +269,21 @@ export async function runPlanStage(
   // to users who upload (e.g.) 4 images for a 5-min template.
 
   const planResult = await withStep(
-    { runId, stepOrder: 2, stepType: "plan", input: { templateName } },
+    {
+      runId,
+      stepOrder: 2,
+      stepType: "plan",
+      input: {
+        templateName,
+        ...(durationSec !== undefined ? { durationSec } : {}),
+      },
+    },
     async () => {
-      const result = planTimeline({ dataset, template });
+      const result = planTimeline({
+        dataset,
+        template,
+        targetDurationSec: durationSec,
+      });
       if (result.abortedSlotIds && result.abortedSlotIds.length > 0) {
         return {
           output: { abortedSlotIds: result.abortedSlotIds },
@@ -503,8 +525,8 @@ export async function runSceneStage(
       const attemptId = sceneAttemptIdByAttemptKey.get(attemptKey);
       if (!stepId) return;
       // Clip cost — one generation per scene. Priced per the logical model
-      // (kling/seedance/seedance-fast) + provider (kieai/piapi). Zero when
-      // providerName is "test-override".
+      // (kling/seedance/seedance-fast/seedance-1-fast) + provider
+      // (kieai/piapi). Zero when providerName is "test-override".
       const clipCostUsd = sceneClipCost(
         resolvedVideoProvider,
         context.prompt.modelChoice,
@@ -911,45 +933,32 @@ export async function runAssembleStage(
     }
 
     if (input.musicPrompt) {
-      const musicDuration = Math.min(30, Math.round(input.timeline.totalDurationSec));
       const music = await withStep(
         {
           runId: input.runId,
           stepOrder: 201,
           stepType: "music",
           input: {
-            promptLength: input.musicPrompt.length,
-            durationSec: musicDuration,
+            source: "repo_track",
+            trackPath: HARDCODED_BACKGROUND_MUSIC_PATH,
           },
         },
         async () => {
-          const result = await generateBackgroundMusic({
-            prompt: input.musicPrompt!,
-            durationSeconds: musicDuration,
-          });
-          const costUsd = elevenlabsCost({
-            kind: "music",
-            charCount: input.musicPrompt!.length,
-          });
+          const buffer = await readFile(HARDCODED_BACKGROUND_MUSIC_PATH);
           return {
             output: {
-              durationMs: result.durationMs,
-              model: result.model,
-              byteLength: result.byteLength,
+              source: "repo_track",
+              trackPath: HARDCODED_BACKGROUND_MUSIC_PATH,
+              byteLength: buffer.byteLength,
             },
-            externalIds: result.requestId
-              ? { elevenlabsMusicRequestId: result.requestId }
-              : undefined,
             metrics: {
-              costUsd,
+              costUsd: 0,
               cost: {
-                provider: "elevenlabs" as const,
-                model: result.model,
-                charCount: input.musicPrompt!.length,
-                costUsd,
+                provider: "repo_track" as const,
+                costUsd: 0,
               },
             },
-            result,
+            result: { buffer },
           };
         },
       );

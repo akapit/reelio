@@ -30,9 +30,11 @@ const BodySchema = z.object({
    * the motion prompt, but doesn't get to pick the model. Omit to let the LLM
    * pick per scene. Only applies to mode="scenes".
    */
-  modelChoice: z.enum(["kling", "seedance", "seedance-fast"]).optional(),
-  /** Seedance mode only: target video duration 4-15s. Default 15. */
-  durationSec: z.number().int().min(4).max(15).optional(),
+  modelChoice: z
+    .enum(["kling", "seedance", "seedance-fast", "seedance-1-fast"])
+    .optional(),
+  /** Target video duration. Scene mode accepts 1-50s; Seedance mode accepts 4-15s. */
+  durationSec: z.number().int().min(1).max(50).optional(),
   /** Seedance mode only: output aspect ratio. Default 16:9. */
   aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
   /** Optional ElevenLabs voiceover text (max ~2000 chars). */
@@ -93,6 +95,16 @@ export async function POST(req: NextRequest) {
       {
         error: `Seedance mode accepts at most ${SEEDANCE_MULTIREF_MAX_IMAGES} images (received ${imageAssetIds.length})`,
       },
+      { status: 400 },
+    );
+  }
+  if (
+    mode === "seedance" &&
+    durationSec !== undefined &&
+    (durationSec < 4 || durationSec > 15)
+  ) {
+    return NextResponse.json(
+      { error: "Seedance mode accepts durationSec from 4 to 15 seconds" },
       { status: 400 },
     );
   }
@@ -224,6 +236,7 @@ export async function POST(req: NextRequest) {
         templateName,
         ...(videoProvider ? { videoProvider } : {}),
         ...(modelChoice ? { modelChoice } : {}),
+        ...(durationSec !== undefined ? { durationSec } : {}),
         ...(voiceoverText ? { voiceoverText } : {}),
         ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
         ...(musicPrompt ? { musicPrompt } : {}),

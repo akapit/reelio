@@ -291,7 +291,12 @@ export const TEMPLATE_ASPECT_RATIO: Record<TemplateName, AspectRatio> = {
 export const SceneRole = z.enum(["opening", "hero", "wow", "filler", "closing"]);
 export type SceneRole = z.infer<typeof SceneRole>;
 
-export const VideoModelChoice = z.enum(["kling", "seedance", "seedance-fast"]);
+export const VideoModelChoice = z.enum([
+  "kling",
+  "seedance",
+  "seedance-fast",
+  "seedance-1-fast",
+]);
 export type VideoModelChoice = z.infer<typeof VideoModelChoice>;
 
 /**
@@ -302,8 +307,9 @@ export type VideoModelChoice = z.infer<typeof VideoModelChoice>;
  */
 export function resolveDefaultVideoModel(): VideoModelChoice {
   const raw = process.env.ENGINE_DEFAULT_MODEL;
-  if (raw === "kling" || raw === "seedance" || raw === "seedance-fast") {
-    return raw;
+  const parsed = VideoModelChoice.safeParse(raw);
+  if (parsed.success) {
+    return parsed.data;
   }
   return "kling";
 }

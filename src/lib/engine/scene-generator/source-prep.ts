@@ -34,6 +34,10 @@ function log(event: string, sceneId: string, data: Record<string, unknown> = {})
   }
 }
 
+function errorMessage(raw: unknown): string {
+  return raw instanceof Error ? raw.message : String(raw);
+}
+
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
@@ -156,10 +160,50 @@ export async function prepareSceneSource(
   const sourceLocalPath = sourceIsRemote
     ? await downloadRemoteImage(scene.sceneId, scene.imagePath, scratchDir)
     : scene.imagePath;
-  const preparedLocalPath =
-    crop && !crop.noop
-      ? await applyCrop(sourceLocalPath, crop, path.join(scratchDir, "crops"))
-      : sourceLocalPath;
+  let preparedLocalPath = sourceLocalPath;
+  let cropFallback = false;
+
+  if (crop && !crop.noop) {
+    try {
+      preparedLocalPath = await applyCrop(
+        sourceLocalPath,
+        crop,
+        path.join(scratchDir, "crops"),
+      );
+    } catch (raw) {
+      cropFallback = true;
+      log("source.crop_failed_fallback", scene.sceneId, {
+        error: errorMessage(raw),
+        crop,
+        sourceLocalPath,
+        fallback: sourceIsRemote ? "original_remote" : "upload_original",
+      });
+
+      if (sourceIsRemote) {
+        log("source.prepared", scene.sceneId, {
+          originalImagePath: scene.imagePath,
+          sourceLocalPath,
+          preparedLocalPath: null,
+          uploadedPreparedUrl: null,
+          providerImageUrl: scene.imagePath,
+          cropReason: crop.reason,
+          cropNoop: crop.noop,
+          cropFallback,
+        });
+
+        return {
+          originalImagePath: scene.imagePath,
+          providerImageUrl: scene.imagePath,
+          localizedFromRemote: false,
+          crop,
+          uploadedPreparedUrl: null,
+          sourceLocalPath,
+          preparedLocalPath: null,
+        };
+      }
+    }
+  }
+
   const uploadedPreparedUrl = await uploadPreparedImage(preparedLocalPath, uploadPrefix);
 
   log("source.prepared", scene.sceneId, {
@@ -167,8 +211,10 @@ export async function prepareSceneSource(
     sourceLocalPath,
     preparedLocalPath,
     uploadedPreparedUrl,
+    providerImageUrl: uploadedPreparedUrl,
     cropReason: crop?.reason,
     cropNoop: crop?.noop,
+    cropFallback,
   });
 
   return {

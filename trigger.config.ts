@@ -9,4 +9,7 @@ export default defineConfig({
   runtime: "node",
   maxDuration: 600,
   dirs: ["./trigger"],
+  additionalFiles: [
+    "background-music-library/upbeat/miromaxmusic-music-promotion-no-copyright-513944.mp3",
+  ],
 });

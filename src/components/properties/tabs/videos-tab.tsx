@@ -31,6 +31,25 @@ const STATUS_MAP = {
   failed: { labelKey: "failed", color: "oklch(0.65 0.20 25)" },
 } as const;
 
+function getSourceImageCount(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return 0;
+
+  const meta = metadata as {
+    engineRequest?: { imageAssetIds?: unknown };
+    referenceAssetIds?: unknown;
+  };
+
+  if (Array.isArray(meta.engineRequest?.imageAssetIds)) {
+    return meta.engineRequest.imageAssetIds.length;
+  }
+
+  if (Array.isArray(meta.referenceAssetIds)) {
+    return meta.referenceAssetIds.length + 1;
+  }
+
+  return 0;
+}
+
 export function VideosTab({
   assets = [],
   selectedAssetId,
@@ -130,7 +149,7 @@ export function VideosTab({
             }
           | null
           | undefined;
-        const sourceCount = meta?.referenceAssetIds?.length ?? 0;
+        const sourceCount = getSourceImageCount(meta);
         const thumbnailUrl =
           (video as { thumbnail_url?: string | null }).thumbnail_url ?? null;
         const statusKey = (

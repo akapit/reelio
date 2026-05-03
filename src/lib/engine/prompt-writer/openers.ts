@@ -20,7 +20,7 @@
 import type { ScenePrompt as ScenePromptType } from "../models";
 
 export interface WhipPanOpener {
-  /** Rich prose for Seedance / Seedance-fast. */
+  /** Rich prose for Seedance-family models. */
   seedance: string;
   /** Terse single-sentence for Kling (<=20 words). */
   kling: string;
@@ -90,7 +90,7 @@ export function pickWhipPanOpener(
  */
 export function buildOpeningPromptOverride(
   sceneId: string,
-  targetModel: "kling" | "seedance" | "seedance-fast",
+  targetModel: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast",
   rng?: () => number,
 ): ScenePromptType {
   const pick = pickWhipPanOpener(rng);

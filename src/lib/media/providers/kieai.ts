@@ -51,6 +51,7 @@ const VIDEO_MODEL_SLUGS: Record<VideoModel, string> = {
   kling: "kling-2.6/image-to-video",
   seedance: "bytedance/seedance-2",
   "seedance-fast": "bytedance/seedance-2-fast",
+  "seedance-1-fast": "bytedance/v1-pro-fast-image-to-video",
 };
 
 /**
@@ -571,16 +572,48 @@ export const kieaiProvider: IMediaProvider = {
     }
     const aspectRatio = options.aspectRatio ?? "16:9";
 
-    // ByteDance Seedance has a distinct input schema from Kling on kie.ai:
+    // ByteDance Seedance 2 has a distinct input schema from Kling on kie.ai:
     //   - image field is `first_frame_url` (string), not `image_urls` (array)
     //   - `duration` is integer seconds in [4, 15] (not a string)
     //   - `generate_audio` replaces Kling's `sound`; we disable since we mux audio later
     //   - `web_search` is required
-    const isSeedance = model.startsWith("bytedance/seedance");
+    const isSeedance2 = model.startsWith("bytedance/seedance");
+    const isSeedance1Fast = requested === "seedance-1-fast";
 
     let input: Record<string, unknown>;
 
-    if (isSeedance) {
+    if (isSeedance1Fast) {
+      if (!options.imageUrl) {
+        throw new Error(
+          "kieai.generateVideo: Seedance 1 Pro Fast i2v requires imageUrl",
+        );
+      }
+      if ((options.referenceImageUrls?.length ?? 0) > 0) {
+        throw new Error(
+          "kieai.generateVideo: Seedance 1 Pro Fast does not support referenceImageUrls; use seedance or seedance-fast for multi-reference generation.",
+        );
+      }
+      const seedancePrompt = await translatePromptForSeedance(
+        options.prompt,
+        { imageCount: 1 },
+        { log: logKie },
+      );
+      const roundedDuration = Math.round(options.duration ?? 5);
+      const duration = roundedDuration >= 8 ? "10" : "5";
+      const resolution =
+        options.resolution === "1080p" ? "1080p" : "720p";
+      input = {
+        prompt: seedancePrompt,
+        image_url: options.imageUrl,
+        resolution,
+        duration,
+        nsfw_checker: false,
+      };
+      logKie("seedance1Fast.params", {
+        duration,
+        resolution,
+      });
+    } else if (isSeedance2) {
       // Seedance's valid duration window is 4-15; clamp to be safe.
       const seedanceDuration = Math.min(
         15,

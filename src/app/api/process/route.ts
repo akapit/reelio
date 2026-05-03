@@ -80,6 +80,7 @@ export async function POST(req: NextRequest) {
     "kling",
     "seedance",
     "seedance-fast",
+    "seedance-1-fast",
   ];
   const resolvedVideoModel: VideoModel | undefined =
     videoModel && (VALID_VIDEO_MODELS as readonly string[]).includes(videoModel)

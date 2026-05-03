@@ -534,6 +534,12 @@ export const piapiProvider: IMediaProvider = {
       };
     }
 
+    if (requested === "seedance-1-fast") {
+      throw new Error(
+        "piapi.generateVideo: seedance-1-fast is only supported by the kieai provider.",
+      );
+    }
+
     // Seedance 2 / Seedance 2 Fast. PiAPI replaces kie.ai's `first_frame_url`
     // vs `reference_image_urls` mutex with a single `image_urls` array plus
     // a `mode` enum. Spec cap is 12 references.

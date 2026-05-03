@@ -19,7 +19,7 @@ export interface WriteScenePromptsInput {
    * terse motion-only sentence; Seedance handles richer, slightly longer
    * prompts with atmospheric hints. Default: "kling".
    */
-  targetModel?: "kling" | "seedance" | "seedance-fast";
+  targetModel?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
   /** Optional dep injection for tests */
   client?: Anthropic | { messages: Anthropic["messages"] };
   /** Default: "claude-sonnet-4-6" */
@@ -59,12 +59,9 @@ const DEFAULT_MODEL = "claude-sonnet-4-6";
 //     prose produces flatter / more jittery output. Best practices docs
 //     emphasize "camera verb + subject, minimal adjectives".
 //
-//   • Seedance 2 — the model actually prefers richer prompts. The kie.ai
-//     seedance adapter already has a tier-2 LLM translator that enriches
-//     terse prompts, so writing short prompts here means the translator
-//     will fire more often and add its own description — effectively
-//     undoing the "short prompt" goal. Instead, give Seedance 1-2 sentences
-//     with atmosphere, subject hint, and speed.
+//   • Seedance-family models prefer richer prompts. The kie.ai seedance
+//     adapter already has a cleanup pass for mention tokens, so give
+//     Seedance 1-2 sentences with atmosphere, subject hint, and speed.
 //
 // Both system prompts share the same JSON output contract so the downstream
 // parser needs no change.
@@ -147,7 +144,7 @@ Return ONLY a JSON object, no prose or code fences:
 }
 One entry per scene, preserving sceneId. Every \`modelChoice\` is "kling". Every \`prompt\` is a single sentence of <= 20 words.`;
 
-const SYSTEM_PROMPT_SEEDANCE = `You write motion prompts for ByteDance Seedance 2 image-to-video.
+const SYSTEM_PROMPT_SEEDANCE = `You write motion prompts for ByteDance Seedance image-to-video.
 
 ## Storyboard mindset — READ FIRST
 You are writing ALL the scenes for ONE short real-estate tour video in a single
@@ -210,7 +207,7 @@ Return ONLY a JSON object, no prose or code fences:
     {
       "sceneId": "...",
       "prompt": "...",
-      "modelChoice": "seedance" | "seedance-fast",
+      "modelChoice": "seedance" | "seedance-fast" | "seedance-1-fast",
       "modelReason": "...",
       "modelParams": { "mode": "std" | "pro", "cameraMovement": "..." }
     }
@@ -218,7 +215,9 @@ Return ONLY a JSON object, no prose or code fences:
 }
 One entry per scene, preserving sceneId.`;
 
-function systemPromptFor(target: "kling" | "seedance" | "seedance-fast"): string {
+function systemPromptFor(
+  target: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast",
+): string {
   return target === "kling" ? SYSTEM_PROMPT_KLING : SYSTEM_PROMPT_SEEDANCE;
 }
 
@@ -366,7 +365,7 @@ function alignPrompts(
 function applyOpeningOverride(
   prompts: ScenePromptType[],
   scenes: Scene[],
-  targetModel: "kling" | "seedance" | "seedance-fast",
+  targetModel: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast",
 ): ScenePromptType[] {
   const openingScene =
     scenes.find((s) => s.sceneRole === "opening") ??
@@ -622,7 +621,7 @@ export async function writeScenePrompts(
         {
           role: "user",
           content:
-            "Your previous response failed JSON validation. Return ONLY the JSON object with no prose, no markdown, no code fences. The shape must be exactly: { \"prompts\": [ { \"sceneId\": \"...\", \"prompt\": \"...\", \"modelChoice\": \"kling\"|\"seedance\"|\"seedance-fast\", \"modelReason\": \"...\", \"modelParams\": { \"mode\": \"std\"|\"pro\", \"cameraMovement\": \"...\" } } ] }",
+            "Your previous response failed JSON validation. Return ONLY the JSON object with no prose, no markdown, no code fences. The shape must be exactly: { \"prompts\": [ { \"sceneId\": \"...\", \"prompt\": \"...\", \"modelChoice\": \"kling\"|\"seedance\"|\"seedance-fast\"|\"seedance-1-fast\", \"modelReason\": \"...\", \"modelParams\": { \"mode\": \"std\"|\"pro\", \"cameraMovement\": \"...\" } } ] }",
         },
       ]);
 

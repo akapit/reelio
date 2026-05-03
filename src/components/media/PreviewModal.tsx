@@ -70,6 +70,7 @@ const MODEL_LABELS: Record<string, string> = {
   kling: "Kling",
   seedance: "Seedance 2.0",
   "seedance-fast": "Seedance 2.0 Fast",
+  "seedance-1-fast": "Seedance 1.0 Pro Fast",
 };
 
 const RUN_STATUS_META = {
