@@ -38,19 +38,35 @@ function targetSize(
   };
 }
 
+export interface ThumbnailResult {
+  /** Resized JPEG/WebP suitable for upload as the thumbnail. */
+  blob: Blob;
+  /** Source image's intrinsic pixel width — taken from the decoded bitmap so
+   *  callers can persist `metadata.dimensions` without decoding twice. */
+  sourceWidth: number;
+  /** Source image's intrinsic pixel height. */
+  sourceHeight: number;
+}
+
 /**
  * Generate a thumbnail blob from an image source. Works on any browser-decodable
  * image (jpeg/png/webp/gif/heic where the browser supports it). Throws if the
  * source can't be decoded.
+ *
+ * Also returns the source image's intrinsic width/height — already known from
+ * the `createImageBitmap` decode, surfaced so the upload hook can persist
+ * dimensions in the asset row without a second decode.
  */
 export async function generateThumbnail(
   source: Blob,
   opts: ThumbnailOptions = {},
-): Promise<Blob> {
+): Promise<ThumbnailResult> {
   const { maxEdge, quality, mimeType } = { ...DEFAULTS, ...opts };
 
   const bitmap = await createImageBitmap(source);
-  const { w, h } = targetSize(bitmap.width, bitmap.height, maxEdge);
+  const sourceWidth = bitmap.width;
+  const sourceHeight = bitmap.height;
+  const { w, h } = targetSize(sourceWidth, sourceHeight, maxEdge);
 
   // Prefer OffscreenCanvas when available; fall back to a detached <canvas>.
   if (typeof OffscreenCanvas !== "undefined") {
@@ -59,7 +75,8 @@ export async function generateThumbnail(
     if (!ctx) throw new Error("OffscreenCanvas 2d context unavailable");
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close();
-    return await canvas.convertToBlob({ type: mimeType, quality });
+    const blob = await canvas.convertToBlob({ type: mimeType, quality });
+    return { blob, sourceWidth, sourceHeight };
   }
 
   const canvas = document.createElement("canvas");
@@ -69,11 +86,12 @@ export async function generateThumbnail(
   if (!ctx) throw new Error("Canvas 2d context unavailable");
   ctx.drawImage(bitmap, 0, 0, w, h);
   bitmap.close();
-  return await new Promise<Blob>((resolve, reject) => {
+  const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
       mimeType,
       quality,
     );
   });
+  return { blob, sourceWidth, sourceHeight };
 }

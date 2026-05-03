@@ -272,6 +272,20 @@ export const TEMPLATE_SLOT_COUNTS: Record<TemplateName, number> = {
   premium_45s: 10,
 };
 
+/**
+ * Output aspect ratio per template. Mirrors the `aspectRatio` field in each
+ * template JSON — duplicated as a typed runtime const so the client (which
+ * shouldn't import server-only template JSONs) can reason about target AR
+ * before kicking off a generation. Keep in sync with the JSON files.
+ */
+export const TEMPLATE_ASPECT_RATIO: Record<TemplateName, AspectRatio> = {
+  luxury_30s: "16:9",
+  family_30s: "16:9",
+  fast_15s: "9:16",
+  investor_20s: "16:9",
+  premium_45s: "16:9",
+};
+
 // --- New scene-based pipeline models ---------------------------------------
 
 export const SceneRole = z.enum(["opening", "hero", "wow", "filler", "closing"]);
