@@ -21,7 +21,7 @@ export interface EngineGenerateOptions {
    *  this choice after the LLM writes its prompt. Omit to let the LLM pick
    *  per scene. */
   modelChoice?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
-  /** Seedance mode only: target video duration 4-15s (default 15). */
+  /** Target video duration. Scene mode accepts 1-50s; Seedance mode accepts 4-15s. */
   durationSec?: number;
   /** Seedance mode only: output aspect ratio. */
   aspectRatio?: "16:9" | "9:16" | "1:1";

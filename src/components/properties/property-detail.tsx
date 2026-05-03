@@ -23,7 +23,13 @@ import {
   type PresetSelection,
 } from "./modals/ai-enhancement-modal";
 import { ShareModal } from "./modals/share-modal";
+import type { VideoGenerationOptions } from "@/components/media/VideoGenerationOptionsModal";
+import {
+  AspectRatioWarningModal,
+  type AspectRatioMismatch,
+} from "@/components/media/AspectRatioWarningModal";
 import { useI18n } from "@/lib/i18n/client";
+import { TEMPLATE_ASPECT_RATIO } from "@/lib/engine/models";
 import {
   FALLBACK_PRESETS,
   findFallbackPreset,
@@ -113,6 +119,15 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [actionAssetIds, setActionAssetIds] = useState<string[]>([]);
+  const [pendingVideoGeneration, setPendingVideoGeneration] = useState<{
+    assetIds: string[];
+    options: VideoGenerationOptions;
+  } | null>(null);
+  const [arWarning, setArWarning] = useState<{
+    open: boolean;
+    mismatches: AspectRatioMismatch[];
+    targetAspectRatio: "16:9" | "9:16" | "1:1";
+  } | null>(null);
   const [presets, setPresets] = useState<EnhancementPreset[]>(FALLBACK_PRESETS);
   const { t } = useI18n();
   const engineGenerate = useEngineGenerate();
@@ -233,14 +248,59 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     }
   };
 
-  const handleCreateVideo = (assetIds: string[]) => {
-    if (assetIds.length === 0) return;
-    engineGenerate.mutate({
+  const dispatchVideoGeneration = async (
+    assetIds: string[],
+    options: VideoGenerationOptions,
+  ) => {
+    await engineGenerate.mutateAsync({
       projectId,
       imageAssetIds: assetIds,
       templateName: "luxury_30s",
+      durationSec: options.durationSec,
+      voiceoverText: options.voiceoverText,
+      musicPrompt: options.musicPrompt,
+      musicVolume: options.musicVolume,
     });
-    setSelectedAssetId(assetIds[0] ?? null);
+    setActiveTab("videos");
+  };
+
+  const handleCreateVideo = async (
+    assetIds: string[],
+    options: VideoGenerationOptions,
+  ) => {
+    if (assetIds.length === 0) return;
+
+    const targetAspectRatio = TEMPLATE_ASPECT_RATIO.luxury_30s;
+    const res = await fetch("/api/assets/check-aspect-ratio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        assetIds,
+        targetAspectRatio,
+      }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        mismatches?: AspectRatioMismatch[];
+      };
+      if (data.mismatches && data.mismatches.length > 0) {
+        setPendingVideoGeneration({ assetIds, options });
+        setArWarning({
+          open: true,
+          mismatches: data.mismatches,
+          targetAspectRatio,
+        });
+        return;
+      }
+    } else {
+      console.warn(
+        "[property-detail] AR check failed",
+        res.status,
+        await res.text().catch(() => ""),
+      );
+    }
+
+    await dispatchVideoGeneration(assetIds, options);
   };
 
   const handleAiSelect = (selection: PresetSelection) => {
@@ -574,8 +634,11 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
                     setActionAssetIds(ids);
                     setShareModalOpen(true);
                   }}
-                  onCreateVideo={(picked) =>
-                    handleCreateVideo(picked.map((p) => p.id))
+                  onCreateVideo={(picked, options) =>
+                    handleCreateVideo(
+                      picked.map((p) => p.id),
+                      options,
+                    )
                   }
                   onSwitchTab={(id) => setActiveTab(id)}
                 />
@@ -605,6 +668,26 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
       <ShareModal
         open={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
+      />
+      <AspectRatioWarningModal
+        isOpen={arWarning?.open ?? false}
+        mismatches={arWarning?.mismatches ?? []}
+        targetAspectRatio={arWarning?.targetAspectRatio ?? "16:9"}
+        onCancel={() => {
+          setArWarning(null);
+          setPendingVideoGeneration(null);
+        }}
+        onConfirm={() => {
+          const pending = pendingVideoGeneration;
+          setArWarning(null);
+          setPendingVideoGeneration(null);
+          if (!pending) return;
+          void dispatchVideoGeneration(pending.assetIds, pending.options).catch(
+            (err) => {
+              console.warn("[property-detail] video dispatch failed", err);
+            },
+          );
+        }}
       />
     </div>
   );

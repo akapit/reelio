@@ -10,6 +10,15 @@ import { useEngineGenerate } from "@/hooks/use-engine-generate";
 import { TEMPLATE_META, FALLBACK_META } from "@/components/templates/template-meta";
 import { Field } from "@/components/upload/Field";
 import type { TemplateName } from "@/lib/engine/models";
+import { TEMPLATE_ASPECT_RATIO } from "@/lib/engine/models";
+import {
+  VideoGenerationOptionsModal,
+  type VideoGenerationOptions,
+} from "@/components/media/VideoGenerationOptionsModal";
+import {
+  AspectRatioWarningModal,
+  type AspectRatioMismatch,
+} from "@/components/media/AspectRatioWarningModal";
 
 type Tone = "warm" | "amber" | "cool" | "sunset" | "mono";
 
@@ -26,7 +35,6 @@ interface MetaState {
   title: string;
   addr: string;
   price: string;
-  duration: "30" | "45" | "60";
   template: string;
 }
 
@@ -39,10 +47,21 @@ export default function UploadPage() {
     title: "",
     addr: "",
     price: "",
-    duration: "30",
     template: searchParams.get("template") ?? "luxury_30s",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [videoOptionsOpen, setVideoOptionsOpen] = useState(false);
+  const [pendingUploadedGeneration, setPendingUploadedGeneration] = useState<{
+    projectId: string;
+    assetIds: string[];
+    templateName: TemplateName;
+    options: VideoGenerationOptions;
+  } | null>(null);
+  const [arWarning, setArWarning] = useState<{
+    open: boolean;
+    mismatches: AspectRatioMismatch[];
+    targetAspectRatio: "16:9" | "9:16" | "1:1";
+  } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -57,7 +76,7 @@ export default function UploadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const ready = files.length >= 4 && meta.title.trim().length > 0;
+  const ready = files.length >= 6 && meta.title.trim().length > 0;
 
   const totalMB = (
     files.reduce((sum, f) => sum + f.file.size, 0) / 1_000_000
@@ -94,7 +113,28 @@ export default function UploadPage() {
 
   const templateMeta = TEMPLATE_META[meta.template] ?? FALLBACK_META;
 
-  async function handleGenerate() {
+  async function dispatchUploadedGeneration(args: {
+    projectId: string;
+    assetIds: string[];
+    templateName: TemplateName;
+    options: VideoGenerationOptions;
+  }) {
+    const result = await engineGenerate.mutateAsync({
+      projectId: args.projectId,
+      imageAssetIds: args.assetIds,
+      templateName: args.templateName,
+      durationSec: args.options.durationSec,
+      voiceoverText: args.options.voiceoverText,
+      musicPrompt: args.options.musicPrompt,
+      musicVolume: args.options.musicVolume,
+    });
+
+    router.push(
+      `/dashboard/generate?assetId=${result.resultAssetId}&projectId=${args.projectId}`,
+    );
+  }
+
+  async function handleGenerate(options: VideoGenerationOptions) {
     if (!ready || submitting) return;
     setSubmitting(true);
     try {
@@ -145,17 +185,53 @@ export default function UploadPage() {
         assetIds.push(asset.id);
       }
 
-      const result = await engineGenerate.mutateAsync({
-        projectId,
-        imageAssetIds: assetIds,
-        templateName: meta.template as TemplateName,
+      const templateName = meta.template as TemplateName;
+      const targetAspectRatio = TEMPLATE_ASPECT_RATIO[templateName];
+      const ar = await fetch("/api/assets/check-aspect-ratio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetIds,
+          targetAspectRatio,
+        }),
       });
+      if (ar.ok) {
+        const data = (await ar.json()) as {
+          mismatches?: AspectRatioMismatch[];
+        };
+        if (data.mismatches && data.mismatches.length > 0) {
+          setPendingUploadedGeneration({
+            projectId,
+            assetIds,
+            templateName,
+            options,
+          });
+          setArWarning({
+            open: true,
+            mismatches: data.mismatches,
+            targetAspectRatio,
+          });
+          setVideoOptionsOpen(false);
+          return;
+        }
+      } else {
+        console.warn(
+          "[upload] AR check failed",
+          ar.status,
+          await ar.text().catch(() => ""),
+        );
+      }
 
-      router.push(
-        `/dashboard/generate?assetId=${result.resultAssetId}&projectId=${projectId}`
-      );
+      await dispatchUploadedGeneration({
+        projectId,
+        assetIds,
+        templateName,
+        options,
+      });
+      setVideoOptionsOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generation failed");
+      throw err;
     } finally {
       setSubmitting(false);
     }
@@ -436,30 +512,13 @@ export default function UploadPage() {
             />
           </Field>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Asking price">
-              <input
-                value={meta.price}
-                onChange={(e) => setMeta({ ...meta, price: e.target.value })}
-                placeholder="$8.4M"
-              />
-            </Field>
-
-            <Field label="Duration">
-              <div className="seg" style={{ width: "100%" }}>
-                {(["30", "45", "60"] as const).map((d) => (
-                  <button
-                    key={d}
-                    aria-pressed={meta.duration === d}
-                    onClick={() => setMeta({ ...meta, duration: d })}
-                    style={{ flex: 1 }}
-                  >
-                    {d}s
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
+          <Field label="Asking price">
+            <input
+              value={meta.price}
+              onChange={(e) => setMeta({ ...meta, price: e.target.value })}
+              placeholder="$8.4M"
+            />
+          </Field>
 
           <Field label="Template">
             <div
@@ -531,7 +590,7 @@ export default function UploadPage() {
           <button
             className="btn-generate"
             disabled={!ready || submitting}
-            onClick={handleGenerate}
+            onClick={() => setVideoOptionsOpen(true)}
             style={{
               width: "100%",
               justifyContent: "center",
@@ -548,6 +607,38 @@ export default function UploadPage() {
           </button>
         </div>
       </div>
+
+      <VideoGenerationOptionsModal
+        isOpen={videoOptionsOpen}
+        imageCount={files.length}
+        onClose={() => {
+          if (!submitting) setVideoOptionsOpen(false);
+        }}
+        onConfirm={handleGenerate}
+      />
+      <AspectRatioWarningModal
+        isOpen={arWarning?.open ?? false}
+        mismatches={arWarning?.mismatches ?? []}
+        targetAspectRatio={arWarning?.targetAspectRatio ?? "16:9"}
+        onCancel={() => {
+          setArWarning(null);
+          setPendingUploadedGeneration(null);
+        }}
+        onConfirm={() => {
+          const pending = pendingUploadedGeneration;
+          setArWarning(null);
+          setPendingUploadedGeneration(null);
+          if (!pending) return;
+          setSubmitting(true);
+          void dispatchUploadedGeneration(pending)
+            .catch((err) => {
+              toast.error(
+                err instanceof Error ? err.message : "Generation failed",
+              );
+            })
+            .finally(() => setSubmitting(false));
+        }}
+      />
 
       <style>{`
         @media (max-width: 768px) {

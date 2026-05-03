@@ -12,6 +12,8 @@ export const enginePlanRunTask = task({
     userId: string;
     imageUrls: string[];
     templateName: string;
+    /** Optional requested total duration for the scene planner. */
+    durationSec?: number;
     /** Pre-resolved effective video model (user override OR env default).
      *  Drives the writer's model-specific SYSTEM_PROMPT. */
     targetModel?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
@@ -27,6 +29,7 @@ export const enginePlanRunTask = task({
       runId: payload.runId,
       imageCount: payload.imageUrls.length,
       templateName: payload.templateName,
+      durationSec: payload.durationSec,
       targetModel: payload.targetModel,
     });
 
@@ -34,6 +37,7 @@ export const enginePlanRunTask = task({
       runId: payload.runId,
       imagePaths: payload.imageUrls,
       templateName: payload.templateName,
+      durationSec: payload.durationSec,
       ...(payload.targetModel ? { targetModel: payload.targetModel } : {}),
     });
 

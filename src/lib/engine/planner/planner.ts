@@ -422,6 +422,8 @@ export function buildTimeline(
 export interface PlanTimelineInput {
   dataset: ImageDataset;
   template: Template;
+  /** Optional requested total duration for the final scene timeline. */
+  targetDurationSec?: number;
 }
 
 export interface PlanTimelineResult {
@@ -431,6 +433,24 @@ export interface PlanTimelineResult {
 
 function logPlanner(event: string, data: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ source: "engine.planner", event, ...data }));
+}
+
+function slotForCustomDuration(
+  slot: TemplateSlot,
+  targetDurationSec: number,
+  sceneCount: number,
+): TemplateSlot {
+  const perScene = targetDurationSec / Math.max(1, sceneCount);
+  const minDuration = Math.max(1.2, Math.round(perScene * 0.7 * 10) / 10);
+  const maxDuration = Math.max(
+    minDuration + 0.3,
+    Math.round(perScene * 1.3 * 10) / 10,
+  );
+  return {
+    ...slot,
+    minDuration,
+    maxDuration,
+  };
 }
 
 /**
@@ -513,6 +533,10 @@ function makeSceneId(slotId: string, imagePath: string, order: number): string {
 export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
   const { dataset } = input;
   let { template } = input;
+  const targetDurationSec =
+    input.targetDurationSec !== undefined
+      ? input.targetDurationSec
+      : template.targetDurationSec;
 
   if (dataset.usableCount === 0) {
     logPlanner("plan.start", {
@@ -569,6 +593,7 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
     imageCount: dataset.images.length,
     usableCount: dataset.usableCount,
     slotCount: template.slots.length,
+    targetDurationSec,
     trimmed: slotsTrimmed !== null,
   });
 
@@ -655,10 +680,13 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
   }
 
   const durationInputs: DurationChoice[] = choices.map((c) => ({
-    slot: c.slot,
+    slot:
+      input.targetDurationSec !== undefined
+        ? slotForCustomDuration(c.slot, targetDurationSec, choices.length)
+        : c.slot,
     image: c.image,
   }));
-  const durations = distribute(durationInputs, template.targetDurationSec);
+  const durations = distribute(durationInputs, targetDurationSec);
 
   const warnings: string[] = [];
   if (slotsTrimmed) {
@@ -760,14 +788,14 @@ export function planTimeline(input: PlanTimelineInput): PlanTimelineResult {
   });
 
   const total = scenes.reduce((s, x) => s + x.durationSec, 0);
-  const durationDelta = total - template.targetDurationSec;
+  const durationDelta = total - targetDurationSec;
   if (Math.abs(durationDelta) > 2) {
     warnings.push(`duration_off_by_${durationDelta.toFixed(1)}s`);
   }
 
   const rawTimeline = {
     templateName: template.name,
-    targetDurationSec: template.targetDurationSec,
+    targetDurationSec,
     totalDurationSec: total,
     aspectRatio: template.aspectRatio,
     resolution: template.resolution,

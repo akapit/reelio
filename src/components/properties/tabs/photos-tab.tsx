@@ -15,12 +15,17 @@ import {
   Video,
   Wand2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { SelectableAsset, TabId } from "@/components/properties/property-detail";
 import { useI18n } from "@/lib/i18n/client";
 import { useUpload } from "@/hooks/use-upload";
 import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
 import { ImagePreviewModal } from "@/components/properties/modals/image-preview-modal";
+import {
+  VideoGenerationOptionsModal,
+  type VideoGenerationOptions,
+} from "@/components/media/VideoGenerationOptionsModal";
 
 const ACCEPTED_FILE_TYPES = "image/*,video/*";
 
@@ -56,7 +61,10 @@ interface PhotosTabProps {
   /** Opens share modal for the selected photo ids. */
   onShare?: (assetIds: string[]) => void;
   /** Dispatches video generation for the selected photos. */
-  onCreateVideo?: (assets: CreatorPhotoAsset[]) => void;
+  onCreateVideo?: (
+    assets: CreatorPhotoAsset[],
+    options: VideoGenerationOptions,
+  ) => Promise<void> | void;
   /** Switches the parent's active tab — used by the AI Copy tip card. */
   onSwitchTab?: (id: TabId) => void;
 }
@@ -271,6 +279,7 @@ export function PhotosTab({
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [videoOptionsOpen, setVideoOptionsOpen] = useState(false);
   const [optimisticRoomTypes, setOptimisticRoomTypes] = useState<
     Record<string, RoomType>
   >({});
@@ -341,8 +350,23 @@ export function PhotosTab({
   const handleCreateVideo = () => {
     const picked = pickedCreatorPhotos();
     if (picked.length === 0) return;
-    onCreateVideo?.(picked);
+    if (picked.length < 6) {
+      toast.error(t.creation.videoMinImagesRequired.replace("{count}", "6"));
+      return;
+    }
+    if (picked.length > 20) {
+      toast.error(t.creation.videoMaxImagesAllowed.replace("{count}", "20"));
+      return;
+    }
+    setVideoOptionsOpen(true);
+  };
+
+  const handleVideoOptionsConfirm = async (options: VideoGenerationOptions) => {
+    const picked = pickedCreatorPhotos();
+    if (picked.length < 6 || picked.length > 20) return;
+    await onCreateVideo?.(picked, options);
     setSelectedIds(new Set());
+    setVideoOptionsOpen(false);
   };
 
   const handleAiEnhance = () => {
@@ -804,6 +828,12 @@ export function PhotosTab({
         open={previewUrl !== null}
         imageUrl={previewUrl}
         onClose={() => setPreviewUrl(null)}
+      />
+      <VideoGenerationOptionsModal
+        isOpen={videoOptionsOpen}
+        imageCount={pickedCreatorPhotos().length}
+        onClose={() => setVideoOptionsOpen(false)}
+        onConfirm={handleVideoOptionsConfirm}
       />
     </div>
   );

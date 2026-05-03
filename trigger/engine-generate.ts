@@ -80,6 +80,8 @@ export const engineGenerateTask = task({
     musicPrompt?: string;
     musicVolume?: number;
     videoProvider?: "piapi" | "kieai";
+    /** Optional requested total duration for the scene planner. */
+    durationSec?: number;
     /** User-selected model. When set, every scene's modelChoice is overridden
      *  after the prompt writer returns. See "hard override" logic below. */
     modelChoice?: "kling" | "seedance" | "seedance-fast" | "seedance-1-fast";
@@ -93,11 +95,15 @@ export const engineGenerateTask = task({
     metadata.set("assetId", payload.assetId);
     metadata.set("templateName", payload.templateName);
     metadata.set("imageCount", payload.imageUrls.length);
+    if (payload.durationSec !== undefined) {
+      metadata.set("durationSec", payload.durationSec);
+    }
 
     logger.info("[engine-generate] start", {
       assetId: payload.assetId,
       imageCount: payload.imageUrls.length,
       templateName: payload.templateName,
+      durationSec: payload.durationSec,
       hasVoiceover: !!payload.voiceoverText,
       hasMusic: !!payload.musicPrompt,
       videoProvider: payload.videoProvider,
@@ -111,6 +117,9 @@ export const engineGenerateTask = task({
         input: {
           imagePaths: payload.imageUrls,
           templateName: payload.templateName,
+          ...(payload.durationSec !== undefined
+            ? { durationSec: payload.durationSec }
+            : {}),
           hasVoiceover: !!payload.voiceoverText,
           hasMusic: !!payload.musicPrompt,
           musicVolume: payload.musicVolume,
@@ -125,6 +134,9 @@ export const engineGenerateTask = task({
         payload: {
           imageCount: payload.imageUrls.length,
           templateName: payload.templateName,
+          ...(payload.durationSec !== undefined
+            ? { durationSec: payload.durationSec }
+            : {}),
           videoProvider: payload.videoProvider ?? "piapi",
         },
       });
@@ -142,6 +154,7 @@ export const engineGenerateTask = task({
         userId: payload.userId,
         imageUrls: payload.imageUrls,
         templateName: payload.templateName,
+        durationSec: payload.durationSec,
         targetModel: effectiveModel,
       });
       if (!planResult.ok) {
