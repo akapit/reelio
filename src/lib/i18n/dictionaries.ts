@@ -577,6 +577,15 @@ export const dictionaries = {
       videoModalDescription: "Create a cinematic tour from this photo.",
       voiceoverScript: "Voiceover script",
       voiceoverPlaceholder: "Welcome to this beautiful three-room home...",
+      arWarningTitle: "Aspect ratio mismatch",
+      arWarningBodyLandscape:
+        "Your template produces a landscape video, but the photos below are portrait. They'll be cropped to fit and may cut off the subject.",
+      arWarningBodyPortrait:
+        "Your template produces a portrait video, but the photos below are landscape. They'll be cropped to fit and may cut off the subject.",
+      arWarningCancel: "Cancel",
+      arWarningProceed: "Generate anyway",
+      arWarningCheckFailed:
+        "Couldn't verify image aspect ratios — proceeding without check.",
     },
     status: {
       draft: "Draft",
@@ -1163,6 +1172,15 @@ export const dictionaries = {
       videoModalDescription: "צור סיור קולנועי מתמונה זו.",
       voiceoverScript: "תסריט קריינות",
       voiceoverPlaceholder: "ברוכים הבאים לבית התלת-חדרי המדהים הזה...",
+      arWarningTitle: "אי-התאמה ביחס תמונה",
+      arWarningBodyLandscape:
+        "התבנית שלך יוצרת סרטון רוחבי, אך התמונות למטה הן אנכיות. הן ייחתכו כדי להתאים ועלולות לחתוך את הנושא.",
+      arWarningBodyPortrait:
+        "התבנית שלך יוצרת סרטון אנכי, אך התמונות למטה הן רוחביות. הן ייחתכו כדי להתאים ועלולות לחתוך את הנושא.",
+      arWarningCancel: "ביטול",
+      arWarningProceed: "צור בכל זאת",
+      arWarningCheckFailed:
+        "לא ניתן לאמת את יחס התמונות — ממשיך ללא בדיקה.",
     },
     status: {
       draft: "טיוטה",

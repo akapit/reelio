@@ -21,6 +21,11 @@ import { useEngineGenerate } from "@/hooks/use-engine-generate";
 import { toast } from "sonner";
 import type { VideoModel } from "@/lib/media/types";
 import { useI18n } from "@/lib/i18n/client";
+import { TEMPLATE_ASPECT_RATIO } from "@/lib/engine/models";
+import {
+  AspectRatioWarningModal,
+  type AspectRatioMismatch,
+} from "@/components/media/AspectRatioWarningModal";
 
 /**
  * Minimum source-image count required to kick off a video generation. Matches
@@ -168,6 +173,17 @@ export function CreationBar({
     activeIndex: number;
   }>({ open: false, query: "", startIndex: -1, activeIndex: 0 });
 
+  // AR-mismatch confirm modal state. Populated by `handleSubmit` when the
+  // pre-flight check finds source images whose orientation conflicts with the
+  // target template. `pendingSubmit` carries the deferred engine.mutate call so
+  // "Generate anyway" doesn't have to re-derive the request body.
+  const [arWarning, setArWarning] = useState<{
+    open: boolean;
+    mismatches: AspectRatioMismatch[];
+    targetAspectRatio: "16:9" | "9:16" | "1:1";
+  } | null>(null);
+  const [arCheckPending, setArCheckPending] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const upload = useUpload(projectId);
@@ -186,6 +202,7 @@ export function CreationBar({
 
   const isUploading = pendingFiles.some((f) => f.isUploading);
   const hasAssets = uploadedAssetIds.length > 0;
+  const isSubmitting = arCheckPending;
 
   // Video requires ≥ MIN_IMAGES_FOR_VIDEO for the scene engine. Enhance
   // requires ≥ 1. Show the gate inline under the thumbnail strip and
@@ -197,7 +214,7 @@ export function CreationBar({
   );
   const videoGateMet = mode !== "video" || videoImageShortfall === 0;
   const canSubmit =
-    hasAssets && !isUploading && mode !== null && videoGateMet;
+    hasAssets && !isUploading && !isSubmitting && mode !== null && videoGateMet;
   const sourceStatusText = isUploading
     ? t.creation.uploadingSourcePhotos
     : hasAssets
@@ -524,8 +541,39 @@ export function CreationBar({
     [mention.open, mention.activeIndex, mentionSuggestions, applyMention, closeMention]
   );
 
+  // Kicks off the actual engine generation. Pulled out of `handleSubmit` so
+  // both the happy path and the "Generate anyway" branch from the AR-mismatch
+  // modal go through the same code, and so we can keep `handleSubmit` async
+  // for the pre-flight check without making the modal callback awkward.
+  const submitVideoGeneration = useCallback(() => {
+    if (uploadedAssetIds.length === 0) return;
+    engine.mutate({
+      projectId,
+      imageAssetIds: uploadedAssetIds,
+      templateName: ENGINE_TEMPLATE,
+      voiceoverText: voiceoverEnabled
+        ? voiceoverText.trim() || undefined
+        : undefined,
+      ...(musicEnabled
+        ? { musicPrompt: musicPrompt.trim() || undefined }
+        : {}),
+      musicVolume: musicEnabled ? musicVolume / 100 : undefined,
+    });
+    clearAll();
+  }, [
+    uploadedAssetIds,
+    engine,
+    projectId,
+    voiceoverEnabled,
+    voiceoverText,
+    musicEnabled,
+    musicPrompt,
+    musicVolume,
+    clearAll,
+  ]);
+
   // Submit
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!canSubmit) return;
 
     if (mode === "enhance") {
@@ -535,41 +583,66 @@ export function CreationBar({
       toast.success(
         `${t.creation.enhance} ${uploadedAssetIds.length} ${t.creation.images}`
       );
-    } else if (mode === "video") {
-      if (uploadedAssetIds.length > 0) {
-        // Always uses the scene-based engine (planner + per-scene i2v +
-        // ffmpeg concat). Server picks the model via ENGINE_DEFAULT_MODEL
-        // and the provider via ENGINE_VIDEO_PROVIDER.
-        engine.mutate({
-          projectId,
-          imageAssetIds: uploadedAssetIds,
-          templateName: ENGINE_TEMPLATE,
-          voiceoverText: voiceoverEnabled
-            ? voiceoverText.trim() || undefined
-            : undefined,
-          ...(musicEnabled
-            ? { musicPrompt: musicPrompt.trim() || undefined }
-            : {}),
-          musicVolume: musicEnabled ? musicVolume / 100 : undefined,
-        });
-      }
+      clearAll();
+      return;
     }
 
-    clearAll();
+    if (mode === "video") {
+      if (uploadedAssetIds.length === 0) return;
+
+      // Pre-flight aspect-ratio check. The engine silently center-crops AR
+      // mismatches (a 9:16 phone shot inside a 16:9 template gets the top and
+      // bottom chopped off), so warn the user before they burn provider
+      // credits. The check fails open: any error → proceed without warning,
+      // since blocking on a network blip would be worse UX than skipping the
+      // safety net.
+      const targetAspectRatio = TEMPLATE_ASPECT_RATIO[ENGINE_TEMPLATE];
+      setArCheckPending(true);
+      try {
+        const res = await fetch("/api/assets/check-aspect-ratio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assetIds: uploadedAssetIds,
+            targetAspectRatio,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            mismatches?: AspectRatioMismatch[];
+          };
+          if (data.mismatches && data.mismatches.length > 0) {
+            setArWarning({
+              open: true,
+              mismatches: data.mismatches,
+              targetAspectRatio,
+            });
+            return;
+          }
+        } else {
+          console.warn(
+            "[creation-bar] AR check failed",
+            res.status,
+            await res.text().catch(() => ""),
+          );
+        }
+      } catch (err) {
+        console.warn("[creation-bar] AR check threw, failing open", err);
+      } finally {
+        setArCheckPending(false);
+      }
+
+      submitVideoGeneration();
+    }
   }, [
     canSubmit,
     mode,
     uploadedAssetIds,
     process,
-    engine,
     projectId,
-    voiceoverEnabled,
-    voiceoverText,
-    musicEnabled,
-    musicPrompt,
-    musicVolume,
     clearAll,
     t,
+    submitVideoGeneration,
   ]);
 
   const toggleMode = (m: CreationMode) => {
@@ -577,6 +650,7 @@ export function CreationBar({
   };
 
   return (
+    <>
     <motion.div
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -1344,5 +1418,16 @@ export function CreationBar({
         onChange={handleFileChange}
       />
     </motion.div>
+    <AspectRatioWarningModal
+      isOpen={arWarning?.open ?? false}
+      mismatches={arWarning?.mismatches ?? []}
+      targetAspectRatio={arWarning?.targetAspectRatio ?? "16:9"}
+      onCancel={() => setArWarning(null)}
+      onConfirm={() => {
+        setArWarning(null);
+        submitVideoGeneration();
+      }}
+    />
+    </>
   );
 }

@@ -3,12 +3,19 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { generateThumbnail } from "@/lib/image-thumbnail";
+import { getAspectRatioLabel } from "@/lib/aspect-ratio";
 import { useI18n } from "@/lib/i18n/client";
 
 interface PresignedUpload {
   presignedUrl: string;
   key: string;
   publicUrl: string;
+}
+
+interface ImageThumbResult {
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
 }
 
 async function getPresignedUrl(
@@ -38,23 +45,29 @@ async function putToR2(
 }
 
 /**
- * For images, generate a small JPEG thumbnail client-side and upload it
- * alongside the original. Failures here don't block the upload — the asset
- * row still gets the original URL; the photos tab and backfill flow will
- * fall back to the original until a thumbnail is available.
+ * For images, decode + resize once: upload the thumbnail to R2 and surface the
+ * source's intrinsic width/height so the asset row gets `metadata.dimensions`
+ * tagged in the same insert. Failures here don't block the upload — we still
+ * store the original; the photos tab + backfill flow fall back to the original
+ * until a thumbnail is available, and the server-side AR backfill handles the
+ * missing-dimensions case for the warning.
  */
-async function uploadThumbnail(file: File): Promise<string | null> {
+async function processImage(file: File): Promise<ImageThumbResult> {
   try {
-    const thumb = await generateThumbnail(file);
+    const { blob, sourceWidth, sourceHeight } = await generateThumbnail(file);
     const { presignedUrl, publicUrl } = await getPresignedUrl(
       "thumb.jpg",
-      thumb.type || "image/jpeg",
+      blob.type || "image/jpeg",
     );
-    await putToR2(presignedUrl, thumb, thumb.type || "image/jpeg");
-    return publicUrl;
+    await putToR2(presignedUrl, blob, blob.type || "image/jpeg");
+    return {
+      thumbnailUrl: publicUrl,
+      width: sourceWidth,
+      height: sourceHeight,
+    };
   } catch (err) {
     console.warn("[upload] thumbnail generation failed", err);
-    return null;
+    return { thumbnailUrl: null, width: null, height: null };
   }
 }
 
@@ -70,7 +83,9 @@ export function useUpload(projectId: string) {
       const original = await getPresignedUrl(file.name, file.type);
       await putToR2(original.presignedUrl, file, file.type);
 
-      const thumbnailUrl = isImage ? await uploadThumbnail(file) : null;
+      const imageResult: ImageThumbResult = isImage
+        ? await processImage(file)
+        : { thumbnailUrl: null, width: null, height: null };
 
       const {
         data: { user },
@@ -78,15 +93,32 @@ export function useUpload(projectId: string) {
       if (!user) throw new Error(t.hooks.notAuthenticated);
 
       const assetType = file.type.startsWith("video/") ? "video" : "image";
+      const metadata: Record<string, unknown> = {};
+      if (
+        imageResult.width !== null &&
+        imageResult.height !== null &&
+        imageResult.height > 0
+      ) {
+        const w = imageResult.width;
+        const h = imageResult.height;
+        metadata.dimensions = {
+          width: w,
+          height: h,
+          aspectRatio: w / h,
+          label: getAspectRatioLabel(w, h),
+        };
+      }
+
       const { data, error } = await supabase
         .from("assets")
         .insert({
           project_id: projectId,
           user_id: user.id,
           original_url: original.publicUrl,
-          thumbnail_url: thumbnailUrl,
+          thumbnail_url: imageResult.thumbnailUrl,
           asset_type: assetType,
           status: "uploaded",
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         })
         .select()
         .single();
