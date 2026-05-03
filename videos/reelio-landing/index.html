@@ -1,0 +1,953 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #f8f7f3;
+        color: #182238;
+        font-family: Heebo, ui-sans-serif, system-ui, sans-serif;
+      }
+
+      [data-composition-id="main"] {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background:
+          radial-gradient(760px 560px at 78% 18%, rgba(241, 135, 0, 0.18), rgba(241, 135, 0, 0)),
+          radial-gradient(620px 480px at 10% 88%, rgba(32, 33, 38, 0.09), rgba(32, 33, 38, 0)),
+          #f8f7f3;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        visibility: hidden;
+        opacity: 0;
+        background:
+          radial-gradient(900px 640px at 80% 18%, rgba(241, 135, 0, 0.15), rgba(241, 135, 0, 0)),
+          radial-gradient(760px 600px at 12% 92%, rgba(24, 34, 56, 0.08), rgba(24, 34, 56, 0)),
+          #f8f7f3;
+      }
+
+      #scene-1 {
+        visibility: visible;
+        opacity: 1;
+      }
+
+      .scene-content {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        height: 100%;
+        padding: 92px 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 40px;
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        opacity: 0.18;
+        background-image:
+          linear-gradient(rgba(24, 34, 56, 0.035) 1px, rgba(24, 34, 56, 0) 1px),
+          linear-gradient(90deg, rgba(24, 34, 56, 0.03) 1px, rgba(24, 34, 56, 0) 1px);
+        background-size: 80px 80px;
+        pointer-events: none;
+      }
+
+      .warm-orb {
+        position: absolute;
+        width: 720px;
+        height: 720px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(223, 111, 0, 0.22), rgba(223, 111, 0, 0) 64%);
+        filter: blur(8px);
+        z-index: 1;
+      }
+
+      .orb-a {
+        top: -260px;
+        right: -180px;
+      }
+
+      .orb-b {
+        bottom: -320px;
+        left: -220px;
+        background: radial-gradient(circle, rgba(24, 34, 56, 0.13), rgba(24, 34, 56, 0) 68%);
+      }
+
+      .top-row,
+      .split,
+      .stage {
+        display: flex;
+        align-items: center;
+      }
+
+      .top-row {
+        justify-content: space-between;
+      }
+
+      .logo-lockup {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 42px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: #182238;
+      }
+
+      .logo-lockup img {
+        width: 48px;
+        height: 56px;
+        object-fit: contain;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 42px;
+        padding: 0 18px;
+        border-radius: 999px;
+        border: 1px solid rgba(36, 48, 74, 0.14);
+        background: rgba(255, 255, 255, 0.72);
+        color: #41506b;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0;
+        box-shadow: 0 10px 28px -24px rgba(24, 34, 56, 0.38);
+      }
+
+      .kicker {
+        margin: 0 0 22px;
+        color: #df6f00;
+        font-size: 22px;
+        line-height: 1.2;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      .headline {
+        max-width: 940px;
+        color: #182238;
+        font-size: 96px;
+        line-height: 0.95;
+        font-weight: 900;
+        letter-spacing: -0.045em;
+      }
+
+      .headline.wide {
+        max-width: 1120px;
+      }
+
+      .body-copy {
+        max-width: 720px;
+        margin-top: 28px;
+        color: #41506b;
+        font-size: 30px;
+        line-height: 1.24;
+        font-weight: 350;
+        letter-spacing: 0;
+      }
+
+      .split {
+        justify-content: space-between;
+        gap: 80px;
+      }
+
+      .copy-block {
+        flex: 0 0 820px;
+      }
+
+      .media-stage {
+        position: relative;
+        flex: 1;
+        height: 690px;
+        min-width: 680px;
+      }
+
+      .photo-card {
+        position: absolute;
+        overflow: hidden;
+        border-radius: 28px;
+        background: #ffffff;
+        border: 1px solid rgba(36, 48, 74, 0.12);
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.85) inset,
+          0 34px 80px -48px rgba(24, 34, 56, 0.55);
+      }
+
+      .photo-card.hero {
+        width: 620px;
+        height: 520px;
+        right: 18px;
+        top: 80px;
+      }
+
+      .photo-card.raw {
+        width: 300px;
+        height: 230px;
+        left: 0;
+        top: 38px;
+        transform: rotate(-5deg);
+      }
+
+      .photo-card.staged {
+        width: 350px;
+        height: 250px;
+        left: 52px;
+        bottom: 44px;
+        transform: rotate(4deg);
+      }
+
+      .photo {
+        position: absolute;
+        inset: 16px;
+        overflow: hidden;
+        border-radius: 20px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0)),
+          linear-gradient(145deg, #cbb898 0%, #7c684a 48%, #2f3b44 100%);
+      }
+
+      .photo.cool {
+        background:
+          radial-gradient(420px 300px at 62% 12%, rgba(118, 160, 185, 0.58), rgba(118, 160, 185, 0)),
+          linear-gradient(145deg, #cfd8d4 0%, #7a897f 46%, #283342 100%);
+      }
+
+      .photo.sunset {
+        background:
+          radial-gradient(440px 300px at 74% 18%, rgba(241, 135, 0, 0.62), rgba(241, 135, 0, 0)),
+          linear-gradient(145deg, #e9c99c 0%, #9b6840 48%, #24262a 100%);
+      }
+
+      .photo::before {
+        content: "";
+        position: absolute;
+        left: 9%;
+        right: 9%;
+        bottom: 14%;
+        height: 48%;
+        border-radius: 14px 14px 8px 8px;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.86) 0 18%, rgba(255, 255, 255, 0.36) 18% 22%, rgba(255, 255, 255, 0.74) 22% 46%, rgba(255, 255, 255, 0.32) 46% 50%, rgba(255, 255, 255, 0.76) 50% 100%),
+          #efe6d7;
+        box-shadow: 0 -42px 0 -28px rgba(32, 33, 38, 0.76);
+      }
+
+      .photo::after {
+        content: "";
+        position: absolute;
+        left: 18%;
+        right: 18%;
+        bottom: 8%;
+        height: 11%;
+        border-radius: 999px;
+        background: rgba(32, 33, 38, 0.35);
+        filter: blur(16px);
+      }
+
+      .status-strip {
+        position: absolute;
+        left: 28px;
+        right: 28px;
+        bottom: 26px;
+        height: 58px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        color: #ffffff;
+        font-size: 20px;
+        font-weight: 800;
+        background: #202126;
+        box-shadow: 0 18px 36px -24px rgba(32, 33, 38, 0.72);
+      }
+
+      .mini-label {
+        position: absolute;
+        left: 22px;
+        top: 22px;
+        z-index: 3;
+        height: 34px;
+        padding: 0 14px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.82);
+        color: #182238;
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .tool-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 38px;
+        flex-wrap: wrap;
+      }
+
+      .tool-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        height: 52px;
+        padding: 0 18px;
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid rgba(36, 48, 74, 0.13);
+        color: #263552;
+        font-size: 20px;
+        font-weight: 800;
+        box-shadow: 0 18px 44px -36px rgba(24, 34, 56, 0.42);
+      }
+
+      .tool-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #df6f00;
+        box-shadow: 0 0 0 5px rgba(223, 111, 0, 0.12);
+      }
+
+      .workflow-board {
+        height: 690px;
+        width: 780px;
+        border-radius: 32px;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(36, 48, 74, 0.12);
+        box-shadow: 0 40px 90px -58px rgba(24, 34, 56, 0.58);
+      }
+
+      .board-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 54px;
+        color: #263552;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .board-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .workflow-card {
+        position: relative;
+        height: 268px;
+        border-radius: 24px;
+        overflow: hidden;
+        background: #fbfaf7;
+        border: 1px solid rgba(36, 48, 74, 0.12);
+      }
+
+      .workflow-card.large {
+        grid-column: span 2;
+        height: 278px;
+      }
+
+      .workflow-card .photo {
+        inset: 0;
+        border-radius: 0;
+      }
+
+      .overlay-tag {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        display: flex;
+        align-items: center;
+        height: 44px;
+        padding: 0 16px;
+        border-radius: 14px;
+        color: #ffffff;
+        background: #202126;
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .prompt-shell {
+        width: 880px;
+        border-radius: 32px;
+        padding: 26px;
+        background: #202126;
+        color: #ffffff;
+        box-shadow: 0 50px 90px -60px rgba(32, 33, 38, 0.9);
+      }
+
+      .prompt-input {
+        min-height: 148px;
+        border-radius: 24px;
+        padding: 28px;
+        background: #2a2b31;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #f8f7f3;
+        font-size: 31px;
+        line-height: 1.25;
+        font-weight: 450;
+      }
+
+      .mention {
+        color: #ffd986;
+        font-weight: 800;
+      }
+
+      .model-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .model-pill {
+        height: 58px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.07);
+        color: #f8f7f3;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .model-pill.active {
+        color: #202126;
+        background: #ffd986;
+      }
+
+      .pipeline {
+        width: 680px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .pipeline-step {
+        min-height: 112px;
+        border-radius: 22px;
+        padding: 22px 24px;
+        background: #ffffff;
+        border: 1px solid rgba(36, 48, 74, 0.12);
+        box-shadow: 0 22px 52px -42px rgba(24, 34, 56, 0.44);
+      }
+
+      .step-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #182238;
+        font-size: 25px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+      }
+
+      .step-copy {
+        margin-top: 10px;
+        color: #41506b;
+        font-size: 19px;
+        line-height: 1.28;
+        font-weight: 500;
+      }
+
+      .progress-bar {
+        position: relative;
+        margin-top: 18px;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(36, 48, 74, 0.1);
+        overflow: hidden;
+      }
+
+      .progress-bar span {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 74%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #df6f00, #f18700);
+      }
+
+      .output-wall {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 24px;
+        width: 940px;
+        height: 650px;
+      }
+
+      .video-preview,
+      .copy-panel,
+      .stat-panel {
+        position: relative;
+        overflow: hidden;
+        border-radius: 28px;
+        background: #ffffff;
+        border: 1px solid rgba(36, 48, 74, 0.12);
+        box-shadow: 0 28px 70px -52px rgba(24, 34, 56, 0.55);
+      }
+
+      .video-preview {
+        grid-row: span 2;
+      }
+
+      .video-preview .photo {
+        inset: 0;
+        border-radius: 0;
+      }
+
+      .play {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 106px;
+        height: 106px;
+        margin-left: -53px;
+        margin-top: -53px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        background: #202126;
+        font-size: 46px;
+        padding-left: 8px;
+      }
+
+      .copy-panel,
+      .stat-panel {
+        padding: 26px;
+      }
+
+      .panel-label {
+        color: #9d3f00;
+        font-size: 17px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .panel-text {
+        margin-top: 18px;
+        color: #182238;
+        font-size: 30px;
+        line-height: 1.12;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+      }
+
+      .stat-number {
+        margin-top: 18px;
+        color: #182238;
+        font-size: 76px;
+        line-height: 0.95;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .final-content {
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 28px;
+      }
+
+      .final-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        color: #182238;
+        font-size: 74px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .final-logo img {
+        width: 86px;
+        height: 100px;
+        object-fit: contain;
+        filter: drop-shadow(0 18px 40px rgba(223, 111, 0, 0.22));
+      }
+
+      .final-headline {
+        max-width: 1180px;
+        color: #182238;
+        font-size: 110px;
+        line-height: 0.92;
+        font-weight: 900;
+        letter-spacing: -0.05em;
+      }
+
+      .cta-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        margin-top: 14px;
+      }
+
+      .cta {
+        height: 64px;
+        padding: 0 28px;
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        color: #ffffff;
+        background: #9d3f00;
+        font-size: 24px;
+        font-weight: 900;
+        box-shadow: 0 18px 42px -24px rgba(185, 77, 0, 0.72);
+      }
+
+      .cta.secondary {
+        color: #263552;
+        background: #ffffff;
+        border: 1px solid rgba(36, 48, 74, 0.14);
+        box-shadow: 0 18px 44px -36px rgba(24, 34, 56, 0.42);
+      }
+
+      .transition-leak {
+        position: absolute;
+        z-index: 20;
+        inset: -16% -10%;
+        pointer-events: none;
+        opacity: 0;
+        background:
+          radial-gradient(760px 420px at 24% 48%, rgba(255, 217, 134, 0.72), rgba(255, 217, 134, 0)),
+          linear-gradient(110deg, rgba(223, 111, 0, 0), rgba(223, 111, 0, 0.28), rgba(255, 255, 255, 0));
+        mix-blend-mode: screen;
+        transform: translateX(-18%) rotate(-3deg);
+      }
+
+      .line-sweep {
+        position: absolute;
+        z-index: 2;
+        left: 120px;
+        right: 120px;
+        bottom: 72px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(223, 111, 0, 0), rgba(223, 111, 0, 0.72), rgba(223, 111, 0, 0));
+        opacity: 0.55;
+        transform-origin: left center;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="18"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div class="transition-leak leak-1"></div>
+      <div class="transition-leak leak-2"></div>
+      <div class="transition-leak leak-3"></div>
+      <div class="transition-leak leak-4"></div>
+
+      <section id="scene-1" class="clip scene" data-start="0" data-duration="4.4" data-track-index="0">
+        <div class="grain"></div>
+        <div class="warm-orb orb-a"></div>
+        <div class="warm-orb orb-b"></div>
+        <div class="line-sweep"></div>
+        <div class="scene-content">
+          <div class="top-row">
+            <div class="logo-lockup s1-logo">
+              <img src="assets/reelio-mark-gold.png" alt="" />
+              <span>reelio</span>
+            </div>
+            <div class="pill s1-pill">AI real-estate media workspace</div>
+          </div>
+          <div class="split">
+            <div class="copy-block">
+              <p class="kicker s1-kicker">Listing media, compressed</p>
+              <h1 class="headline s1-title">From property photos to polished content in minutes.</h1>
+              <p class="body-copy s1-body">
+                Upload the shots you already have. Reelio enhances, stages, edits, and turns them into listing-ready media.
+              </p>
+              <div class="tool-row s1-tools">
+                <div class="tool-chip"><span class="tool-dot"></span>Enhance</div>
+                <div class="tool-chip"><span class="tool-dot"></span>Stage</div>
+                <div class="tool-chip"><span class="tool-dot"></span>Animate</div>
+              </div>
+            </div>
+            <div class="media-stage">
+              <div class="photo-card raw s1-raw">
+                <div class="mini-label">RAW</div>
+                <div class="photo"></div>
+              </div>
+              <div class="photo-card staged s1-staged">
+                <div class="mini-label">STAGED</div>
+                <div class="photo cool"></div>
+              </div>
+              <div class="photo-card hero s1-hero">
+                <div class="mini-label">READY</div>
+                <div class="photo sunset"></div>
+                <div class="status-strip"><span>Hero reel generated</span><span>00:15</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="clip scene" data-start="3.8" data-duration="4.2" data-track-index="1">
+        <div class="grain"></div>
+        <div class="warm-orb orb-a"></div>
+        <div class="line-sweep"></div>
+        <div class="scene-content">
+          <div class="top-row">
+            <div class="pill s2-pill">One workspace, four production tools</div>
+            <div class="pill s2-pill-right">Realtime asset status</div>
+          </div>
+          <div class="split">
+            <div class="copy-block">
+              <p class="kicker s2-kicker">Every listing asset starts here</p>
+              <h2 class="headline wide s2-title">Enhance. Stage. Re-sky. Generate video.</h2>
+              <p class="body-copy s2-body">
+                The dashboard stays practical: source photos, derived outputs, and generation history remain connected.
+              </p>
+            </div>
+            <div class="workflow-board s2-board">
+              <div class="board-top">
+                <span>Project / Palm Residence</span>
+                <span>12 assets</span>
+              </div>
+              <div class="board-grid">
+                <div class="workflow-card">
+                  <div class="photo"></div>
+                  <div class="overlay-tag"><span>AI Enhance</span></div>
+                </div>
+                <div class="workflow-card">
+                  <div class="photo cool"></div>
+                  <div class="overlay-tag"><span>Virtual staging</span></div>
+                </div>
+                <div class="workflow-card large">
+                  <div class="photo sunset"></div>
+                  <div class="overlay-tag"><span>Sky replacement complete</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="clip scene" data-start="7.2" data-duration="4.2" data-track-index="2">
+        <div class="grain"></div>
+        <div class="warm-orb orb-b"></div>
+        <div class="scene-content">
+          <div class="top-row">
+            <div class="pill s3-pill">Seedance, Kling, voiceover, music</div>
+            <div class="pill s3-pill-right">Trigger.dev handles the long run</div>
+          </div>
+          <div class="split">
+            <div class="prompt-shell s3-prompt">
+              <div class="prompt-input">
+                Create a cinematic walkthrough using <span class="mention">@image1</span> as the hero exterior and <span class="mention">@image2</span> for the living room.
+              </div>
+              <div class="model-row">
+                <div class="model-pill active"><span>Seedance Fast</span></div>
+                <div class="model-pill"><span>10s</span></div>
+                <div class="model-pill"><span>Voiceover on</span></div>
+              </div>
+            </div>
+            <div class="pipeline">
+              <div class="pipeline-step s3-step-1">
+                <div class="step-title"><span>1. Prompt translated</span><span>0.8s</span></div>
+                <p class="step-copy">Terse listing notes become model-ready real-estate direction.</p>
+                <div class="progress-bar"><span></span></div>
+              </div>
+              <div class="pipeline-step s3-step-2">
+                <div class="step-title"><span>2. Media generated</span><span>kie.ai</span></div>
+                <p class="step-copy">External task IDs are captured before polling starts.</p>
+                <div class="progress-bar"><span></span></div>
+              </div>
+              <div class="pipeline-step s3-step-3">
+                <div class="step-title"><span>3. Asset updates live</span><span>Realtime</span></div>
+                <p class="step-copy">The placeholder flips from processing to done in the grid.</p>
+                <div class="progress-bar"><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="clip scene" data-start="10.8" data-duration="4.2" data-track-index="3">
+        <div class="grain"></div>
+        <div class="warm-orb orb-a"></div>
+        <div class="scene-content">
+          <div class="top-row">
+            <div class="pill s4-pill">Outputs stay attached to the original source photo</div>
+            <div class="pill s4-pill-right">Re-run from history</div>
+          </div>
+          <div class="split">
+            <div class="copy-block">
+              <p class="kicker s4-kicker">Ready for the listing page</p>
+              <h2 class="headline s4-title">Video, captions, copy, and share assets in one place.</h2>
+              <p class="body-copy s4-body">
+                Agents can review, re-run, compare, and publish without digging through scattered downloads.
+              </p>
+            </div>
+            <div class="output-wall s4-wall">
+              <div class="video-preview">
+                <div class="photo sunset"></div>
+                <div class="play"><span>▶</span></div>
+                <div class="status-strip"><span>Property reel</span><span>Ready</span></div>
+              </div>
+              <div class="copy-panel">
+                <div class="panel-label">Marketing copy</div>
+                <div class="panel-text">A warm, light-filled home minutes from the city center.</div>
+              </div>
+              <div class="stat-panel">
+                <div class="panel-label">Generation time</div>
+                <div class="stat-number">10s</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="clip scene" data-start="14.4" data-duration="3.6" data-track-index="4">
+        <div class="grain"></div>
+        <div class="warm-orb orb-a"></div>
+        <div class="warm-orb orb-b"></div>
+        <div class="scene-content final-content">
+          <div class="final-logo s5-logo">
+            <img src="assets/reelio-mark-gold-final.png" alt="" />
+            <span>reelio</span>
+          </div>
+          <h2 class="final-headline s5-title">Turn listing photos into media that sells the room.</h2>
+          <div class="cta-row s5-ctas">
+            <div class="cta"><span>Upload</span></div>
+            <div class="cta secondary"><span>Generate</span></div>
+            <div class="cta"><span>Share</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+
+      const tl = gsap.timeline({ paused: true });
+      const duration = 18;
+      const ambientRepeat = Math.ceil(duration / 5.5) - 1;
+
+      tl.from(".orb-a", { scale: 0.92, x: 26, y: -18, duration: 5.5, ease: "sine.inOut", repeat: ambientRepeat, yoyo: true }, 0);
+      tl.from(".orb-b", { scale: 0.94, x: -18, y: 24, duration: 5.2, ease: "sine.inOut", repeat: ambientRepeat, yoyo: true }, 0.1);
+      tl.from(".line-sweep", { scaleX: 0.08, opacity: 0, duration: 1.2, ease: "power2.out" }, 0.2);
+
+      function lightLeak(selector, at) {
+        tl.fromTo(
+          selector,
+          { opacity: 0, x: -260, filter: "blur(18px)" },
+          { opacity: 0.86, x: 160, filter: "blur(3px)", duration: 0.34, ease: "power2.out" },
+          at
+        );
+        tl.to(selector, { opacity: 0, x: 430, filter: "blur(18px)", duration: 0.36, ease: "sine.inOut" }, at + 0.34);
+      }
+
+      function blurCrossfade(outScene, inScene, at) {
+        tl.set(inScene, { visibility: "visible" }, at);
+        tl.fromTo(
+          inScene,
+          { opacity: 0, scale: 1.018, filter: "blur(18px)" },
+          { opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.64, ease: "sine.inOut" },
+          at
+        );
+        tl.to(outScene, { opacity: 0, scale: 0.986, filter: "blur(16px)", duration: 0.64, ease: "sine.inOut" }, at);
+        tl.set(outScene, { visibility: "hidden" }, at + 0.64);
+      }
+
+      lightLeak(".leak-1", 3.72);
+      blurCrossfade("#scene-1", "#scene-2", 3.8);
+      lightLeak(".leak-2", 7.08);
+      blurCrossfade("#scene-2", "#scene-3", 7.2);
+      lightLeak(".leak-3", 10.68);
+      blurCrossfade("#scene-3", "#scene-4", 10.8);
+      lightLeak(".leak-4", 14.28);
+      blurCrossfade("#scene-4", "#scene-5", 14.4);
+
+      tl.from(".s1-logo", { opacity: 0, y: 26, scale: 0.94, duration: 0.56, ease: "power3.out" }, 0.18);
+      tl.from(".s1-pill", { opacity: 0, x: 42, duration: 0.46, ease: "back.out(1.3)" }, 0.3);
+      tl.from(".s1-kicker", { opacity: 0, x: -28, duration: 0.44, ease: "power2.out" }, 0.48);
+      tl.from(".s1-title", { opacity: 0, y: 54, scale: 0.985, duration: 0.72, ease: "expo.out" }, 0.66);
+      tl.from(".s1-body", { opacity: 0, y: 36, duration: 0.52, ease: "power3.out" }, 0.95);
+      tl.from(".s1-tools .tool-chip", { opacity: 0, y: 26, scale: 0.94, duration: 0.42, stagger: 0.1, ease: "back.out(1.55)" }, 1.18);
+      tl.from(".s1-raw", { opacity: 0, x: -88, y: 34, rotation: -11, duration: 0.64, ease: "power4.out" }, 0.72);
+      tl.from(".s1-staged", { opacity: 0, x: -62, y: 72, rotation: 9, duration: 0.66, ease: "back.out(1.25)" }, 0.9);
+      tl.from(".s1-hero", { opacity: 0, x: 78, y: 28, scale: 0.9, duration: 0.78, ease: "expo.out" }, 1.04);
+
+      tl.from(".s2-pill", { opacity: 0, x: -38, duration: 0.44, ease: "power2.out" }, 4.02);
+      tl.from(".s2-pill-right", { opacity: 0, x: 44, duration: 0.44, ease: "back.out(1.2)" }, 4.1);
+      tl.from(".s2-kicker", { opacity: 0, y: 24, duration: 0.38, ease: "sine.out" }, 4.24);
+      tl.from(".s2-title", { opacity: 0, x: -54, scale: 0.988, duration: 0.68, ease: "expo.out" }, 4.42);
+      tl.from(".s2-body", { opacity: 0, y: 34, duration: 0.5, ease: "power3.out" }, 4.78);
+      tl.from(".s2-board", { opacity: 0, x: 86, scale: 0.96, duration: 0.72, ease: "power4.out" }, 4.46);
+      tl.from(".s2-board .workflow-card", { opacity: 0, y: 42, scale: 0.94, duration: 0.5, stagger: 0.11, ease: "back.out(1.25)" }, 4.94);
+
+      tl.from(".s3-pill", { opacity: 0, y: -28, duration: 0.42, ease: "power2.out" }, 7.42);
+      tl.from(".s3-pill-right", { opacity: 0, y: -28, duration: 0.42, ease: "back.out(1.25)" }, 7.5);
+      tl.from(".s3-prompt", { opacity: 0, x: -86, scale: 0.96, duration: 0.72, ease: "expo.out" }, 7.72);
+      tl.from(".prompt-input", { opacity: 0, y: 34, duration: 0.5, ease: "power3.out" }, 8.02);
+      tl.from(".model-pill", { opacity: 0, y: 22, scale: 0.92, duration: 0.36, stagger: 0.08, ease: "back.out(1.4)" }, 8.28);
+      tl.from(".s3-step-1", { opacity: 0, x: 70, duration: 0.5, ease: "power4.out" }, 7.88);
+      tl.from(".s3-step-2", { opacity: 0, x: 70, duration: 0.52, ease: "expo.out" }, 8.12);
+      tl.from(".s3-step-3", { opacity: 0, x: 70, duration: 0.54, ease: "back.out(1.2)" }, 8.36);
+      tl.from(".progress-bar span", { scaleX: 0.04, transformOrigin: "left center", duration: 1.2, stagger: 0.1, ease: "power2.inOut" }, 8.58);
+
+      tl.from(".s4-pill", { opacity: 0, x: -42, duration: 0.42, ease: "power2.out" }, 11.04);
+      tl.from(".s4-pill-right", { opacity: 0, x: 42, duration: 0.42, ease: "back.out(1.25)" }, 11.12);
+      tl.from(".s4-kicker", { opacity: 0, y: 28, duration: 0.4, ease: "sine.out" }, 11.22);
+      tl.from(".s4-title", { opacity: 0, y: 52, duration: 0.66, ease: "expo.out" }, 11.42);
+      tl.from(".s4-body", { opacity: 0, y: 34, duration: 0.5, ease: "power3.out" }, 11.75);
+      tl.from(".s4-wall", { opacity: 0, x: 82, scale: 0.95, duration: 0.72, ease: "power4.out" }, 11.34);
+      tl.from(".video-preview", { opacity: 0, y: 34, scale: 0.96, duration: 0.56, ease: "expo.out" }, 11.68);
+      tl.from(".copy-panel", { opacity: 0, x: 42, duration: 0.46, ease: "back.out(1.25)" }, 11.92);
+      tl.from(".stat-panel", { opacity: 0, x: 42, duration: 0.48, ease: "power3.out" }, 12.1);
+      tl.from(".play", { opacity: 0, scale: 0.66, duration: 0.42, ease: "back.out(1.7)" }, 12.22);
+
+      tl.from(".s5-logo", { opacity: 0, y: 34, scale: 0.94, duration: 0.62, ease: "power3.out" }, 14.72);
+      tl.from(".s5-title", { opacity: 0, y: 60, scale: 0.985, duration: 0.78, ease: "expo.out" }, 14.98);
+      tl.from(".s5-ctas .cta", { opacity: 0, y: 32, scale: 0.9, duration: 0.44, stagger: 0.1, ease: "back.out(1.5)" }, 15.52);
+      tl.to(".s5-logo, .s5-title, .s5-ctas", { opacity: 0, y: -20, duration: 0.62, ease: "sine.inOut" }, 17.2);
+      tl.to("#scene-5", { backgroundColor: "#f8f7f3", duration: 0.62, ease: "sine.inOut" }, 17.2);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
