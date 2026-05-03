@@ -10,6 +10,11 @@ import {
   estimateVoiceoverSeconds,
   maxVoiceoverSeconds,
 } from "@/lib/voiceover-duration";
+import {
+  hasLogoPlacement,
+  isLogoAsset,
+  normalizeLogoPlacement,
+} from "@/lib/video-logo";
 import type { engineGenerateTask } from "../../../../../trigger/engine-generate";
 import type { engineGenerateSeedanceTask } from "../../../../../trigger/engine-generate-seedance";
 
@@ -51,6 +56,18 @@ const BodySchema = z.object({
   musicMood: z.enum(["upbeat", "luxury", "calm"]).optional(),
   /** Music loudness 0..1 in the final mix. Default 0.2 at the engine layer. */
   musicVolume: z.number().min(0).max(1).optional(),
+  /** Optional reusable logo asset to burn into the final MP4. */
+  logoAssetId: z.string().uuid().optional(),
+  logoPlacement: z
+    .object({
+      corner: z.boolean().optional(),
+      endCard: z.boolean().optional(),
+      cornerPosition: z
+        .enum(["top-right", "top-left", "bottom-right", "bottom-left"])
+        .optional(),
+      endCardDurationSec: z.number().int().min(1).max(8).optional(),
+    })
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -90,7 +107,10 @@ export async function POST(req: NextRequest) {
     musicPrompt,
     musicMood,
     musicVolume,
+    logoAssetId,
+    logoPlacement,
   } = parsed.data;
+  const normalizedLogoPlacement = normalizeLogoPlacement(logoPlacement);
 
   // Seedance mode: single-call generation caps at 9 references (kie.ai
   // spec). Reject > 9 at the API boundary — the UI also gates this, but the
@@ -132,6 +152,18 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+  if (logoPlacement && !logoAssetId) {
+    return NextResponse.json(
+      { error: "logoAssetId is required when logo placement is provided" },
+      { status: 400 },
+    );
+  }
+  if (logoAssetId && !hasLogoPlacement(normalizedLogoPlacement)) {
+    return NextResponse.json(
+      { error: "Choose at least one logo placement" },
+      { status: 400 },
+    );
+  }
 
   const { data: project, error: projectErr } = await supabase
     .from("projects")
@@ -145,9 +177,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  let logo:
+    | {
+        assetId: string;
+        url: string;
+        placement: typeof normalizedLogoPlacement;
+      }
+    | undefined;
+  if (logoAssetId) {
+    const { data: logoAsset, error: logoErr } = await supabase
+      .from("assets")
+      .select("id, user_id, project_id, original_url, processed_url, asset_type, metadata")
+      .eq("id", logoAssetId)
+      .single();
+    if (logoErr || !logoAsset) {
+      return NextResponse.json({ error: "Logo asset not found" }, { status: 404 });
+    }
+    if (logoAsset.user_id !== user.id || logoAsset.project_id !== projectId) {
+      return NextResponse.json({ error: "Logo asset not accessible" }, { status: 403 });
+    }
+    if (logoAsset.asset_type !== "image") {
+      return NextResponse.json(
+        { error: "Logo asset must be an image" },
+        { status: 400 },
+      );
+    }
+    if (!isLogoAsset(logoAsset)) {
+      return NextResponse.json(
+        { error: "Selected logo asset is not marked as a logo" },
+        { status: 400 },
+      );
+    }
+    const logoUrl = logoAsset.processed_url ?? logoAsset.original_url;
+    if (!logoUrl) {
+      return NextResponse.json(
+        { error: "Logo asset has no usable URL" },
+        { status: 400 },
+      );
+    }
+    logo = {
+      assetId: logoAsset.id,
+      url: logoUrl,
+      placement: normalizedLogoPlacement,
+    };
+  }
+
   const { data: sourceAssets, error: assetsErr } = await supabase
     .from("assets")
-    .select("id, user_id, project_id, original_url, processed_url, thumbnail_url, asset_type")
+    .select("id, user_id, project_id, original_url, processed_url, thumbnail_url, asset_type, metadata")
     .in("id", imageAssetIds);
   if (assetsErr) {
     console.error("[engine/generate] Failed to load source assets:", assetsErr);
@@ -165,6 +242,12 @@ export async function POST(req: NextRequest) {
     if (a.asset_type && a.asset_type !== "image") {
       return NextResponse.json(
         { error: `Asset ${a.id} is a ${a.asset_type}, not an image` },
+        { status: 400 },
+      );
+    }
+    if (isLogoAsset(a)) {
+      return NextResponse.json(
+        { error: `Asset ${a.id} is a logo, not a listing photo` },
         { status: 400 },
       );
     }
@@ -221,6 +304,14 @@ export async function POST(req: NextRequest) {
           ...(musicPrompt ? { musicPrompt } : {}),
           ...(musicMood ? { musicMood } : {}),
           ...(musicVolume !== undefined ? { musicVolume } : {}),
+          ...(logo
+            ? {
+                logo: {
+                  assetId: logo.assetId,
+                  placement: logo.placement,
+                },
+              }
+            : {}),
         },
       },
     })
@@ -249,6 +340,15 @@ export async function POST(req: NextRequest) {
           ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
           ...(musicMood ? { musicMood } : {}),
           ...(musicVolume !== undefined ? { musicVolume } : {}),
+          ...(logo
+            ? {
+                logo: {
+                  assetId: logo.assetId,
+                  url: logo.url,
+                  placement: logo.placement,
+                },
+              }
+            : {}),
         },
       );
     } else {
@@ -265,6 +365,15 @@ export async function POST(req: NextRequest) {
         ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
         ...(musicPrompt ? { musicPrompt } : {}),
         ...(musicVolume !== undefined ? { musicVolume } : {}),
+        ...(logo
+          ? {
+              logo: {
+                assetId: logo.assetId,
+                url: logo.url,
+                placement: logo.placement,
+              },
+            }
+          : {}),
       });
     }
   } catch (err) {

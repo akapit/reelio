@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TemplateName } from "@/lib/engine/models";
 import { useI18n } from "@/lib/i18n/client";
+import type { VideoLogoPlacement } from "@/lib/video-logo";
 
 export interface EngineGenerateOptions {
   projectId: string;
@@ -41,6 +42,9 @@ export interface EngineGenerateOptions {
   musicPrompt?: string;
   /** 0..1 — music loudness. */
   musicVolume?: number;
+  /** Optional reusable logo asset to burn into the final MP4. */
+  logoAssetId?: string;
+  logoPlacement?: VideoLogoPlacement;
 }
 
 /**

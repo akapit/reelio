@@ -24,6 +24,7 @@ import {
 } from "./modals/ai-enhancement-modal";
 import { ShareModal } from "./modals/share-modal";
 import type { VideoGenerationOptions } from "@/components/media/VideoGenerationOptionsModal";
+import { uploadLogoAsset } from "@/lib/upload-logo-asset";
 import {
   AspectRatioWarningModal,
   type AspectRatioMismatch,
@@ -252,6 +253,11 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
     assetIds: string[],
     options: VideoGenerationOptions,
   ) => {
+    const logoAssetId =
+      options.logoAssetId ??
+      (options.logoFile
+        ? (await uploadLogoAsset({ projectId, file: options.logoFile })).id
+        : undefined);
     await engineGenerate.mutateAsync({
       projectId,
       imageAssetIds: assetIds,
@@ -260,6 +266,8 @@ export function PropertyDetail({ projectId, property }: PropertyDetailProps) {
       voiceoverText: options.voiceoverText,
       musicPrompt: options.musicPrompt,
       musicVolume: options.musicVolume,
+      ...(logoAssetId ? { logoAssetId } : {}),
+      ...(options.logoPlacement ? { logoPlacement: options.logoPlacement } : {}),
     });
     setActiveTab("videos");
   };

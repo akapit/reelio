@@ -34,7 +34,9 @@ import {
   type MusicMood,
 } from "@/lib/audio/background-music";
 import { mergeAudioWithVideo } from "@/lib/audio/merge";
+import { applyLogoToVideoBuffer } from "@/lib/engine/merge/logo";
 import { r2, getPublicUrl } from "@/lib/r2";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 
 import {
   appendAssetMetadata,
@@ -71,6 +73,7 @@ export const engineGenerateSeedanceTask = task({
     /** Pick a track from our royalty-free R2 library for this mood. */
     musicMood?: MusicMood;
     musicVolume?: number;
+    logo?: VideoLogoRenderOptions & { assetId?: string };
   }) => {
     const runStart = Date.now();
 
@@ -112,6 +115,7 @@ export const engineGenerateSeedanceTask = task({
       aspectRatio,
       hasVoiceover: !!payload.voiceoverText,
       musicMood: payload.musicMood ?? null,
+      hasLogo: !!payload.logo,
     });
 
     try {
@@ -252,6 +256,26 @@ export const engineGenerateSeedanceTask = task({
         downloadMs: Date.now() - dlStart,
       });
 
+      if (payload.logo) {
+        const logoStart = Date.now();
+        finalBuffer = await applyLogoToVideoBuffer({
+          videoBuffer: finalBuffer,
+          logo: payload.logo,
+        });
+        await appendAssetMetadata(payload.assetId, {
+          engine: {
+            logo: {
+              ...(payload.logo.assetId ? { assetId: payload.logo.assetId } : {}),
+              placement: payload.logo.placement,
+            },
+          },
+        });
+        logger.info("[engine-generate-seedance] logo rendered", {
+          byteLength: finalBuffer.byteLength,
+          logoMs: Date.now() - logoStart,
+        });
+      }
+
       // ----- Step 4: audio (optional) -----
       let voiceoverBuffer: Buffer | undefined;
       let musicBuffer: Buffer | undefined;
@@ -317,7 +341,9 @@ export const engineGenerateSeedanceTask = task({
           // Library tracks are typically 2-4 minutes — cap output to the
           // video's target length so we don't produce a 3-minute file
           // that's mostly silent visuals.
-          maxDurationSec: durationSec,
+          maxDurationSec: payload.logo?.placement.endCard
+            ? durationSec + (payload.logo.placement.endCardDurationSec ?? 3)
+            : durationSec,
         });
         logger.info("[engine-generate-seedance] audio muxed", {
           byteLength: finalBuffer.byteLength,

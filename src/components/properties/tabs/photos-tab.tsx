@@ -24,8 +24,10 @@ import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
 import { ImagePreviewModal } from "@/components/properties/modals/image-preview-modal";
 import {
   VideoGenerationOptionsModal,
+  type VideoLogoAssetOption,
   type VideoGenerationOptions,
 } from "@/components/media/VideoGenerationOptionsModal";
+import { isLogoAsset } from "@/lib/video-logo";
 
 const ACCEPTED_FILE_TYPES = "image/*,video/*";
 
@@ -236,8 +238,19 @@ export function PhotosTab({
   // selects WHERE thumbnail_url IS NULL), and Supabase Realtime will refresh
   // the grid as rows get updated.
   const backfilledRef = useRef(false);
-  const missingThumbCount = assets.filter(
-    (a) => a.asset_type === "image" && !!a.original_url && !a.thumbnail_url,
+  const listingImageAssets = assets.filter(
+    (a) => a.asset_type === "image" && !isLogoAsset(a),
+  );
+  const logoAssets: VideoLogoAssetOption[] = assets
+    .filter((a) => a.asset_type === "image" && isLogoAsset(a))
+    .map((asset) => ({
+      id: asset.id,
+      url: asset.thumbnail_url ?? asset.original_url ?? "",
+      name: readMetaString(asset, "filename") ?? null,
+    }))
+    .filter((asset) => asset.url.length > 0);
+  const missingThumbCount = listingImageAssets.filter(
+    (a) => !!a.original_url && !a.thumbnail_url,
   ).length;
   useEffect(() => {
     if (backfilledRef.current) return;
@@ -258,8 +271,8 @@ export function PhotosTab({
     inFlight: false,
     cooldownUntil: 0,
   });
-  const missingRoomCount = assets.filter(
-    (a) => a.asset_type === "image" && a.status === "uploaded" && !getRoomType(a),
+  const missingRoomCount = listingImageAssets.filter(
+    (a) => a.status === "uploaded" && !getRoomType(a),
   ).length;
   useEffect(() => {
     if (missingRoomCount === 0) return;
@@ -320,7 +333,7 @@ export function PhotosTab({
     photo.status !== "processing" &&
     photo.status !== "failed";
 
-  const photos = assets.filter((a) => a.asset_type === "image");
+  const photos = listingImageAssets;
 
   const toCreatorPhoto = (photo: (typeof photos)[number]): CreatorPhotoAsset | null => {
     const originalUrl = photo.original_url ?? "";
@@ -838,6 +851,7 @@ export function PhotosTab({
         isOpen={videoOptionsOpen}
         imageCount={pickedCreatorPhotos().length}
         imageAssetIds={pickedCreatorPhotos().map((photo) => photo.id)}
+        logoAssets={logoAssets}
         propertyContext={videoScriptContext}
         onClose={() => setVideoOptionsOpen(false)}
         onConfirm={handleVideoOptionsConfirm}

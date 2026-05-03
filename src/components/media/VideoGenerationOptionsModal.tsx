@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Loader2, Mic, Music, Wand2, X } from "lucide-react";
+import { Image as ImageIcon, Loader2, Mic, Music, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/client";
@@ -11,12 +11,27 @@ import {
   estimateVoiceoverSeconds,
   maxVoiceoverSeconds,
 } from "@/lib/voiceover-duration";
+import {
+  DEFAULT_LOGO_END_CARD_DURATION_SEC,
+  type LogoCornerPosition,
+  type VideoLogoPlacement,
+} from "@/lib/video-logo";
+import { isSupportedLogoFile } from "@/lib/upload-logo-asset";
+
+export interface VideoLogoAssetOption {
+  id: string;
+  url: string;
+  name?: string | null;
+}
 
 export interface VideoGenerationOptions {
   durationSec: number;
   voiceoverText?: string;
   musicPrompt?: string;
   musicVolume?: number;
+  logoAssetId?: string;
+  logoFile?: File;
+  logoPlacement?: VideoLogoPlacement;
 }
 
 interface VideoGenerationOptionsModalProps {
@@ -24,6 +39,7 @@ interface VideoGenerationOptionsModalProps {
   imageCount: number;
   imageAssetIds?: string[];
   imageLabels?: string[];
+  logoAssets?: VideoLogoAssetOption[];
   propertyContext?: Record<string, string | number | null | undefined>;
   minImages?: number;
   maxImages?: number;
@@ -54,6 +70,7 @@ export function VideoGenerationOptionsModal({
   imageCount,
   imageAssetIds,
   imageLabels,
+  logoAssets = [],
   propertyContext,
   minImages = 6,
   maxImages = 20,
@@ -71,8 +88,19 @@ export function VideoGenerationOptionsModal({
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [musicPrompt, setMusicPrompt] = useState(DEFAULT_MUSIC_PROMPT);
   const [musicVolume, setMusicVolume] = useState(DEFAULT_MUSIC_VOLUME);
+  const [logoEnabled, setLogoEnabled] = useState(false);
+  const [cornerLogoEnabled, setCornerLogoEnabled] = useState(true);
+  const [endCardLogoEnabled, setEndCardLogoEnabled] = useState(true);
+  const [logoCornerPosition, setLogoCornerPosition] =
+    useState<LogoCornerPosition>("top-right");
+  const [selectedLogoAssetId, setSelectedLogoAssetId] = useState<string>("");
+  const [selectedLogoFile, setSelectedLogoFile] = useState<File | undefined>();
+  const [selectedLogoPreview, setSelectedLogoPreview] = useState<string | null>(
+    null,
+  );
   const [generatingScript, setGeneratingScript] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const hasEnoughImages = imageCount >= minImages;
   const withinImageLimit = imageCount <= maxImages;
@@ -82,9 +110,14 @@ export function VideoGenerationOptionsModal({
     voiceoverEnabled &&
     voiceoverText.trim().length > 0 &&
     estimatedVoiceoverSec > maxVoiceoverSec;
+  const hasSelectedLogo = Boolean(selectedLogoAssetId || selectedLogoFile);
+  const logoPlacementSelected = cornerLogoEnabled || endCardLogoEnabled;
+  const logoInvalid =
+    logoEnabled && (!hasSelectedLogo || !logoPlacementSelected);
   const canConfirm =
     hasEnoughImages &&
     withinImageLimit &&
+    !logoInvalid &&
     !voiceoverTooLong &&
     !generatingScript &&
     !submitting;
@@ -98,9 +131,22 @@ export function VideoGenerationOptionsModal({
     setMusicEnabled(false);
     setMusicPrompt(DEFAULT_MUSIC_PROMPT);
     setMusicVolume(DEFAULT_MUSIC_VOLUME);
+    setLogoEnabled(false);
+    setCornerLogoEnabled(true);
+    setEndCardLogoEnabled(true);
+    setLogoCornerPosition("top-right");
+    setSelectedLogoAssetId("");
+    setSelectedLogoFile(undefined);
+    setSelectedLogoPreview(null);
     setGeneratingScript(false);
     setSubmitting(false);
   }, [imageCount, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (selectedLogoPreview) URL.revokeObjectURL(selectedLogoPreview);
+    };
+  }, [selectedLogoPreview]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -126,12 +172,36 @@ export function VideoGenerationOptionsModal({
               musicVolume: musicVolume / 100,
             }
           : {}),
+        ...(logoEnabled
+          ? {
+              ...(selectedLogoAssetId ? { logoAssetId: selectedLogoAssetId } : {}),
+              ...(selectedLogoFile ? { logoFile: selectedLogoFile } : {}),
+              logoPlacement: {
+                corner: cornerLogoEnabled,
+                endCard: endCardLogoEnabled,
+                cornerPosition: logoCornerPosition,
+                endCardDurationSec: DEFAULT_LOGO_END_CARD_DURATION_SEC,
+              },
+            }
+          : {}),
       });
     } catch (err) {
       console.warn("[video-options] confirm failed", err);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleLogoFile(file: File) {
+    if (!isSupportedLogoFile(file)) {
+      toast.error(t.creation.logoUnsupported);
+      return;
+    }
+    if (selectedLogoPreview) URL.revokeObjectURL(selectedLogoPreview);
+    setSelectedLogoFile(file);
+    setSelectedLogoAssetId("");
+    setSelectedLogoPreview(URL.createObjectURL(file));
+    setLogoEnabled(true);
   }
 
   async function handleGenerateScript() {
@@ -183,6 +253,12 @@ export function VideoGenerationOptionsModal({
     ...option,
     value: clamp(Math.round(option.value), minSeconds, maxSeconds),
   }));
+  const cornerPositions: Array<{ label: string; value: LogoCornerPosition }> = [
+    { label: t.creation.logoTopRight, value: "top-right" },
+    { label: t.creation.logoTopLeft, value: "top-left" },
+    { label: t.creation.logoBottomRight, value: "bottom-right" },
+    { label: t.creation.logoBottomLeft, value: "bottom-left" },
+  ];
 
   return (
     <AnimatePresence>
@@ -206,7 +282,7 @@ export function VideoGenerationOptionsModal({
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
             <div
-              className="pointer-events-auto w-full max-w-lg rounded-2xl border border-[var(--line-soft)] bg-[var(--bg-1)] p-5 shadow-[0_24px_64px_rgba(0,0,0,0.45)]"
+              className="pointer-events-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--line-soft)] bg-[var(--bg-1)] p-5 shadow-[0_24px_64px_rgba(0,0,0,0.45)]"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-4">
@@ -334,6 +410,142 @@ export function VideoGenerationOptionsModal({
                           {musicVolume}%
                         </span>
                       </label>
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-3">
+                  <ToggleRow
+                    enabled={logoEnabled}
+                    onChange={setLogoEnabled}
+                    icon={<ImageIcon size={15} />}
+                    label={t.creation.logoOff}
+                    activeLabel={t.creation.logoOn}
+                    dir={dir}
+                  />
+                  {logoEnabled && (
+                    <div className="space-y-3">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="sr-only"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleLogoFile(file);
+                          event.target.value = "";
+                        }}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => logoInputRef.current?.click()}
+                          className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 text-xs font-semibold text-[var(--fg-1)] transition-colors hover:border-[var(--gold)]/60 hover:text-[var(--fg-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                        >
+                          <Upload size={13} />
+                          {selectedLogoFile
+                            ? t.creation.logoReplace
+                            : t.creation.logoUpload}
+                        </button>
+                        {selectedLogoFile && selectedLogoPreview && (
+                          <span className="inline-flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-2 py-1 text-xs text-[var(--fg-2)]">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={selectedLogoPreview}
+                              alt=""
+                              className="h-6 w-10 rounded object-contain"
+                            />
+                            {selectedLogoFile.name}
+                          </span>
+                        )}
+                      </div>
+
+                      {logoAssets.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          {logoAssets.map((logo) => (
+                            <button
+                              key={logo.id}
+                              type="button"
+                              onClick={() => {
+                                if (selectedLogoPreview) {
+                                  URL.revokeObjectURL(selectedLogoPreview);
+                                }
+                                setSelectedLogoAssetId(logo.id);
+                                setSelectedLogoFile(undefined);
+                                setSelectedLogoPreview(null);
+                              }}
+                              className={cn(
+                                "flex h-16 items-center justify-center rounded-lg border bg-[var(--bg-2)] p-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]",
+                                selectedLogoAssetId === logo.id
+                                  ? "border-[var(--gold)]"
+                                  : "border-[var(--line-soft)] hover:border-[var(--gold)]/60",
+                              )}
+                              title={logo.name ?? t.creation.logoSaved}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={logo.url}
+                                alt={logo.name ?? t.creation.logoSaved}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {!hasSelectedLogo && (
+                        <p className="text-xs leading-relaxed text-[var(--fg-3)]">
+                          {t.creation.logoRequired}
+                        </p>
+                      )}
+
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2 text-xs font-medium text-[var(--fg-1)]">
+                          <input
+                            type="checkbox"
+                            checked={cornerLogoEnabled}
+                            onChange={(event) =>
+                              setCornerLogoEnabled(event.target.checked)
+                            }
+                            className="accent-[var(--gold)]"
+                          />
+                          {t.creation.logoCorner}
+                        </label>
+                        <label className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-2 text-xs font-medium text-[var(--fg-1)]">
+                          <input
+                            type="checkbox"
+                            checked={endCardLogoEnabled}
+                            onChange={(event) =>
+                              setEndCardLogoEnabled(event.target.checked)
+                            }
+                            className="accent-[var(--gold)]"
+                          />
+                          {t.creation.logoEndCard}
+                        </label>
+                      </div>
+                      {cornerLogoEnabled && (
+                        <select
+                          value={logoCornerPosition}
+                          onChange={(event) =>
+                            setLogoCornerPosition(
+                              event.target.value as LogoCornerPosition,
+                            )
+                          }
+                          className="h-10 w-full rounded-lg border border-[var(--line-soft)] bg-[var(--bg-2)] px-3 text-sm text-[var(--fg-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+                          aria-label={t.creation.logoCornerPosition}
+                        >
+                          {cornerPositions.map((position) => (
+                            <option key={position.value} value={position.value}>
+                              {position.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {!logoPlacementSelected && (
+                        <p className="text-xs leading-relaxed text-red-300">
+                          {t.creation.logoPlacementRequired}
+                        </p>
+                      )}
                     </div>
                   )}
                 </section>

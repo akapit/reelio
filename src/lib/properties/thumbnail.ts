@@ -1,3 +1,5 @@
+import { isLogoAsset } from "@/lib/video-logo";
+
 interface PropertyAsset {
   id: string;
   asset_type?: string | null;
@@ -53,6 +55,7 @@ function isUploadedSourceImage(asset: PropertyAsset): boolean {
   return (
     asset.asset_type === "image" &&
     asset.status === "uploaded" &&
+    !isLogoAsset(asset) &&
     !asset.tool_used
   );
 }
@@ -71,7 +74,7 @@ function isDoorLike(asset: PropertyAsset): boolean {
 
 export function pickPropertyThumbnailUrl(assets: PropertyAsset[]): string | null {
   const images = assets
-    .filter((asset) => asset.asset_type === "image")
+    .filter((asset) => asset.asset_type === "image" && !isLogoAsset(asset))
     .sort((a, b) => assetTime(a) - assetTime(b));
   const imagesById = new Map(images.map((asset) => [asset.id, asset]));
 

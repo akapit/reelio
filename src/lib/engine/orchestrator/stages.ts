@@ -22,6 +22,7 @@ import {
   type VideoProviderName,
 } from "@/lib/engine/scene-generator/generator";
 import { loadTemplate } from "@/lib/engine/templates/loader";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 import {
   appendEngineEvent,
   findSceneAttemptId,
@@ -869,6 +870,7 @@ export interface AssembleStageInput {
   voiceoverVoiceId?: string;
   musicPrompt?: string;
   musicVolume?: number;
+  logo?: VideoLogoRenderOptions;
 }
 
 export interface AssembleStageOutput {
@@ -974,6 +976,7 @@ export async function runAssembleStage(
           sceneCount: input.sceneVideos.length,
           hasVoiceover: !!voiceoverBuffer,
           hasMusic: !!musicBuffer,
+          hasLogo: !!input.logo,
         },
       },
       async () => {
@@ -984,6 +987,7 @@ export async function runAssembleStage(
           voiceoverBuffer,
           musicBuffer,
           musicVolume: input.musicVolume,
+          logo: input.logo,
         });
         return {
           output: {

@@ -20,6 +20,7 @@ import { engineEvaluateSceneTask } from "./engine-evaluate-scene";
 import { engineFinalizeAssetTask } from "./engine-finalize-asset";
 import { engineGenerateSceneTask } from "./engine-generate-scene";
 import { enginePlanRunTask } from "./engine-plan-run";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 
 function resultErrorMessage(result: { error: unknown }): string {
   const error = result.error;
@@ -79,6 +80,7 @@ export const engineGenerateTask = task({
     voiceoverVoiceId?: string;
     musicPrompt?: string;
     musicVolume?: number;
+    logo?: VideoLogoRenderOptions & { assetId?: string };
     videoProvider?: "piapi" | "kieai";
     /** Optional requested total duration for the scene planner. */
     durationSec?: number;
@@ -106,6 +108,7 @@ export const engineGenerateTask = task({
       durationSec: payload.durationSec,
       hasVoiceover: !!payload.voiceoverText,
       hasMusic: !!payload.musicPrompt,
+      hasLogo: !!payload.logo,
       videoProvider: payload.videoProvider,
     });
 
@@ -122,6 +125,8 @@ export const engineGenerateTask = task({
             : {}),
           hasVoiceover: !!payload.voiceoverText,
           hasMusic: !!payload.musicPrompt,
+          hasLogo: !!payload.logo,
+          ...(payload.logo ? { logo: payload.logo } : {}),
           musicVolume: payload.musicVolume,
           videoProvider: payload.videoProvider,
         },
@@ -623,6 +628,7 @@ export const engineGenerateTask = task({
         ...(payload.musicVolume !== undefined
           ? { musicVolume: payload.musicVolume }
           : {}),
+        ...(payload.logo ? { logo: payload.logo } : {}),
       });
       if (!assembleResult.ok) {
         throw new Error(

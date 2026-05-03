@@ -2,6 +2,7 @@ import { task, logger, metadata, tags } from "@trigger.dev/sdk";
 
 import type { SceneTimeline, SceneVideo } from "@/lib/engine/models";
 import { runAssembleStage } from "@/lib/engine/orchestrator/stages";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 
 export const engineAssembleVideoTask = task({
   id: "engine-assemble-video",
@@ -17,6 +18,7 @@ export const engineAssembleVideoTask = task({
     voiceoverVoiceId?: string;
     musicPrompt?: string;
     musicVolume?: number;
+    logo?: VideoLogoRenderOptions;
   }) => {
     await tags.add(`run_${payload.runId}`);
     await tags.add(`asset_${payload.assetId}`);
@@ -29,6 +31,7 @@ export const engineAssembleVideoTask = task({
       sceneCount: payload.sceneVideos.length,
       hasVoiceover: !!payload.voiceoverText,
       hasMusic: !!payload.musicPrompt,
+      hasLogo: !!payload.logo,
     });
 
     const result = await runAssembleStage(payload);
