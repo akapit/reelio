@@ -19,6 +19,7 @@ import {
   AspectRatioWarningModal,
   type AspectRatioMismatch,
 } from "@/components/media/AspectRatioWarningModal";
+import { uploadLogoAsset } from "@/lib/upload-logo-asset";
 
 type Tone = "warm" | "amber" | "cool" | "sunset" | "mono";
 
@@ -119,6 +120,14 @@ export default function UploadPage() {
     templateName: TemplateName;
     options: VideoGenerationOptions;
   }) {
+    const logoAssetId =
+      args.options.logoAssetId ??
+      (args.options.logoFile
+        ? (await uploadLogoAsset({
+            projectId: args.projectId,
+            file: args.options.logoFile,
+          })).id
+        : undefined);
     const result = await engineGenerate.mutateAsync({
       projectId: args.projectId,
       imageAssetIds: args.assetIds,
@@ -127,6 +136,10 @@ export default function UploadPage() {
       voiceoverText: args.options.voiceoverText,
       musicPrompt: args.options.musicPrompt,
       musicVolume: args.options.musicVolume,
+      ...(logoAssetId ? { logoAssetId } : {}),
+      ...(args.options.logoPlacement
+        ? { logoPlacement: args.options.logoPlacement }
+        : {}),
     });
 
     router.push(

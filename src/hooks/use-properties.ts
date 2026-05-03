@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { pickPropertyThumbnailUrl } from "@/lib/properties/thumbnail";
+import { isLogoAsset } from "@/lib/video-logo";
 
 interface PropertyAssetForThumbnail {
   id: string;
@@ -50,7 +51,7 @@ export function useProperties() {
         return {
           ...row,
           assets: projectAssets,
-          assetCount: projectAssets.length,
+          assetCount: projectAssets.filter((asset) => !isLogoAsset(asset)).length,
           thumbnailUrl: pickPropertyThumbnailUrl(projectAssets),
         };
       });

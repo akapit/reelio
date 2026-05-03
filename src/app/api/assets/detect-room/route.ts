@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { ROOM_TYPES, isRoomType, type RoomType } from "@/lib/rooms";
 import { buildAnthropicImageContent } from "@/lib/engine/llm/anthropicImage";
+import { isLogoAsset } from "@/lib/video-logo";
 
 const MAX_PER_REQUEST = 12;
 const MODEL = "claude-haiku-4-5-20251001";
@@ -103,6 +104,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: fetchErr.message }, { status: 500 });
   }
   const targets = (rows ?? []).filter((row) => {
+    if (isLogoAsset(row)) return false;
     const meta = (row.metadata as Record<string, unknown> | null) ?? null;
     const existing = meta?.roomType;
     return !existing && pickClassifierUrl(row);

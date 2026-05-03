@@ -24,6 +24,7 @@ import { task, logger, metadata, tags } from "@trigger.dev/sdk";
 import type { Scene, SceneTimeline, SceneVideo } from "@/lib/engine/models";
 import { loadTemplate } from "@/lib/engine/templates/loader";
 import { runAssembleStage } from "@/lib/engine/orchestrator/stages";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 import {
   appendEngineEvent,
   completeRun,
@@ -42,6 +43,20 @@ function log(event: string, data: Record<string, unknown> = {}): void {
   } catch {
     /* never throw from logging */
   }
+}
+
+function parseLogo(input: unknown): VideoLogoRenderOptions | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const logo = (input as Record<string, unknown>).logo;
+  if (!logo || typeof logo !== "object") return undefined;
+  const record = logo as Record<string, unknown>;
+  if (typeof record.url !== "string") return undefined;
+  const placement = record.placement;
+  if (!placement || typeof placement !== "object") return undefined;
+  return {
+    url: record.url,
+    placement: placement as VideoLogoRenderOptions["placement"],
+  };
 }
 
 export const engineRescueRunTask = task({
@@ -255,6 +270,7 @@ export const engineRescueRunTask = task({
       typeof run.input.musicVolume === "number"
         ? run.input.musicVolume
         : undefined;
+    const logo = parseLogo(run.input);
 
     const runStartedAt = Date.now();
     const assembled = await runAssembleStage({
@@ -267,6 +283,7 @@ export const engineRescueRunTask = task({
       ...(voiceoverVoiceId ? { voiceoverVoiceId } : {}),
       ...(musicPrompt ? { musicPrompt } : {}),
       ...(musicVolume !== undefined ? { musicVolume } : {}),
+      ...(logo ? { logo } : {}),
     });
 
     log("assemble.ok", {

@@ -6,6 +6,8 @@ import type { Scene, SceneVideo } from "@/lib/engine/models";
 import { runFfmpeg, runFfprobe } from "@/lib/engine/renderer/ffmpegRun";
 import { buildConcatGraph } from "@/lib/engine/renderer/transitions";
 import { mergeAudioWithVideo } from "@/lib/audio/merge";
+import { applyLogoToVideoFile } from "@/lib/engine/merge/logo";
+import type { VideoLogoRenderOptions } from "@/lib/video-logo";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -24,6 +26,8 @@ export interface MergeScenesInput {
   musicBuffer?: Buffer;
   /** Music volume 0..1 (default 0.2). */
   musicVolume?: number;
+  /** Optional logo overlay/end-card rendering options. */
+  logo?: VideoLogoRenderOptions;
   /**
    * Hard cap for the muxed output. Defaults to the probed visual concat
    * duration when audio is present, so long music beds cannot extend the MP4.
@@ -76,6 +80,7 @@ export async function mergeScenes(
     voiceoverBuffer,
     musicBuffer,
     musicVolume = 0.2,
+    logo,
   } = input;
 
   if (scenes.length === 0) {
@@ -97,6 +102,7 @@ export async function mergeScenes(
   // Accumulate paths to clean up in the finally block.
   const downloadedPaths: string[] = [];
   let concatPath: string | null = null;
+  let brandedPath: string | null = null;
 
   try {
     // ------------------------------------------------------------------
@@ -228,6 +234,30 @@ export async function mergeScenes(
       durationMs: Date.now() - concatStart,
     });
 
+    let visualPath = concatPath;
+    if (logo) {
+      brandedPath = path.join(scratch, "branded.mp4");
+      const logoStart = Date.now();
+      log("logo.start", {
+        corner: logo.placement.corner ?? false,
+        endCard: logo.placement.endCard ?? false,
+      });
+      try {
+        await applyLogoToVideoFile({
+          inputPath: concatPath,
+          outputPath: brandedPath,
+          logo,
+          tmpDir: scratch,
+        });
+      } catch (err) {
+        throw new Error(`merge: logo render failed: ${String(err)}`);
+      }
+      visualPath = brandedPath;
+      log("logo.done", {
+        durationMs: Date.now() - logoStart,
+      });
+    }
+
     // ------------------------------------------------------------------
     // Step 3 — audio mux (or rename if no audio).
     // ------------------------------------------------------------------
@@ -235,9 +265,9 @@ export async function mergeScenes(
 
     if (!hasAudio) {
       // No audio — concat output is the final output.
-      await fsp.copyFile(concatPath, outputPath);
+      await fsp.copyFile(visualPath, outputPath);
     } else {
-      const concatProbe = await runFfprobe(concatPath);
+      const concatProbe = await runFfprobe(visualPath);
       const maxDurationSec = input.maxDurationSec ?? concatProbe.durationSec;
       const audioStart = Date.now();
       log("audio.start", {
@@ -250,7 +280,7 @@ export async function mergeScenes(
       // Read the concat video back as a buffer so we can pass it to the
       // existing mergeAudioWithVideo helper (which works entirely in-memory
       // using its own tmp dir).
-      const videoBuffer = await fsp.readFile(concatPath);
+      const videoBuffer = await fsp.readFile(visualPath);
 
       let merged: Buffer;
       try {
@@ -315,6 +345,9 @@ export async function mergeScenes(
     const toDelete = [...downloadedPaths];
     if (concatPath !== null) {
       toDelete.push(concatPath);
+    }
+    if (brandedPath !== null) {
+      toDelete.push(brandedPath);
     }
 
     await Promise.all(
